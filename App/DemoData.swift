@@ -614,7 +614,7 @@ func demoAskConversation(now: Date) -> AskConversation {
     - **€40k moves from paid ads to customer research and the beta.** You proposed it in the investor update and Maria agreed [1][2].
     - **Hiring stays flat** until the beta results are in [1].
 
-    For the beta itself, pricing stays on the current tiers, with no discounts until the usage numbers are in [3]. Your open task is to send Maria the updated budget before the board meeting.
+    For the beta itself, pricing stays on the current tiers, with no discounts until the usage numbers are in [3]. You already sent Maria the updated budget; your open task from that meeting is to plan the customer research interviews.
     """
     let askedAt: Date = now.addingTimeInterval(-25 * 60)
     let turn: AskConversationTurn = AskConversationTurn(

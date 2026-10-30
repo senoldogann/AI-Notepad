@@ -196,7 +196,6 @@ private struct SettingsTabs: View {
     }
 }
 
-/// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 /// Tanıma sözlüğünün açıklaması: sözlüğün nerede uygulandığı sürüme göre (abonelikte motor seçimi yok).
 private var vocabularyHelp: LocalizedStringKey {
     #if HOSTED_EDITION
@@ -206,6 +205,7 @@ private var vocabularyHelp: LocalizedStringKey {
     #endif
 }
 
+/// Arayüz ve not dili, motor, ad, canlı çeviri, mikrofon, "Ne kaçırdım?" süresi ve ses saklama süresi.
 private struct GeneralSettings: View {
     let model: AppModel
     let updater: AppUpdater
@@ -369,9 +369,16 @@ private struct GeneralSettings: View {
                         NoticeText(problem, severity: .attention)
                     }
                 } control: {
+                    // Açılınca bildirim izni yeniden istenir (sonradan kapatılmış olabilir); izin yoksa geri kapanır.
                     Toggle("Toplantıdan 1 dk önce hatırlat", isOn: $meetingReminders)
                         .settingsToggle()
-                        .onChange(of: meetingReminders) { (_: Bool, _: Bool) in model.startCalendarServices() }
+                        .onChange(of: meetingReminders) { (_: Bool, enabled: Bool) in
+                            if enabled {
+                                Task { await model.enableMeetingReminders() }
+                            } else {
+                                model.startCalendarServices()
+                            }
+                        }
                 }
                 SettingsRow(title: Text("Görüşme başlayınca öner")) {
                     Text("Teams, Zoom ya da başka bir uygulama mikrofonu açınca (kayıt yoksa) dinlemeye başlamayı önerir; 10 dk'da en fazla bir kez.")
@@ -451,7 +458,11 @@ private struct GeneralSettings: View {
                 .settingsToggle()
             }
             SettingsRow(title: Text("Kayıt başlarken haber vermeyi hatırlat")) {
+                #if HOSTED_EDITION
+                Text("Panelde kısa bir hatırlatma ve toplantı sohbetine yapıştırılacak İngilizce bildirim. Kayıt yapmadan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur.")
+                #else
                 Text("Panelde kısa bir hatırlatma ve toplantı sohbetine yapıştırılacak Fince/İngilizce bildirim. Kayıt yapmadan önce katılımcılara haber vermek çoğu yerde yasal zorunluluktur.")
+                #endif
             } control: {
                 Toggle("Kayıt başlarken haber vermeyi hatırlat", isOn: $consentReminder).settingsToggle()
             }
@@ -1953,8 +1964,12 @@ private struct WebhookSettings: View {
         }
         model.setMarkdownFolder(path: url.path)
         model.setMarkdownAutoExport(enabled: true)
-        folderStatus = model.meetings.first(where: { $0.note != nil }).flatMap { model.exportToFolder(meetingID: $0.id) }
-            ?? String(localized: "Son not klasöre yazıldı.")
+        // Notu olan toplantı yoksa (yeni kurulum, notlar hâlâ hazırlanıyor) yazılan bir şey yoktur: öyle söylenir.
+        guard let latest = model.meetings.first(where: { $0.note != nil }) else {
+            folderStatus = String(localized: "Klasör seçildi; notlar hazır olunca buraya yazılır.")
+            return
+        }
+        folderStatus = model.exportToFolder(meetingID: latest.id) ?? String(localized: "Son not klasöre yazıldı.")
     }
 }
 
@@ -2070,8 +2085,6 @@ private struct TaskTrackerSettings: View {
     }
 }
 
-/// Görev aracının takım/proje alanı: yazarken değil, Return'de ya da alandan çıkınca kaydedilir (her tuşta Anahtar
-/// Zinciri'ne yazılmasın, yazılan metin geri gelen eski değerle ezilmesin).
 /// Görev aracının hedefi (Linear takımı, Jira projesi): araçtaki gerçek seçenekler menüde. Tek seçenek varsa yalnızca
 /// adı görünür (seçilecek bir şey yok); hedef boşsa ilk seçenek kullanılır ve öyle gösterilir. Seçenekler okunamazsa
 /// neden ve "Yeniden dene" görünür.

@@ -3,17 +3,23 @@ import CoreAudio
 import Foundation
 import UserNotifications
 
-/// Bildirimlerin "Dinlemeye başla" eylemi ve kategorisi.
+/// Bildirimlerin "Dinlemeye başla" eylemi ve kategorileri.
 enum MeetingNotificationID {
     static let category: String = "meeting.start"
+    /// "Kayıt başlatılamadı" bildirimi: tıklanınca nedenin yazdığı Ana sayfa açılır.
+    static let autoFailedCategory: String = "meeting.autoFailed"
     static let startAction: String = "meeting.start.listen"
     static let reminderPrefix: String = "meeting.reminder."
     static let micSuggestion: String = "meeting.mic"
 }
 
-/// Bildirim izni reddedildi.
+/// Bildirim izni ya da kurulumu hatası.
 enum NotificationError: Error, Equatable {
+    /// Bildirim izni yok (reddedildi ya da Sistem Ayarları'nda kapatıldı).
     case denied
+    /// İzin istenemedi (sistem hatası).
+    case authorizationFailed(reason: String)
+    /// Bildirim kurulamadı.
     case scheduleFailed(reason: String)
 }
 
@@ -25,7 +31,10 @@ final class MeetingNotifier {
 
     init() {
         let start: UNNotificationAction = UNNotificationAction(identifier: MeetingNotificationID.startAction, title: String(localized: "Dinlemeye başla"), options: [.foreground])
-        center.setNotificationCategories([UNNotificationCategory(identifier: MeetingNotificationID.category, actions: [start], intentIdentifiers: [])])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: MeetingNotificationID.category, actions: [start], intentIdentifiers: []),
+            UNNotificationCategory(identifier: MeetingNotificationID.autoFailedCategory, actions: [], intentIdentifiers: []),
+        ])
     }
 
     /// Bildirim izni ister.
@@ -34,17 +43,28 @@ final class MeetingNotifier {
         do {
             granted = try await center.requestAuthorization(options: [.alert, .sound])
         } catch {
-            throw NotificationError.scheduleFailed(reason: error.localizedDescription)
+            throw NotificationError.authorizationFailed(reason: error.localizedDescription)
         }
         guard granted else {
             throw NotificationError.denied
         }
     }
 
-    /// Önceki toplantı hatırlatmalarını kaldırıp verilenler için başlangıçtan 1 dk önceye yenilerini kurar.
-    func scheduleReminders(meetings: [CalendarMeeting]) async throws {
+    /// Kurulu toplantı hatırlatmalarını kaldırır (hatırlatmalar ya da takvim kapandı).
+    func removeReminders() async {
         let pending: [UNNotificationRequest] = await center.pendingNotificationRequests()
         center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix(MeetingNotificationID.reminderPrefix) })
+    }
+
+    /// Önceki toplantı hatırlatmalarını kaldırıp verilenler için başlangıçtan 1 dk önceye yenilerini kurar. Bildirim izni
+    /// yoksa (sonradan Sistem Ayarları'nda kapatılmış olabilir) `NotificationError.denied`: sistemin İngilizce
+    /// "bildirimlere izin verilmiyor" hatası yerine ne yapılacağı yazar.
+    func scheduleReminders(meetings: [CalendarMeeting]) async throws {
+        await removeReminders()
+        let status: UNAuthorizationStatus = await center.notificationSettings().authorizationStatus
+        guard status == .authorized || status == .provisional else {
+            throw NotificationError.denied
+        }
         for meeting in meetings {
             let fire: Date = max(Date().addingTimeInterval(5), meeting.start.addingTimeInterval(-60))
             let content: UNMutableNotificationContent = UNMutableNotificationContent()
@@ -80,6 +100,7 @@ final class MeetingNotifier {
         let content: UNMutableNotificationContent = UNMutableNotificationContent()
         content.title = String(localized: "Kayıt başlatılamadı: \(title)")
         content.body = String(localized: "Takvimdeki görüşme başladı ama kayıt açılamadı. Nedenini görmek için \(appName)'i aç.")
+        content.categoryIdentifier = MeetingNotificationID.autoFailedCategory
         do {
             try await center.add(UNNotificationRequest(identifier: MeetingNotificationID.micSuggestion, content: content, trigger: nil))
         } catch {
@@ -151,11 +172,13 @@ private func defaultInputIsRunning() -> Bool {
     return running != 0
 }
 
-/// Bildirim izni hatasının kullanıcı metni. Saf fonksiyondur.
+/// Bildirim izni ya da kurulumu hatasının kullanıcı metni. Saf fonksiyondur.
 func notificationMessage(error: any Error) -> String {
     switch error {
     case NotificationError.denied:
         String(localized: "Bildirim izni yok: Sistem Ayarları › Bildirimler › \(appName) bölümünden izin ver.")
+    case NotificationError.authorizationFailed(let reason):
+        String(localized: "Bildirim izni istenemedi: \(reason)")
     case NotificationError.scheduleFailed(let reason):
         String(localized: "Bildirim kurulamadı: \(reason)")
     default:

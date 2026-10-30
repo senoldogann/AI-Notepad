@@ -71,7 +71,7 @@ private enum OnboardingStep: Int, CaseIterable {
         case .welcome: "Teams, Zoom ve yüz yüze toplantılar canlı yazıya dökülür; bitince \(selectedNoteLanguage().interfaceName) not hazır, en üstte senin görevlerin."
         case .permissions: "Mikrofon senin sesin, sistem sesi karşı taraf. İkisi ayrı kaydedilir, konuşmacılar ayrılır."
         #if HOSTED_EDITION
-        case .profile: "Adın notta sana düşen görevleri ayırır; canlı metin bu Mac'te yazılır."
+        case .profile: "Adın notta sana düşen görevleri ayırır; canlı metin bulutta yazılır, bulut kullanılamazsa bu Mac'te."
         #else
         case .profile: "Adın notta sana düşen görevleri ayırır; canlı metni bulutta ya da bu Mac'te yazdırırsın."
         #endif
@@ -306,7 +306,8 @@ private struct WelcomeStep: View {
                 .appFont(size: 14, weight: .regular)
                 .foregroundStyle(Theme.muted)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "Fince, İngilizce ve 33 dil daha; \(noteLanguageName) çevirisi altında akar.", palette: .sunset)
+                // Canlı çeviri varsayılan kapalıdır (Ayarlar ya da kayıt kartından açılır): isteğe bağlı diye yazılır.
+                FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin", text: "Fince, İngilizce ve 33 dil daha; istersen \(noteLanguageName) çevirisi altında akar.", palette: .sunset)
                 FeatureTile(symbol: "sparkles", title: "Ne kaçırdım?", text: "Son dakikaların \(noteLanguageName) özeti, toplantıya soru.", palette: .rose)
                 FeatureTile(symbol: "checklist", title: "Önce senin görevlerin", text: "Bitince not: görevler, kararlar, özet ve sözlük.", palette: .rose)
                 FeatureTile(symbol: "eye.slash.fill", title: "Ekran paylaşımında gizli", text: "Panel ve ada paylaşılan ekranda görünmez.", palette: .sunset)
@@ -371,8 +372,8 @@ private struct PermissionsStep: View {
             .appFont(size: 12, weight: .regular)
         }
         .onAppear { microphone = model.microphonePermission }
-        // Kullanıcı izni Sistem Ayarları'nda değiştirip geri dönünce durum yenilenir.
-        // Panel uygulamayı etkinleştirmediği için panelin yeniden anahtar pencere olması da dinlenir.
+        // Kullanıcı izni Sistem Ayarları'nda değiştirip geri dönünce durum yenilenir. Pencere yeniden anahtar olunca da
+        // (uygulama etkin kalırken odak pencereye dönünce) yenilenir; okumak ucuzdur.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { (_: Notification) in
             microphone = model.microphonePermission
         }
@@ -594,6 +595,15 @@ private struct KeysStep: View {
     }
 }
 
+/// Kısayolun tuş başlıkları (`keyBindingDisplay` metninden): her değiştirici (⌃ ⌥ ⇧ ⌘) ayrı başlık, tuşun adı tek başlık
+/// ("Boşluk", "F5" harf harf bölünmez). Değiştiriciler metnin başındadır. Saf fonksiyondur.
+func keycapLabels(display: String) -> [String] {
+    let modifierSymbols: Set<Character> = ["⌃", "⌥", "⇧", "⌘"]
+    let modifiers: Substring = display.prefix { (character: Character) -> Bool in modifierSymbols.contains(character) }
+    let key: Substring = display.dropFirst(modifiers.count)
+    return modifiers.map(String.init) + (key.isEmpty ? [] : [String(key)])
+}
+
 /// Kısayollar ve ilk kullanım.
 private struct ReadyStep: View {
     let shortcuts: ShortcutController
@@ -601,9 +611,10 @@ private struct ReadyStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             ForEach(ShortcutAction.allCases, id: \.self) { (action: ShortcutAction) in
+                let display: String = keyBindingDisplay(binding: shortcuts.currentBinding(action: action))
                 HStack(spacing: 14) {
                     HStack(spacing: 4) {
-                        ForEach(Array(keyBindingDisplay(binding: shortcuts.currentBinding(action: action)).map(String.init).enumerated()), id: \.offset) { (key: (offset: Int, element: String)) in
+                        ForEach(Array(keycapLabels(display: display).enumerated()), id: \.offset) { (key: (offset: Int, element: String)) in
                             Text(verbatim: key.element)
                                 .appFont(size: 15, weight: .medium)
                                 .frame(minWidth: 30, minHeight: 30)
@@ -613,13 +624,16 @@ private struct ReadyStep: View {
                                 .shadow(color: .black.opacity(0.08), radius: 0, y: 2)
                         }
                     }
+                    // VoiceOver kısayolu harf harf değil tek bir ad olarak okur.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text(verbatim: display))
                     Text(action.title).appFont(size: 14, weight: .regular)
                     Spacer(minLength: 0)
                 }
             }
             FeatureTile(
                 symbol: "rectangle.on.rectangle", title: "Kayıt sırasında cam panel",
-                text: "Canlı metin ve \(selectedNoteLanguage().interfaceName) çevirisi, \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.", palette: .sunset
+                text: "Canlı metin (istersen \(selectedNoteLanguage().interfaceName) çevirisiyle), \"Ne kaçırdım?\" ve soru; çentikte ada süreyi ve son cümleyi gösterir.", palette: .sunset
             )
             .padding(.top, 6)
             FeatureTile(

@@ -832,7 +832,14 @@ final class HostedAccount {
         let userID: String? = signedInUserIDCache
         await perform { (client: HostedClient) async throws -> Void in
             try await client.deleteAccount()
+            // Yerel temizlik yalnızca silme başarılıysa: başarısızsa (ör. çevrimdışı) hesap durur, kapatılamamış oturumları
+            // izlenmeye ve çevrimdışı kayıt izni geçerli kalmalı.
+            await self.clearAfterAccountDeletion(userID: userID)
         }
+    }
+
+    /// Silinen hesabın yerel izleri: şimdiki toplantı, çevrimdışı kayıt izni ve açık oturum listesi.
+    private func clearAfterAccountDeletion(userID: String?) {
         currentMeeting = nil
         clearHostedOfflinePermit()
         guard let userID else {
@@ -939,11 +946,20 @@ final class HostedAccount {
             await refresh()
         }
         do {
+            // Yerel kayıt yerleri (açık oturum listesi, kayıt–oturum bağları) oturum açılmadan denetlenir: açıldıktan sonra
+            // yazılamasaydı izlenmeyen oturum deneme toplantısını ya da aylık süreyi boşa harcardı.
+            let openDefaults: UserDefaults = try await signedInOpenMeetingsDefaults(client: client)
+            _ = try loadHostedMeetingLinks()
             let started: HostedStartedMeeting = try await openServerMeeting(client: client, clientRef: recordID, deferred: false)
+            do {
+                try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: started.meetingId, createdAt: Date()))
+            } catch {
+                await abandonServerMeeting(client: client, meetingID: started.meetingId)
+                throw error
+            }
             currentMeeting = started
             isOfflineRecording = false
-            addHostedOpenMeetingID(meetingID: started.meetingId, defaults: try await signedInOpenMeetingsDefaults(client: client))
-            try saveHostedMeetingLink(link: HostedMeetingLink(recordID: recordID, serverMeetingID: started.meetingId, createdAt: Date()))
+            addHostedOpenMeetingID(meetingID: started.meetingId, defaults: openDefaults)
             accountLogger.info("Toplantı oturumu açıldı, en çok dakika: \(started.maxDurationMinutes, privacy: .public)")
             Task { await refresh() }
             return .online(started)
@@ -962,6 +978,18 @@ final class HostedAccount {
             isOfflineRecording = true
             accountLogger.info("Sunucuya ulaşılamadı, kayıt çevrimdışı başlıyor, en çok dakika: \(minutes, privacy: .public)")
             return .offline(maxMinutes: minutes)
+        }
+    }
+
+    /// Açılan ama bu Mac'te kayda bağlanamayan sunucu oturumunu kapatır (deneme ya da aylık süre boşa akmasın).
+    /// Kapatılamazsa uyarı loglanır; sunucu onu sonraki canlı başlatmada kapatır. Asıl hata çağırana döner.
+    private func abandonServerMeeting(client: HostedClient, meetingID: String) async {
+        await client.clearCurrentMeeting()
+        do {
+            _ = try await client.endMeeting(meetingID: meetingID)
+            accountLogger.info("Kayda bağlanamayan toplantı oturumu kapatıldı")
+        } catch {
+            accountLogger.warning("Kayda bağlanamayan toplantı oturumu kapatılamadı, hata: \(String(describing: error), privacy: .private)")
         }
     }
 

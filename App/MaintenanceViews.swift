@@ -145,8 +145,12 @@ struct UpdateToast: View {
         if updater.isRelaunchPostponed {
             return "Kayıt ve işleme bitince uygulama yeniden açılıp güncellenecek."
         }
+        // Çıkışta kendiliğinden kurulum yalnızca indirilmiş güncellemede olur (otomatik güncelleme kapalıyken bulunan
+        // güncelleme indirilmemiştir).
         if isBusy {
-            return "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
+            return update.isReadyToInstall
+                ? "Kayıt ya da işleme sürerken yeniden başlatılmaz; bitince güncelleyebilirsin. Çıkışta da kendiliğinden kurulur."
+                : "Kayıt ya da işleme sürerken güncellenmez; bitince güncelleyebilirsin."
         }
         return nil
     }

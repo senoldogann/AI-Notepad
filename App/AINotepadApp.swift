@@ -211,6 +211,9 @@ struct AINotepadApp: App {
             }
             Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
         }
+        AppDelegate.onOpenHomeFromNotification = {
+            openMainWindow(router: router, section: .home)
+        }
         model.onAutoRecord = {
             guard !model.isRecording else {
                 return
@@ -248,15 +251,20 @@ struct AINotepadApp: App {
                 if !UserDefaults.standard.bool(forKey: SettingsKey.onboardingCompleted) {
                     router.section = .setup
                 }
-                // "--riza": kayıt başlatmadan rıza hatırlatmasını gösterir (görsel kontrol için).
+                #if DEBUG
+                // "--riza": kayıt başlatmadan rıza hatırlatmasını gösterir (görsel kontrol için; yalnız Debug).
                 if CommandLine.arguments.contains("--riza") {
                     model.consentReminderVisible = true
                 }
-                // "--soru <metin>": Sor bölümünde soruyu sorar (görsel kontrol için).
+                // "--soru <metin>": Sor bölümünde soruyu sorar (görsel kontrol için; yalnız Debug: ücretli yapay zekâ
+                // isteğidir).
                 if !isSignInRequired(), let index = CommandLine.arguments.firstIndex(of: "--soru"), CommandLine.arguments.indices.contains(index + 1) {
                     model.askArchive(question: CommandLine.arguments[index + 1], meetingIDs: [], recipeTitle: nil)
                 }
-                #if DEBUG
+                // "--ara": arama penceresini açar (görsel kontrol için; yalnız Debug).
+                if CommandLine.arguments.contains("--ara") {
+                    router.isSearchPresented = true
+                }
                 // "--test-kaydi <sn>": kaydı başlatır, verilen süre sonra durdurur (uçtan uca kabul testi için; yalnız
                 // Debug). Ses dışarıdan (ör. `afplay`) sistem sesine çalınır.
                 if let index = CommandLine.arguments.firstIndex(of: "--test-kaydi"), CommandLine.arguments.indices.contains(index + 1),
@@ -303,10 +311,8 @@ struct AINotepadApp: App {
                     }
                 }
                 #endif
-                // "--ara": arama penceresini açar (görsel kontrol için).
-                if CommandLine.arguments.contains("--ara") {
-                    router.isSearchPresented = true
-                }
+                // "--bolum", "--sayfa", "--toplanti": açılışta bölüm, panel sayfası ya da toplantı açılır (yalnızca gezinme;
+                // Release'te de görsel kontrol için).
                 let section: MainSection? = launchSection(arguments: CommandLine.arguments)
                 let page: PanelPage? = launchPage(arguments: CommandLine.arguments)
                 if let section {
@@ -405,12 +411,15 @@ struct AINotepadApp: App {
                 Button("Ayarlar…") { openMainWindow(router: router, section: .settings) }
                     .keyboardShortcut(",", modifiers: .command)
             }
+            // Menü çubuğundaki menüyle aynı durumlar: bitirilirken "Bitiriliyor…" ve kapalı. Ana pencerede başlatma engelinin
+            // nedeni kayıt kartında yazdığı için engelliyken kapalı kalır.
             CommandGroup(replacing: .newItem) {
-                Button(model.phase == .idle ? "Kaydı başlat" : "Kaydı bitir") {
+                Button(newItemTitle(phase: model.phase)) {
                     Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
                 }
                 .keyboardShortcut("n", modifiers: .command)
-                .disabled(model.phase == .idle && (!model.isReadyToRecord || isSignInRequired() || startBlockNotice(model: model) != nil))
+                .disabled(model.phase == .finishing
+                    || (model.phase == .idle && (!model.isReadyToRecord || model.isStarting || isSignInRequired() || startBlockNotice(model: model) != nil)))
             }
             // Bölümler arası geçiş (⌘1–5), Mac uygulamalarının alışılmış kısayolları.
             CommandMenu("Git") {
@@ -556,6 +565,16 @@ func toggleWindows(panel: LivePanelController, island: IslandController) {
     }
 }
 
+/// Dosya menüsündeki ⌘N öğesinin adı (menü çubuğundaki menüyle aynı): boşta başlat, kayıtta bitir, bitirilirken
+/// bekleme. Saf fonksiyondur.
+func newItemTitle(phase: RecordingPhase) -> LocalizedStringKey {
+    switch phase {
+    case .idle: "Kaydı başlat"
+    case .recording: "Kaydı bitir"
+    case .finishing: "Bitiriliyor…"
+    }
+}
+
 /// Giriş kapısı kapalı mı: abonelik sürümünde bu Mac'te oturum yoksa ana arayüz, kayıt, panel, kısayollar ve menü
 /// eylemleri açılmaz (bkz. `HostedAccount.requiresSignIn`); geliştirici sürümünde kapı yoktur.
 @MainActor
@@ -622,6 +641,14 @@ private struct MenuContent: View {
         }
     }
 
+    /// Menüdeki kırmızı satırlar: kurulum eksikleri, boştayken başlatma engelinin nedeni (abonelikte deneme bitti, aylık
+    /// sınır; kurulum eksiğiyse zaten listede) ve kısayol hataları.
+    private var menuProblems: [String] {
+        let blockReason: String? = model.phase == .idle ? startBlockNotice(model: model)?.reason : nil
+        let block: [String] = blockReason.map { (reason: String) -> [String] in model.setupProblems.contains(reason) ? [] : [reason] } ?? []
+        return model.setupProblems + block + [model.shortcutError, model.localDiarizationWarning].compactMap { $0 }
+    }
+
     @ViewBuilder
     private var fullMenu: some View {
         switch model.phase {
@@ -637,10 +664,12 @@ private struct MenuContent: View {
             Button("Bitiriliyor…", systemImage: "hourglass") {}
                 .disabled(true)
         case .idle:
+            // Başlatma engelinde de basılabilir: `toggleRecordingFlow` ana pencereyi (neden orada) ve gerekirse abone olma
+            // teklifini açar; nedeni aşağıdaki kırmızı satırlarda da yazar.
             Button("Kaydı başlat", systemImage: "record.circle") {
                 Task { await toggleRecordingFlow(model: model, panel: panel, island: island) }
             }
-            .disabled(!model.isReadyToRecord || model.isStarting || startBlockNotice(model: model) != nil)
+            .disabled(!model.isReadyToRecord || model.isStarting)
             .menuShortcut(binding: shortcuts.currentBinding(action: .record))
         }
 
@@ -649,8 +678,8 @@ private struct MenuContent: View {
         }
         .menuShortcut(binding: shortcuts.currentBinding(action: .toggleWindows))
 
-        // Kayıt başlamadan görünmesi gereken sorunlar (kırmızı): eksik anahtar/ayar ve kısayol hataları.
-        ForEach(Array((model.setupProblems + [model.shortcutError, model.localDiarizationWarning].compactMap { $0 }).enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
+        // Kayıt başlamadan görünmesi gereken sorunlar (kırmızı): eksik anahtar/ayar, başlatma engeli ve kısayol hataları.
+        ForEach(Array(menuProblems.enumerated()), id: \.offset) { (item: (offset: Int, element: String)) in
             Label(item.element, systemImage: "exclamationmark.circle")
         }
 

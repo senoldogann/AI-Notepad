@@ -169,8 +169,15 @@ struct HostedAccountSettings: View {
             case .subscribed(let renewsAt):
                 Text("Abonelik etkin; dönem \(hostedDayText(date: renewsAt)) tarihinde yenilenir.")
             case .complimentary:
-                Text("Ücretsiz tam erişim: ödeme ve yenileme yok.")
-                    .foregroundStyle(Theme.ink)
+                // Bitiş tarihli ücretsiz erişimde (sunucu bitişi `cancelAt`'e yazar) erişim o gün kendiliğinden biter: tarih
+                // önceden görünür.
+                if let until = entitlements.subscription?.cancelAt {
+                    Text("Ücretsiz tam erişim: ödeme yok; \(hostedDayText(date: until)) tarihine kadar.")
+                        .foregroundStyle(Theme.ink)
+                } else {
+                    Text("Ücretsiz tam erişim: ödeme ve yenileme yok.")
+                        .foregroundStyle(Theme.ink)
+                }
             case .ending(let endsAt):
                 Text("Abonelik iptal edildi; \(hostedDayText(date: endsAt)) tarihine kadar kullanabilirsin, yenilenmez.")
             case .grace(let endsAt):

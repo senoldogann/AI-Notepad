@@ -28,12 +28,19 @@ struct AppToast: Equatable, Identifiable {
     let action: ToastAction?
 }
 
-/// Bildirimin ekranda kaldığı süre (saniye); fare üstündeyken süre işlemez.
-private let toastVisibleSec: Double = 3
+/// Bildirimin ekranda kaldığı süre (saniye); fare üstündeyken süre işlemez. Başarı kısa bir onaydır; bilgi ve uyarı
+/// birkaç satır olabilir ve başka yerde tekrarlanmaz, okunacak kadar kalır. Saf fonksiyondur.
+func toastVisibleSeconds(kind: ToastKind) -> Double {
+    switch kind {
+    case .success: 3
+    case .info, .warning: 8
+    }
+}
 
 /// Ana pencerenin sağ altındaki kısa bildirimler: başarılar (kaydedildi, kopyalandı, gönderildi) ve verisi yerinde
 /// duran son işlemin uyarıları (not yenilenemedi, ses yeniden yazıya dökülmedi). Tek bildirim görünür, yenisi eskisinin
-/// yerini alır; `toastVisibleSec` sonra kendiliğinden kaybolur, fare üstündeyken bekler. Kalıcı hatalar (toplantı
+/// yerini alır; türüne göre süre dolunca (`toastVisibleSeconds`) kendiliğinden kaybolur, fare üstündeyken bekler.
+/// VoiceOver'a da okunur. Kalıcı hatalar (toplantı
 /// işlenemedi, not yok) bildirim değildir: oldukları yerde kalır.
 @MainActor
 @Observable
@@ -45,9 +52,10 @@ final class ToastCenter {
 
     private init() {}
 
-    /// Bildirimi gösterir ve kaybolma süresini başlatır.
+    /// Bildirimi gösterir, VoiceOver'a okutur ve kaybolma süresini başlatır.
     func show(kind: ToastKind, title: String, detail: String?, action: ToastAction?) {
         current = AppToast(id: UUID(), kind: kind, title: title, detail: detail, action: action)
+        AccessibilityNotification.Announcement(detail.map { "\(title) \($0)" } ?? title).post()
         scheduleDismissal()
     }
 
@@ -70,12 +78,14 @@ final class ToastCenter {
 
     private func scheduleDismissal() {
         dismissal?.cancel()
-        guard let shownID = current?.id else {
+        guard let shown = current else {
             return
         }
+        let shownID: UUID = shown.id
+        let visibleSec: Double = toastVisibleSeconds(kind: shown.kind)
         dismissal = Task { [weak self] in
             do {
-                try await Task.sleep(for: .seconds(toastVisibleSec))
+                try await Task.sleep(for: .seconds(visibleSec))
             } catch {
                 return
             }
