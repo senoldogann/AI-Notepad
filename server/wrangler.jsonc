@@ -164,7 +164,14 @@
     // (yalnızca bu depoda Contents okuma/yazma yetkili ince ayarlı jeton) girilmemişse blog uçları
     // `503 blog_unavailable` döner. Yerelde ve testlerde jeton yoktur.
     "GITHUB_BLOG_REPO": "senoldogann/AI-Notepad",
-    "GITHUB_BLOG_BRANCH": "main"
+    "GITHUB_BLOG_BRANCH": "main",
+    // Yönetim panelindeki site istatistikleri (src/siteAnalytics.ts): Cloudflare GraphQL API'sinden sitenin Web
+    // Analytics toplamları (sayfa görüntüleme, ziyaret, en çok açılan sayfalar, yönlendiren siteler; son 30 gün). Hesap
+    // kimliği ve sitenin etiketi açık değerdir (32 onaltılık karakter); gizli CF_ANALYTICS_TOKEN (yalnızca Account ›
+    // Account Analytics › Read yetkili API jetonu) girilmemişse ya da biri boşsa uç `503 analytics_unavailable` döner.
+    // Yerelde ve testlerde boş.
+    "CF_ANALYTICS_ACCOUNT_ID": "",
+    "CF_ANALYTICS_SITE_TAG": ""
   },
   "env": {
     "production": {
@@ -279,7 +286,11 @@
         // Bkz. üstteki geliştirme `vars` açıklaması. Dala gelen her blog commit'i sitenin yayın iş akışını
         // (.github/workflows/deploy-web.yml) tetikler.
         "GITHUB_BLOG_REPO": "senoldogann/AI-Notepad",
-        "GITHUB_BLOG_BRANCH": "main"
+        "GITHUB_BLOG_BRANCH": "main",
+        // Bkz. üstteki geliştirme `vars` açıklaması. Sahibin dolduracağı değerler: Cloudflare panelinin hesap kimliği ve
+        // Web Analytics › gistsmith.com sitesinin etiketi (`siteTag`); gizli CF_ANALYTICS_TOKEN ayrıca girilir.
+        "CF_ANALYTICS_ACCOUNT_ID": "",
+        "CF_ANALYTICS_SITE_TAG": ""
       }
     }
   }

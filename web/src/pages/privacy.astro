@@ -189,7 +189,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
               <strong>Usage.</strong> Start and end time and length of each meeting session, audio duration and AI tokens
               used; daily and monthly totals. For each meeting session we also note when its first note was finished and,
               if a request for it failed, how many failed and the last error code (for example “transcription service
-              unavailable”) — no content
+              unavailable”) — no content. We also keep daily totals, not linked to anyone, of AI tokens by feature (for
+              example meeting notes or live translation) and of transcriptions by language (requested and detected)
             </td>
             <td>Applying the trial and plan limits; controlling costs; finding and fixing problems</td>
             <td>(b) contract</td>
@@ -222,7 +223,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
           <tr>
             <td>
               <strong>Subscription.</strong> Stripe customer and subscription identifiers, subscription status, period
-              end. Card and payment details are entered at Stripe and never reach us.
+              end, and for each paid invoice and refund its amount, currency, discount and tax and when it was paid or
+              refunded. Card and payment details are entered at Stripe and never reach us.
             </td>
             <td>Managing your subscription and access</td>
             <td>(b) contract; (c) legal obligation for accounting records</td>
@@ -287,8 +289,9 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
             <td>
               <strong>Downloads and updates.</strong> The app and its updates are downloaded from GitHub, which processes
               your IP address and browser or app information to deliver the files (see section 8). We count downloads per
-              day, by which button on our site was used and by the domain of the referring page (only the domain, never the
-              full address); no IP address or other identifier is stored with the counts. To count each network once a day,
+              day, by which button on our site was used, by campaign (the <code>utm_source</code> and
+              <code>utm_campaign</code> parameters of the download link) and by the domain of the referring page (only the
+              domain, never the full address); no IP address or other identifier is stored with the counts. To count each network once a day,
               we keep a keyed one-way hash of your IP address with the date until the end of that day.
             </td>
             <td>Delivering the app and its updates; knowing how many people download it</td>
@@ -554,8 +557,8 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       your payment, billing and tax details as independent controllers under the{" "}
       <a href={stripePrivacyUrl}>Stripe privacy policy</a> and <a href={linkPrivacyUrl}>Link's privacy policy</a>, and the
       purchase itself is governed by <a href={linkTermsUrl}>Link's terms</a>. From them we receive only your Stripe customer
-      ID, your subscription status and period and, if you cancel and give one, your cancellation reason — never your card
-      details. We do not sell personal
+      ID, your subscription status and period, the amounts of your invoices and refunds (with currency, discount and tax)
+      and, if you cancel and give one, your cancellation reason — never your card details. We do not sell personal
       data or share it for advertising.
     </p>
   </LegalSection>
@@ -588,13 +591,14 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         card can't use an invite again.
       </li>
       <li>Processed payment events and total daily AI spend (not linked to you): 90 days.</li>
-      <li>Daily download and error totals, daily AI token totals per feature and daily usage statistics (not linked to you): 400 days.</li>
+      <li>Daily download, campaign, error, AI token and transcription language totals and daily usage statistics (not linked to you): 400 days.</li>
       <li>The latest app and macOS version on your account, the time the app last checked in and the date of the last daily usage report: while your account exists; deleted immediately when you delete it.</li>
       <li>Technical logs: kept for a short period by Cloudflare, normally no more than a few days.</li>
       <li>Database backups (Cloudflare D1 point-in-time recovery): up to 30 days, after which deleted data is gone from backups too.</li>
       <li>
-        Our accounting records of subscription income: for as long as Finnish accounting law requires (currently up to 10
-        years). Receipts and payment records are kept by Stripe and Link under their own policies.
+        Our accounting records of subscription income, including the invoice and refund amounts we receive from Stripe:
+        for as long as Finnish accounting law requires (currently up to 10 years); when you delete your account they are
+        no longer linked to it. Receipts and payment records are kept by Stripe and Link under their own policies.
       </li>
     </ul>
   </LegalSection>
@@ -615,7 +619,7 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
       your network (a hashed IP address, not linked to any account, deleted at the end of the day); if your account used an
       invite code, keyed hashes of your sign-in identity and of the paying card's fingerprint with the dates, for up to
       24 months; payment records kept by
-      Stripe and Link; messages you sent through the contact form until their 180 days run out (ask us if you want them
+      Stripe and Link, and our accounting records of your invoice and refund amounts, no longer linked to your account; messages you sent through the contact form until their 180 days run out (ask us if you want them
       deleted sooner — feedback and crash reports linked to your account are deleted with it); if a duplicate
       subscription was ever created by mistake, its Stripe identifiers for up to 400 days so a double charge can be
       refunded; and

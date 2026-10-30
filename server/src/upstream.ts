@@ -31,7 +31,7 @@ export async function fetchUpstream(
   timeoutMs: number,
 ): Promise<Response> {
   return withRetries(
-    { service, attempts, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableUpstreamError },
+    { service, attempts, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableUpstreamError, recordRetry: platform.recordRetry },
     async (): Promise<Response> => {
       const response: Response = await platform.fetch(url, { ...init(), signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) {

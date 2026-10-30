@@ -48,14 +48,37 @@ export interface PaidInvoiceFields {
   readonly created: number;
 }
 
+/** Faturanın vergi oranı (tutarların vergi dahil fiyattaki payı; testlerde %24 KDV). */
+const testTaxRate: number = 0.24;
+
+/**
+ * Ödenmiş faturanın tutar alanları (Stripe'ın gönderdiği biçimde): vergi dahil fiyat, vergisi ve ödenme anı. İndirim
+ * yoksa `discount` 0.
+ */
+export function paidInvoiceAmounts(amountPaid: number, discount: number, created: number, currency: string): object {
+  const tax: number = Math.round(amountPaid - amountPaid / (1 + testTaxRate));
+  return {
+    currency,
+    amount_paid: amountPaid,
+    amount_due: amountPaid,
+    subtotal: amountPaid + discount,
+    total: amountPaid,
+    total_excluding_tax: amountPaid - tax,
+    total_taxes: amountPaid === 0 ? [] : [{ amount: tax, tax_behavior: "inclusive", taxability_reason: "standard_rated", taxable_amount: amountPaid - tax, type: "tax_rate_details", tax_rate_details: null }],
+    total_discount_amounts: discount === 0 ? [] : [{ amount: discount, discount: "di_test" }],
+    status_transitions: { paid_at: created, finalized_at: created, marked_uncollectible_at: null, voided_at: null },
+    billing_reason: "subscription_cycle",
+  };
+}
+
 /** `invoice.paid` olayı (abonelik metadata'sının faturadaki kopyasıyla). */
 export function invoicePaidEvent(fields: PaidInvoiceFields): string {
   return eventOf(fields.eventId, "invoice.paid", fields.created, {
+    ...paidInvoiceAmounts(fields.amountPaid, 0, fields.created, "usd"),
     id: fields.invoiceId,
     object: "invoice",
     customer: fields.customer,
     status: "paid",
-    amount_paid: fields.amountPaid,
     created: fields.created,
     parent: {
       type: "subscription_details",

@@ -67,10 +67,14 @@ const usageRetentionMs: number = 395 * dayMs;
 const aggregateCounterRetentionMs: number = 400 * dayMs;
 /** Abonelik iptal nedenleri (serbest yorum içerebilir) raporlar gibi 180 gün tutulur. */
 const cancellationRetentionMs: number = 180 * dayMs;
+/** Günlük anlık görüntü (yalnızca toplamlar; eğilimler için) 5 yıl tutulur. */
+const dailyMetricsRetentionMs: number = 1826 * dayMs;
+/** Gelir kayıtları (fatura ve iade tutarları) muhasebe kaydı olarak 10 yıl tutulur (Finlandiya muhasebe yasası). */
+const revenueRetentionMs: number = 3653 * dayMs;
 
 /**
- * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 23 tablo koşulu × 3 tur
- * = 69 silme sorgusu + 3 toplu işlemin 6 ifadesi = 75 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
+ * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 30 tablo koşulu × 3 tur
+ * = 90 silme sorgusu + 3 toplu işlemin 6 ifadesi = 96 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
  * ekler). Workers Paid planının çağrı başına 1000 sorgu sınırının çok altındadır; ücretsiz plana (50) dönülürse
  * `maxBatchesPerTable` 2'ye indirilmelidir. Kalan satırlar ertesi gün silinir. Koşul eklerken bu sayıyı güncelle.
  */
@@ -122,6 +126,30 @@ function cleanupTargets(now: Date): CleanupTarget[] {
     { name: "client_event_durations", table: "client_event_durations", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
     { name: "feature_usage_daily", table: "feature_usage_daily", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
     { name: "subscription_cancellations", table: "subscription_cancellations", where: "created_at < ?", binds: [nowMs - cancellationRetentionMs] },
+    // Günlük toplamlar (token kovaları, konuşma tanıma dilleri, indirme kampanyaları) sayaçlar gibi 400 gün.
+    { name: "llm_usage_daily", table: "llm_usage_daily", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    {
+      name: "transcription_languages_daily",
+      table: "transcription_languages_daily",
+      where: "day < ?",
+      binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))],
+    },
+    { name: "download_campaigns", table: "download_campaigns", where: "day < ?", binds: [dayKey(new Date(nowMs - aggregateCounterRetentionMs))] },
+    { name: "daily_metrics", table: "daily_metrics", where: "day < ?", binds: [dayKey(new Date(nowMs - dailyMetricsRetentionMs))] },
+    { name: "daily_revenue_metrics", table: "daily_revenue_metrics", where: "day < ?", binds: [dayKey(new Date(nowMs - dailyMetricsRetentionMs))] },
+    // Gelir: önce eski faturaların iadeleri (yabancı anahtar), sonra iadesi kalmamış eski faturalar.
+    {
+      name: "revenue_refunds",
+      table: "revenue_refunds",
+      where: "invoice_id IN (SELECT invoice_id FROM revenue_invoices WHERE paid_at < ?)",
+      binds: [nowMs - revenueRetentionMs],
+    },
+    {
+      name: "revenue_invoices",
+      table: "revenue_invoices",
+      where: "paid_at < ? AND NOT EXISTS (SELECT 1 FROM revenue_refunds r WHERE r.invoice_id = revenue_invoices.invoice_id)",
+      binds: [nowMs - revenueRetentionMs],
+    },
     // Hesabı silinmiş davet edilenin satırı (kimlik özeti ve zamanlar) deneme defteri gibi 730 gün tutulur.
     {
       name: "referral_redemptions",

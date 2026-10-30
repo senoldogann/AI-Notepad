@@ -1,7 +1,10 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): yedi görünüm — genel
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): dokuz görünüm — genel
 // bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
-// davet özeti), telemetri (sürüm benimsenmesi, amaca göre token, istemci olayları ve süreleri, özellik kullanımı), kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
+// davet özeti), ürün (etkinlik, kohortlar, tutunma, güvenilirlik, yaklaşık birim ekonomisi, sürüme göre çökmeler),
+// eğilimler (günlük anlık görüntüler, gerçek gelir, token kovaları, diller, kampanyalar, site istatistikleri),
+// telemetri (sürüm benimsenmesi, amaca göre token, istemci olayları ve süreleri, özellik kullanımı),
+// kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
 // işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, kapak
 // seçici, görsel ekleme, önizleme, sitede açma, paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
@@ -21,11 +24,19 @@ import type { IconName } from "../lib/icons";
 import { routes } from "../routes";
 import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-copy";
 import { type AdminBlogCopy, adminBlogCopy } from "../client/admin-blog-copy";
+import { type AdminProductCopy, adminProductCopy } from "../client/admin-product-copy";
+import { type AdminTrendsCopy, type TrendChartId, type TrendTableId, adminTrendsCopy } from "../client/admin-trends-copy";
 import { type AdminTelemetryCopy, adminTelemetryCopy, countEventKinds, durationEventKinds } from "../client/admin-telemetry-copy";
 
 const text: AdminCopy = copy.admin;
 const inviteText: AdminInviteCopy = adminInviteCopy;
 const blogText: AdminBlogCopy = adminBlogCopy;
+const productText: AdminProductCopy = adminProductCopy;
+const trendsText: AdminTrendsCopy = adminTrendsCopy;
+
+/** Eğilimler görünümünün grafikleri ve tabloları (betik `chart-trend-<id>`, `trend-<id>-rows` doldurur). */
+const trendCharts: readonly TrendChartId[] = ["mrr", "subscribers", "active", "spend", "revenue"];
+const trendTables: readonly TrendTableId[] = ["revenue", "tokens", "languages", "events", "campaigns", "paths", "referrers"];
 const telemetryText: AdminTelemetryCopy = adminTelemetryCopy;
 
 /** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
@@ -109,6 +120,8 @@ const charts: readonly { readonly id: string; readonly title: string; readonly l
 const views: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
   { id: "overview", label: text.views.overview, icon: "chart" },
   { id: "insights", label: text.views.insights, icon: "sparkle" },
+  { id: "product", label: productText.view, icon: "waveform" },
+  { id: "trends", label: trendsText.view, icon: "clock" },
   { id: "telemetry", label: telemetryText.view, icon: "waveform" },
   { id: "users", label: text.views.users, icon: "users" },
   { id: "operations", label: text.views.operations, icon: "laptop" },
@@ -387,6 +400,184 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   { id: "stripe", label: text.users.fields.stripeCustomer, mono: true },
   { id: "cancellation", label: text.users.fields.cancellation, mono: false },
 ];
+
+/**
+ * Ürün görünümünün tablosu: betik `<id>-rows` gövdesini, `empty` varsa `<id>-empty` bildirimini doldurur; `<id>-note`
+ * notu sabittir ya da (boşsa) betik değerlerle yazar. Geniş tablo iki sütunu kaplar.
+ */
+interface ProductTable {
+  readonly id: string;
+  readonly title: string;
+  readonly columns: readonly Column[];
+  readonly wide: boolean;
+  readonly empty: string | null;
+  readonly note: string;
+}
+
+/** Ürün görünümünün bölümü: özet kutuları (betik `kpi-<id>` doldurur), grafikler (betik `chart-<id>` çizer) ve tablolar. */
+interface ProductSection {
+  readonly id: string;
+  readonly title: string;
+  readonly kpis: readonly KpiSpec[];
+  readonly charts: readonly { readonly id: string; readonly title: string; readonly legend: boolean }[];
+  readonly tables: readonly ProductTable[];
+}
+
+const productColumns: AdminProductCopy["columns"] = productText.columns;
+
+/** Kohort tablosunun hafta sütunları (kayıttan sonraki 0.–4. hafta; sunucu `cohortWeekColumns`). */
+const cohortWeeks: readonly number[] = [0, 1, 2, 3, 4];
+
+const productSections: readonly ProductSection[] = [
+  {
+    id: "engagement",
+    title: productText.sections.engagement,
+    kpis: [
+      { id: "product-wau", label: productText.kpis.wau, icon: "users", meter: false },
+      { id: "product-d7", label: productText.kpis.d7, icon: "rewind", meter: false },
+      { id: "product-d30", label: productText.kpis.d30, icon: "calendar", meter: false },
+      { id: "product-checkout", label: productText.kpis.checkout, icon: "card", meter: false },
+    ],
+    charts: [],
+    tables: [
+      {
+        id: "product-cohorts",
+        title: productText.tables.cohorts,
+        columns: [
+          textColumn(productColumns.signupWeek),
+          numberColumn(productColumns.signups),
+          ...cohortWeeks.map((week: number): Column => numberColumn(productColumns.week.replace("{week}", String(week)))),
+        ],
+        wide: true,
+        empty: null,
+        note: productText.notes.cohorts,
+      },
+      {
+        id: "product-weeks",
+        title: productText.tables.weeks,
+        columns: [
+          textColumn(productColumns.calendarWeek),
+          numberColumn(productColumns.activeUsers),
+          numberColumn(productColumns.meetings),
+          numberColumn(productColumns.perActiveUser),
+        ],
+        wide: false,
+        empty: null,
+        note: "",
+      },
+      {
+        id: "product-steps",
+        title: productText.tables.steps,
+        columns: [textColumn(productColumns.step), numberColumn(productColumns.accounts), numberColumn(productColumns.median)],
+        wide: false,
+        empty: null,
+        note: "",
+      },
+      {
+        id: "product-trials",
+        title: productText.tables.trials,
+        columns: [textColumn(productColumns.outcome), numberColumn(productColumns.accounts), numberColumn(productColumns.share)],
+        wide: false,
+        empty: null,
+        note: productText.notes.trials,
+      },
+    ],
+  },
+  {
+    id: "reliability",
+    title: productText.sections.reliability,
+    kpis: [
+      { id: "product-failed", label: productText.kpis.failed, icon: "inbox", meter: false },
+      { id: "product-notes", label: productText.kpis.notes, icon: "note", meter: false },
+      { id: "product-note-time", label: productText.kpis.noteTime, icon: "timer", meter: false },
+      { id: "product-on-device", label: productText.kpis.onDevice, icon: "laptop", meter: false },
+    ],
+    charts: [
+      { id: "product-refusals", title: productText.charts.refusals, legend: false },
+      { id: "product-provider", title: productText.charts.providerErrors, legend: false },
+      { id: "product-server", title: productText.charts.serverErrors, legend: false },
+    ],
+    tables: [
+      {
+        id: "product-failures",
+        title: productText.tables.failures,
+        columns: [textColumn(productColumns.lastError), numberColumn(productColumns.meetings), numberColumn(productColumns.share)],
+        wide: false,
+        empty: productText.empty.failures,
+        note: "",
+      },
+      {
+        id: "product-outcomes",
+        title: productText.tables.outcomes,
+        columns: [textColumn(productColumns.measure), numberColumn(productColumns.meetings), numberColumn(productColumns.share)],
+        wide: false,
+        empty: null,
+        note: "",
+      },
+    ],
+  },
+  {
+    id: "economics",
+    title: productText.sections.economics,
+    kpis: [],
+    charts: [{ id: "product-spend", title: productText.charts.spend, legend: true }],
+    tables: [
+      {
+        id: "product-costs",
+        title: productText.tables.costs,
+        columns: [
+          textColumn(productColumns.month),
+          numberColumn(productColumns.meetings),
+          numberColumn(productColumns.hours),
+          numberColumn(productColumns.llm),
+          numberColumn(productColumns.elevenLabs),
+          numberColumn(productColumns.deepgram),
+          numberColumn(productColumns.perMeeting),
+          numberColumn(productColumns.perHour),
+          numberColumn(productColumns.accountLlm),
+        ],
+        wide: true,
+        empty: null,
+        note: "",
+      },
+      {
+        id: "product-payers",
+        title: productText.tables.payers,
+        columns: [
+          textColumn(productColumns.month),
+          numberColumn(productColumns.payers),
+          numberColumn(productColumns.costPerPayer),
+          numberColumn(productColumns.listRevenue),
+          numberColumn(productColumns.grossMargin),
+        ],
+        wide: true,
+        empty: null,
+        note: "",
+      },
+    ],
+  },
+  {
+    id: "crashes",
+    title: productText.sections.crashes,
+    kpis: [],
+    charts: [],
+    tables: [
+      {
+        id: "product-crashes",
+        title: productText.tables.crashes,
+        columns: [
+          textColumn(productColumns.version),
+          numberColumn(productColumns.crashes),
+          numberColumn(productColumns.recent),
+          textColumn(productColumns.latest),
+        ],
+        wide: true,
+        empty: productText.empty.crashes,
+        note: productText.notes.crashes,
+      },
+    ],
+  },
+];
 ---
 
 <Base page="admin" meta={text.meta} indexed={false} social={websiteCard}>
@@ -591,6 +782,83 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
             </div>
           </div>
 
+          {/* ---------- Ürün ---------- */}
+          <div id="panel-product" class="admin__panel hidden">
+            {
+              productSections.map((section: ProductSection) => (
+                <section class="kpi-group product-section" aria-labelledby={`product-${section.id}-title`}>
+                  <h2 class="eyebrow kpi-group__title" id={`product-${section.id}-title`}>
+                    {section.title}
+                  </h2>
+                  {section.kpis.length === 0 ? null : (
+                    <div class="kpi-group__grid">
+                      {section.kpis.map((kpi: KpiSpec) => (
+                        <div class="card kpi" id={`kpi-${kpi.id}-card`}>
+                          <p class="kpi__label">
+                            <Icon name={kpi.icon} size={16} class="kpi__icon" />
+                            {kpi.label}
+                          </p>
+                          <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
+                          <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {section.charts.length === 0 ? null : (
+                    <div class="charts">
+                      {section.charts.map((chart) => (
+                        <figure class="card chart">
+                          <div class="chart__head">
+                            <h3 class="chart__title">{chart.title}</h3>
+                            {chart.legend ? (
+                              <p class="chart__legend small muted" aria-hidden="true">
+                                <span class="legend legend--main">{productText.legendPaid}</span>
+                                <span class="legend legend--accent">{productText.legendTrial}</span>
+                              </p>
+                            ) : null}
+                          </div>
+                          <div id={`chart-${chart.id}`} class="chart__plot" />
+                          <figcaption id={`chart-${chart.id}-summary`} class="small muted" />
+                        </figure>
+                      ))}
+                    </div>
+                  )}
+                  <div class="insights-grid">
+                    {section.tables.map((table: ProductTable) => (
+                      <section class:list={["card", "table-card", { "ops-grid__wide": table.wide }]} aria-labelledby={`${table.id}-title`}>
+                        <h3 class="detail__label table-card__title" id={`${table.id}-title`}>
+                          {table.title}
+                        </h3>
+                        <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`${table.id}-title`}>
+                          <table class="data-table">
+                            <thead>
+                              <tr>
+                                {table.columns.map((column: Column) => (
+                                  <th scope="col" class:list={{ numeric: column.numeric }}>
+                                    {column.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody id={`${table.id}-rows`} />
+                          </table>
+                        </div>
+                        {table.empty === null ? null : (
+                          <p id={`${table.id}-empty`} class="muted table-empty hidden">
+                            {table.empty}
+                          </p>
+                        )}
+                        <p id={`${table.id}-note`} class="small muted table-note">
+                          {table.note}
+                        </p>
+                      </section>
+                    ))}
+                  </div>
+                </section>
+              ))
+            }
+          </div>
+
           {/* ---------- Telemetri ---------- */}
           <div id="panel-telemetry" class="admin__panel hidden">
             <p id="telemetry-window" class="small muted telemetry-lead"></p>
@@ -791,6 +1059,69 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                   <ul id="user-reports" class="link-list"></ul>
                   <p id="user-reports-empty" class="muted hidden">{text.users.noReports}</p>
                 </div>
+              </div>
+            </section>
+          </div>
+
+          {/* ---------- Eğilimler (admin-trends.ts) ---------- */}
+          <div id="panel-trends" class="admin__panel hidden">
+            <section aria-labelledby="trend-charts-title">
+              <h2 class="title-m section-title" id="trend-charts-title">{trendsText.chartsTitle}</h2>
+              <div class="charts">
+                {
+                  trendCharts.map((chart) => (
+                    <figure class="card chart">
+                      <div class="chart__head">
+                        <h3 class="chart__title">{trendsText.charts[chart].title}</h3>
+                        {trendsText.charts[chart].accent === null ? null : (
+                          <p class="chart__legend small muted" aria-hidden="true">
+                            <span class="legend legend--main">{trendsText.charts[chart].main}</span>
+                            <span class="legend legend--accent">{trendsText.charts[chart].accent}</span>
+                          </p>
+                        )}
+                      </div>
+                      <div id={`chart-trend-${chart}`} class="chart__plot" />
+                      <figcaption id={`chart-trend-${chart}-summary`} class="small muted" />
+                    </figure>
+                  ))
+                }
+              </div>
+              <p class="small muted table-note">{trendsText.chartsNote}</p>
+            </section>
+
+            <section aria-labelledby="trend-tables-title">
+              <h2 class="title-m section-title" id="trend-tables-title">{trendsText.tablesTitle}</h2>
+              <div class="insights-grid">
+                {
+                  trendTables.map((table) => (
+                    <section class="card table-card" aria-labelledby={`trend-${table}-title`}>
+                      <h2 class="detail__label table-card__title" id={`trend-${table}-title`}>
+                        {trendsText.tables[table].title}
+                      </h2>
+                      {table === "paths" ? <p id="trend-site-summary" class="small muted table-note" /> : null}
+                      {table === "paths" ? <p id="trend-site-error" class="notice hidden" role="status" /> : null}
+                      <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`trend-${table}-title`}>
+                        <table class="data-table">
+                          <thead>
+                            <tr>
+                              {trendsText.tables[table].columns.map((column) => (
+                                <th scope="col" class:list={{ numeric: column.numeric }}>
+                                  {column.label}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody id={`trend-${table}-rows`} />
+                        </table>
+                      </div>
+                      <p id={`trend-${table}-empty`} class="muted table-empty hidden">
+                        {trendsText.tables[table].empty}
+                      </p>
+                      {table === "revenue" ? <p id="trend-revenue-paid" class="small muted table-note" /> : null}
+                      {trendsText.tables[table].note === "" ? null : <p class="small muted table-note">{trendsText.tables[table].note}</p>}
+                    </section>
+                  ))
+                }
               </div>
             </section>
           </div>
@@ -2042,6 +2373,13 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   .data-table :global(.telemetry-share__meter) {
     width: 72px;
     flex: none;
+  }
+
+  /* ---------- Ürün ---------- */
+
+  /* Bölüm içinde kutular, grafikler ve tablolar arasında başlık aralığından biraz geniş aralık. */
+  .product-section {
+    gap: 16px;
   }
 
   /* ---------- İçgörüler ---------- */

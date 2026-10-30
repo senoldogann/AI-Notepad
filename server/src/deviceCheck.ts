@@ -97,7 +97,7 @@ async function postDeviceCheck(
   const jwt: string = await authorizationJwt(deviceCheck, now);
   const url: string = deviceCheckUrl(deviceCheck.environment, endpoint);
   return withRetries(
-    { service: "devicecheck", attempts: deviceCheckAttempts, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableUpstreamError },
+    { service: "devicecheck", attempts: deviceCheckAttempts, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableUpstreamError, recordRetry: platform.recordRetry },
     async (): Promise<string> => {
       const response: Response = await platform.fetch(url, {
         method: "POST",

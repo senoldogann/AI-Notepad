@@ -16281,6 +16281,17 @@
           }
         }
       }
+    },
+    "Süre dolunca ses dosyaları silinir; metin ve not kalır. iCloud eşitlemesi açıksa iPhone'da kaydedilen toplantıların sesi de bu süreye göre silinir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When the time is up, audio files are deleted; the transcript and note stay. If iCloud sync is on, audio from meetings recorded on iPhone is also deleted after this period."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -2,7 +2,9 @@ import { closeStripeForDeletion } from "./billing";
 import type { Config } from "./config";
 import { log } from "./log";
 import type { Platform } from "./platform";
+import { paidSubscriptionSql } from "./admin";
 import { referralDeletionStatements } from "./referrals";
+import { revenueDeletionStatement } from "./revenue";
 import { userReservationRemovalStatements } from "./reservations";
 import { ledgerOnDeletionStatement, trialIdentityHash } from "./trialLedger";
 import type { IdentityProvider } from "./auth/users";
@@ -12,6 +14,24 @@ import { dayKey } from "./usage";
 interface StoredIdentity {
   readonly provider: IdentityProvider;
   readonly subject: string;
+}
+
+/**
+ * Hesap silme sayacı (`ops_events` türü `account_deleted`; hesap satırları silinmeden, aynı toplu işlemde): ayrıntı
+ * hesabın kesimidir — ödenmiş aboneliği olduysa `subscriber`, denemeye başladıysa `trial`, değilse `signup`. Hesap
+ * yoksa (yinelenen silme) yazılmaz. Kullanıcı tutmaz.
+ */
+function accountDeletedCounterStatement(db: D1Database, userId: string, now: Date): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO ops_events (day, kind, detail, count)
+       SELECT ?1, 'account_deleted',
+         CASE WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = u.id AND ${paidSubscriptionSql}) THEN 'subscriber'
+           WHEN u.trial_started_at IS NOT NULL THEN 'trial' ELSE 'signup' END, 1
+       FROM users u WHERE u.id = ?2
+       ON CONFLICT(day, kind, detail) DO UPDATE SET count = count + 1`,
+    )
+    .bind(dayKey(now), userId);
 }
 
 /**
@@ -35,6 +55,8 @@ interface StoredIdentity {
  * ettiklerinin satırlarında davet eden bağı kaldırılır, bekleyen ödülleri düşer (`referralDeletionStatements`).
  * Süren ayırmaların tahmini maliyeti silinmeden günlük harcamaya yazılır (`userReservationRemovalStatements`): silme
  * sırasında süren çağrı kesinleşirken yabancı anahtar hatası almaz, harcama da kaybolmaz.
+ * Silme, "Sorunlar" sayacına hesabın kesimiyle sayılır (`accountDeletedCounterStatement`). Gelir satırları
+ * (`revenue_invoices`; muhasebe kaydı) kalır, hesap bağı kaldırılır (`revenueDeletionStatement`).
  * `daily_spend` (toplam, kişisel değil), `downloads`, `download_sources`, `download_visitors`, `ops_events`,
  * `used_nonces`, `stripe_events` ve telemetri toplamları (`llm_purpose_usage`, `client_event_counts`,
  * `client_event_durations`, `feature_usage_daily`) hesaba bağlı değildir; hesabın son uygulama ve macOS sürümü ile
@@ -42,6 +64,8 @@ interface StoredIdentity {
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
   return [
+    accountDeletedCounterStatement(db, userId, now),
+    revenueDeletionStatement(db, userId),
     ...identityHashes.map((identityHash: string): D1PreparedStatement => ledgerOnDeletionStatement(db, identityHash, userId, now)),
     db
       .prepare(
