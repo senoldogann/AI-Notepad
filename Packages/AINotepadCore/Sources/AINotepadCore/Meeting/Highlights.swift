@@ -30,6 +30,7 @@ public func markingHighlights(segments: [StoredSegment], highlights: [Highlight]
         }
         return marked
             ? StoredSegment(key: segment.key, speaker: segment.speaker, person: segment.person, startSec: segment.startSec, endSec: segment.endSec, text: "★ " + segment.text, words: segment.words)
+                .with(spokenLanguage: segment.spokenLanguage)
             : segment
     }
 }

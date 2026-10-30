@@ -35,6 +35,7 @@ func sampleState(phase: RecordingPhase) -> LiveViewState {
         translations: translations,
         displayMode: .bilingual,
         failedTranslations: [transcript[1].id],
+        otherLanguageSegments: [],
         assistantCard: .summary(MissedSummary(
             topic: "Gelecek haftaki rapor ve cuma günkü sunum konuşuluyor.",
             decisions: ["Rapor gelecek hafta teslim edilecek."],

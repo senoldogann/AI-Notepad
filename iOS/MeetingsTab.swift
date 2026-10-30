@@ -164,6 +164,10 @@ struct MeetingReadView: View {
                         }
                         .transition(.opacity)
                     case .transcript:
+                        let skipped: [StoredSegment] = skippedLanguageSegments(record: record)
+                        if !skipped.isEmpty {
+                            SkippedLanguageNote(record: record, segments: skipped)
+                        }
                         TranscriptList(record: record, paragraphs: paragraphs, player: player, canPlay: canPlay, proxy: proxy) { (startSec: Double) -> Void in
                             play(from: startSec)
                         }
@@ -253,6 +257,8 @@ struct MeetingReadView: View {
 
     private func hero(paragraphs: [TranscriptParagraph]) -> some View {
         let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+        // Kısa konuşmalar (bkz. `groupedSpeakers`) konuşmacı sayısına girmez.
+        let majorCount: Int = groupedSpeakers(shares: shares, speakerNames: record.speakerNames).major.count
         let totalSec: Double = paragraphs.map(\.endSec).max() ?? 0
         let isPlayingThis: Bool = player.meetingID == record.id && player.isPlaying
         return VStack(alignment: .leading, spacing: 12) {
@@ -273,7 +279,7 @@ struct MeetingReadView: View {
                     GlassChip(text: languageName(language: language), systemImage: nil)
                 }
                 if !shares.isEmpty {
-                    GlassChip(text: String(localized: "\(shares.count) konuşmacı"), systemImage: "person.2")
+                    GlassChip(text: String(localized: "\(majorCount) konuşmacı"), systemImage: "person.2")
                 }
             }
             if totalSec > 0, !shares.isEmpty {
@@ -372,6 +378,7 @@ private struct MeetingSummary: View {
             let mine: [NoteTask] = note.tasks.filter(\.isMine)
             let others: [NoteTask] = note.tasks.filter { !$0.isMine }
             let shares: [SpeakerShare] = speakerShares(paragraphs: paragraphs)
+            let groups: SpeakerGroups = groupedSpeakers(shares: shares, speakerNames: record.speakerNames)
             VStack(alignment: .leading, spacing: 26) {
                 if mine.isEmpty {
                     Label("Bu toplantıda sana düşen görev yok", systemImage: "checkmark.circle")
@@ -418,7 +425,7 @@ private struct MeetingSummary: View {
                     .textSelection(.enabled)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                     PhoneStatTile(value: meetingDurationMinutes(record: record).map { String(localized: "\($0) dk") } ?? "–", label: "süre")
-                    PhoneStatTile(value: "\(shares.count)", label: "konuşmacı")
+                    PhoneStatTile(value: "\(groups.major.count)", label: groups.minor.isEmpty ? "konuşmacı" : "konuşmacı (+\(groups.minor.count) kısa)")
                     PhoneStatTile(value: "\(note.decisions.count)", label: "karar")
                     PhoneStatTile(value: "\(mine.count)", label: "senin görevin")
                 }
@@ -430,8 +437,12 @@ private struct MeetingSummary: View {
                             actionTitle: isEditable && shares.contains(where: { $0.key.person != nil }) ? "Ad ver" : nil,
                             action: onNameSpeakers
                         )
-                        ForEach(Array(shares.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
+                        ForEach(Array(groups.major.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
                             ShareRow(share: item.element, speakerNames: record.speakerNames)
+                        }
+                        // Az konuşanlar tek satırda; dokununca tek tek görünür (ad vermek için "Ad ver").
+                        if !groups.minor.isEmpty {
+                            MinorSpeakersRow(groups: groups, speakerNames: record.speakerNames)
                         }
                     }
                 }
@@ -525,6 +536,84 @@ private struct ShareRow: View {
                     }
                 }
                 .frame(height: 5)
+            }
+        }
+    }
+}
+
+/// Sabit toplantı dilinden başka dilde olduğu için transkriptten, nottan ve Sor'dan atlanan bölümler: tek satır ve
+/// dokununca soluk liste. Bölümler kayıtta durur.
+private struct SkippedLanguageNote: View {
+    let record: MeetingRecord
+    let segments: [StoredSegment]
+    @State private var isExpanded: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.smooth(duration: 0.25)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Label("Başka dilde \(segments.count) bölüm atlandı", systemImage: "globe")
+                    Spacer()
+                    Text(isExpanded ? "Gizle" : "Göster")
+                        .foregroundStyle(Theme.ink)
+                }
+                .appFont(size: 13, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if isExpanded {
+                ForEach(segments, id: \.key) { (segment: StoredSegment) in
+                    Text(verbatim: "\(timestamp(seconds: segment.startSec))  \(segment.person.flatMap { record.speakerNames[$0] } ?? speakerLabel(speaker: segment.speaker, person: segment.person)): \(segment.text)")
+                        .appFont(size: 13, weight: .regular)
+                        .italic()
+                        .foregroundStyle(Theme.muted)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+}
+
+/// Kısa konuşmalar (bkz. `groupedSpeakers`): toplam payıyla tek satır; dokununca kişiler tek tek görünür.
+private struct MinorSpeakersRow: View {
+    let groups: SpeakerGroups
+    let speakerNames: [Int: String]
+    @State private var isExpanded: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.smooth(duration: 0.25)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "ellipsis")
+                        .appFont(size: 12, weight: .semibold)
+                        .foregroundStyle(Theme.muted)
+                        .frame(width: 26, height: 26)
+                        .background(Theme.soft, in: Circle())
+                    Text("Kısa konuşmalar (\(groups.minor.count))")
+                        .appFont(size: 14, weight: .medium)
+                        .foregroundStyle(Theme.ink)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .appFont(size: 11, weight: .semibold)
+                        .foregroundStyle(Theme.muted)
+                    Spacer()
+                    Text(verbatim: groups.minorFraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
+                        .appFont(size: 13, weight: .medium)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.muted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if isExpanded {
+                ForEach(Array(groups.minor.enumerated()), id: \.offset) { (item: (offset: Int, element: SpeakerShare)) in
+                    ShareRow(share: item.element, speakerNames: speakerNames)
+                        .padding(.leading, 14)
+                }
             }
         }
     }

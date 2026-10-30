@@ -58,6 +58,9 @@ public struct LiveViewState: Equatable, Sendable {
     public let translations: [SegmentID: String]
     /// Çevirisi başarısız olan bölümler; panelde "Tekrar dene" gösterilir.
     public let failedTranslations: Set<SegmentID>
+    /// Sabit toplantı dilinden başka dilde konuşulan bölümler: panelde soluk ve eğik görünür, çevrilmez; toplantıdan
+    /// (transkript, not, Sor) okunurken atlanır (bkz. `isSkippedForLanguage`).
+    public let otherLanguageSegments: Set<SegmentID>
     public let displayMode: DisplayMode
     public let assistantCard: AssistantCard?
     /// En son en fazla 3 hata.
@@ -136,6 +139,7 @@ public func makeLiveViewState(
     translations: [SegmentID: String],
     displayMode: DisplayMode,
     failedTranslations: Set<SegmentID>,
+    otherLanguageSegments: Set<SegmentID>,
     assistantCard: AssistantCard?,
     phase: RecordingPhase,
     newPersonNumber: Int,
@@ -168,6 +172,7 @@ public func makeLiveViewState(
         blocks: blocks,
         translations: translations,
         failedTranslations: failedTranslations,
+        otherLanguageSegments: otherLanguageSegments,
         displayMode: displayMode,
         assistantCard: assistantCard,
         errors: Array(errors.suffix(3)),

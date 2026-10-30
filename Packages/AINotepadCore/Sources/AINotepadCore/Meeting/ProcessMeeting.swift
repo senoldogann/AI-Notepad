@@ -208,7 +208,8 @@ private func transcribeOthers(record: MeetingRecord, directory: URL, transcriber
             ) { (_: String, aligned: String) -> String in aligned })
             // Önceki "Sen" son geçişi korunur: bu tekrar işlemede "Sen" geçişi başarısız olursa iyi metin kaybolmasın.
             .with(
-                finalSegments: finalSegmentsWithLiveTail(final: result.segments, live: record.liveSegments, coveredUntilSec: result.coveredUntilSec)
+                // Bölümlerin dili bir kez algılanır: sabit dilli toplantıda başka dildekiler okunurken atlanır.
+                finalSegments: finalSegmentsWithLiveTail(final: labelingSpokenLanguages(segments: result.segments), live: record.liveSegments, coveredUntilSec: result.coveredUntilSec)
                     + record.finalSegments.filter { $0.speaker == .me },
                 language: record.language ?? result.language
             )
@@ -262,7 +263,7 @@ private func transcribeMe(record: MeetingRecord, directory: URL, transcriber: an
     }
     do {
         let result: FinalPassResult = try await transcriber.transcribeFinal(audioURL: meAudio, languageMode: languageMode)
-        let meSegments: [StoredSegment] = result.segments.map { $0.asMe() }
+        let meSegments: [StoredSegment] = labelingSpokenLanguages(segments: result.segments).map { $0.asMe() }
         return record.with(
             finalSegments: record.finalSegments.filter { $0.speaker != .me } + meSegments,
             language: record.language ?? result.language

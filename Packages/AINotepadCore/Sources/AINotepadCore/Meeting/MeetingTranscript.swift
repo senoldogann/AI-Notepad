@@ -51,9 +51,26 @@ let activeHoldSec: Double = 3
 let paragraphMaxSec: Double = 60
 
 /// Toplantının gösterilecek bölümleri: her taraf için son geçiş varsa ondan, yoksa canlıdan ("Sen" yalnızca canlı akış
-/// koptuysa son geçişten gelir); zamana göre sıralı, boşlar ve hoparlör yankısı süzülmüş. Toplantılar penceresi, not ve
-/// dışa aktarma bunu kullanır. Saf fonksiyondur.
+/// koptuysa son geçişten gelir); zamana göre sıralı, boşlar ve hoparlör yankısı süzülmüş; toplantı dili sabitse başka
+/// dildeki bölümler atlanmış (bkz. `isSkippedForLanguage`; atlananlar `skippedLanguageSegments`). Toplantılar penceresi,
+/// konuşmacılar, not, Sor/MCP arşivi ve dışa aktarma bunu kullanır. Saf fonksiyondur.
 public func meetingSegments(record: MeetingRecord) -> [StoredSegment] {
+    spokenSegments(record: record).filter { (segment: StoredSegment) -> Bool in
+        !isSkippedForLanguage(segment: segment, fixedLanguage: record.fixedLanguage)
+    }
+}
+
+/// Toplantının sabit dilinden başka dilde olduğu için atlanan bölümler (zamana göre sıralı); dil Otomatikse boş.
+/// Toplantı sayfası "Başka dilde N bölüm atlandı" satırında gösterir. Saf fonksiyondur.
+public func skippedLanguageSegments(record: MeetingRecord) -> [StoredSegment] {
+    spokenSegments(record: record).filter { (segment: StoredSegment) -> Bool in
+        isSkippedForLanguage(segment: segment, fixedLanguage: record.fixedLanguage)
+    }
+}
+
+/// Toplantıda konuşulan bütün bölümler (dil süzmesinden önce): taraf başına son geçiş ya da canlı, sıralı, boşlar ve
+/// hoparlör yankısı süzülmüş. Saf fonksiyondur.
+private func spokenSegments(record: MeetingRecord) -> [StoredSegment] {
     let side: (Speaker) -> [StoredSegment] = { (speaker: Speaker) -> [StoredSegment] in
         let final: [StoredSegment] = record.finalSegments.filter { $0.speaker == speaker }
         return final.isEmpty ? record.liveSegments.filter { $0.speaker == speaker } : final
@@ -133,6 +150,7 @@ func readingPieces(segment: StoredSegment) -> [StoredSegment] {
             key: item.offset == 0 ? segment.key : "\(segment.key).\(item.offset)", speaker: segment.speaker, person: segment.person,
             startSec: first.startSec, endSec: last.endSec, text: item.element.map(\.text).joined(separator: " "), words: item.element
         )
+        .with(spokenLanguage: segment.spokenLanguage)
     }
 }
 

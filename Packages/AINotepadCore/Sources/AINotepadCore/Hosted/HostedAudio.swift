@@ -1,12 +1,20 @@
 import AVFoundation
 import Foundation
 
-/// Sunucunun tek istekte kabul ettiği en büyük ses (`TRANSCRIBE_MAX_BYTES`): 16 kHz mono 16 bit WAV'da ~49 dakika.
+/// Sunucunun tek istekte kabul ettiği en büyük ses (`TRANSCRIBE_MAX_BYTES`, Cloudflare'ın 100 MB istek gövdesi
+/// sınırının altında): 16 kHz mono 16 bit WAV'da ~49 dakika; FLAC'ta içeriğe bağlı (konuşmada yaklaşık iki katı).
 public let hostedTranscribeMaxBytes: Int = 95_000_000
 
-/// Sunucuya gönderilen sesin örnekleme hızı. WAV'da süre başlıktan kesin hesaplanır (sıkıştırılmış ses en kötü bit
-/// hızıyla tahmin edilip fazla ayrılır).
+/// Sunucuya gönderilen sesin örnekleme hızı. Ses kayıpsız FLAC olarak gider; sunucu süreyi STREAMINFO'daki örnek
+/// sayısından kesin hesaplar (WAV'da başlıktan).
 public let hostedTranscribeSampleRate: Int = 16000
+
+/// FLAC parçasının en uzun süresi (saniye; boyut sınırı `hostedTranscribeMaxBytes` ayrıca uygulanır). Sunucunun
+/// ElevenLabs bekleme süresi (15 dk) ve ses ayırmasının ömrü (20 dk) 95 MB'lık ~49 dakikalık WAV parçasına göre
+/// ayarlıdır; işlem süresi ses süresiyle arttığı için parça bu pencereler değişmeden en çok 60 dk olur (FLAC yüklemesi
+/// WAV'ınkinin yaklaşık yarısıdır). İstemci zaman aşımı 60 dakikalık parçada da 16 dk alt sınırındadır
+/// (`hostedTranscribeTimeoutSec`: 300 + 60 × 10 = 900 sn < 960 sn). Bir saatlik toplantı tek parçada gider.
+public let hostedFlacChunkMaxSec: Double = 3600
 
 /// Ardışık parçaların ortak süresi (saniye): parçanın son dakikası sonrakinin başında yeniden gönderilir; iki parçanın
 /// aynı kelimelerine bakarak sonraki parçanın konuşmacıları öncekilerle eşlenir (ElevenLabs etiketleri parça içinde
@@ -17,8 +25,8 @@ public let hostedChunkOverlapSec: Double = 60
 /// 16 bit mono WAV'ın başlık boyutu.
 private let wavHeaderBytes: Int = 44
 
-/// Kaydın bir WAV parçası: kaydın başından örnek konumu ve sayısı.
-public struct WavChunkSpan: Sendable, Equatable {
+/// Kaydın bir parçası: kaydın başından örnek konumu ve sayısı.
+public struct AudioChunkSpan: Sendable, Equatable {
     public let startSample: Int
     public let sampleCount: Int
 
@@ -39,14 +47,15 @@ public func maxSamplesPerWavChunk(maxBytes: Int) -> Int {
 }
 
 /// Toplam örneği en çok `maxSamples`'lık parçalara böler; her parça öncekinin son `overlapSamples` örneğiyle başlar
-/// (`writeHostedWavChunks` ile aynı bölme). Son parça yalnızca ortak kısımdan ibaret olacaksa açılmaz; boş kayıtta parça
-/// yok. Saf fonksiyondur.
-public func wavChunkSpans(totalSamples: Int, maxSamples: Int, overlapSamples: Int) -> [WavChunkSpan] {
+/// (`writeHostedFlacChunks` ile aynı bölme). Son parça yalnızca ortak kısımdan ibaret olacaksa açılmaz; boş kayıtta parça
+/// yok. WAV sınırıyla (`maxSamplesPerWavChunk`) yapılan bölme, sunucunun parça örtüşmesi payının dayandığı en kısa
+/// parçalamadır (yayımlanmış WAV gönderen sürümler). Saf fonksiyondur.
+public func wavChunkSpans(totalSamples: Int, maxSamples: Int, overlapSamples: Int) -> [AudioChunkSpan] {
     let step: Int = maxSamples - overlapSamples
-    var spans: [WavChunkSpan] = []
+    var spans: [AudioChunkSpan] = []
     var start: Int = 0
     while start < totalSamples {
-        spans.append(WavChunkSpan(startSample: start, sampleCount: min(maxSamples, totalSamples - start)))
+        spans.append(AudioChunkSpan(startSample: start, sampleCount: min(maxSamples, totalSamples - start)))
         guard start + maxSamples < totalSamples else {
             break
         }
@@ -133,10 +142,11 @@ public func mergeChunkTranscriptions(chunks: [ChunkTranscription]) -> Diarizatio
     return DiarizationResult(words: words, languageCode: language?.languageCode, languageProbability: language?.languageProbability)
 }
 
-/// Diske yazılmış WAV parçası.
-public struct WavChunkFile: Sendable, Equatable {
+/// Diske yazılmış FLAC parçası: kayıttaki konumu ve dosya boyutu (bayt).
+public struct AudioChunkFile: Sendable, Equatable {
     public let url: URL
-    public let span: WavChunkSpan
+    public let span: AudioChunkSpan
+    public let bytes: Int
 }
 
 /// Sunucuya gönderilebilecek anahtar terimler: kırpılır, 1–49 UTF-16 birimi (sunucudaki JS `length` gibi; emoji iki
@@ -156,10 +166,101 @@ public func hostedKeyterms(terms: [String], limit: Int) -> [String] {
         .map { $0 }
 }
 
-/// Kayıt dosyasını (ör. `others.m4a`) 16 kHz mono 16 bit WAV parçalarına çevirip `directory`'ye yazar; her parça en
-/// çok `maxBytes` ve öncekinin son `overlapSamples` örneğiyle başlar (bkz. `wavChunkSpans`). Dosya bellekte bütün olarak tutulmaz: akış halinde dönüştürülüp yazılır (4 saatlik toplantı ~460 MB
-/// WAV eder). Dönüştürme ya da yazma hatasında yazılan parçalar `directory`'de kalır; çağıran klasörü siler.
-public func writeHostedWavChunks(source: URL, directory: URL, maxBytes: Int, overlapSamples: Int) throws -> [WavChunkFile] {
+/// FLAC dosyasının başındaki STREAMINFO bloğunun alanları.
+public struct FlacStreamInfo: Sendable, Equatable {
+    public let sampleRate: Int
+    public let channels: Int
+    public let bitsPerSample: Int
+    public let totalSamples: Int
+
+    public init(sampleRate: Int, channels: Int, bitsPerSample: Int, totalSamples: Int) {
+        self.sampleRate = sampleRate
+        self.channels = channels
+        self.bitsPerSample = bitsPerSample
+        self.totalSamples = totalSamples
+    }
+}
+
+/// STREAMINFO'yu okumak için gereken baştaki bayt: `fLaC` (4) + blok başlığı (4) + STREAMINFO (34).
+public let flacStreamInfoHeaderBytes: Int = 42
+
+/// FLAC'ın başını okur: `fLaC` imzası ve ilk metadata bloğu 34 baytlık STREAMINFO olmalı (sunucu da aynısını ister).
+/// Blok verisinin 10. baytından itibaren: 20 bit örnekleme hızı, 3 bit kanal − 1, 5 bit örnek biti − 1, 36 bit toplam
+/// örnek (büyük uçlu). Saf fonksiyondur.
+public func flacStreamInfo(header: Data) throws -> FlacStreamInfo {
+    let bytes: [UInt8] = Array(header.prefix(flacStreamInfoHeaderBytes))
+    guard bytes.count == flacStreamInfoHeaderBytes, bytes[0..<4].elementsEqual(Array("fLaC".utf8)) else {
+        throw AudioCaptureError.conversionFailed(reason: "FLAC imzası yok ya da başlık kısa (\(bytes.count) bayt)")
+    }
+    // Blok başlığının ilk biti "son blok" işaretidir; kalan 7 bit tür (0 = STREAMINFO), sonraki 3 bayt uzunluk.
+    guard bytes[4] & 0x7F == 0, bytes[5..<8].elementsEqual([0, 0, 34]) else {
+        throw AudioCaptureError.conversionFailed(reason: "FLAC'ın ilk metadata bloğu STREAMINFO değil")
+    }
+    let sampleRate: Int = Int(bytes[18]) << 12 | Int(bytes[19]) << 4 | Int(bytes[20] >> 4)
+    let channels: Int = Int((bytes[20] >> 1) & 0x07) + 1
+    let bitsPerSample: Int = (Int(bytes[20] & 0x01) << 4 | Int(bytes[21] >> 4)) + 1
+    let totalSamples: Int = Int(bytes[21] & 0x0F) << 32 | Int(bytes[22]) << 24 | Int(bytes[23]) << 16 | Int(bytes[24]) << 8 | Int(bytes[25])
+    return FlacStreamInfo(sampleRate: sampleRate, channels: channels, bitsPerSample: bitsPerSample, totalSamples: totalSamples)
+}
+
+/// Sınırı aşan FLAC parçasının yeniden kodlanacak örnek sayısı: FLAC boyutu örnek sayısıyla yaklaşık doğrusal
+/// olduğundan aşım oranında kısaltılır ve %1 pay bırakılır (sıkıştırma parça içinde değişir); pay yetmezse çağıran bir
+/// kez daha kısaltır. Kısalan parça ortak bölgeden uzun olmalı (yoksa kayıt ilerlemez); değilse hata. Saf fonksiyondur.
+public func shortenedFlacSampleCount(sampleCount: Int, encodedBytes: Int, maxBytes: Int, overlapSamples: Int) throws -> Int {
+    let shorter: Int = Int(Double(sampleCount) * Double(maxBytes) / Double(encodedBytes) * 0.99)
+    guard shorter > overlapSamples, shorter < sampleCount else {
+        throw AudioCaptureError.conversionFailed(reason: "FLAC parçası \(maxBytes) bayta sığmıyor: \(sampleCount) örnek \(encodedBytes) bayt")
+    }
+    return shorter
+}
+
+/// Kayıt dosyasını (ör. `others.m4a`) 16 kHz mono 16 bit örneklere çevirip kayıpsız FLAC parçaları olarak
+/// `directory`'ye yazar: her parça en çok `maxSamples` örnek ve en çok `maxBytes` bayt, öncekinin son `overlapSamples`
+/// örneğiyle başlar; son parça yalnızca ortak kısımdan ibaret olacaksa açılmaz (`wavChunkSpans` ile aynı bölme).
+///
+/// FLAC'ın boyutu içeriğe bağlıdır (konuşmada PCM'in yaklaşık yarısı, beyaz gürültüde PCM'den ~%0,1 büyük); güvenli bir
+/// sabit üst sınır WAV'dan uzun parça vermezdi. Bu yüzden parça önce `maxSamples` ile kodlanıp boyutu ölçülür;
+/// `maxBytes`'ı aşarsa aynı başlangıçtan kısaltılarak yeniden kodlanır (`shortenedFlacSampleCount`). Örnekler önce
+/// `directory`'deki ham PCM dosyasına akış halinde yazılır (dosya bellekte bütün olarak tutulmaz; 4 saatlik toplantı
+/// ~460 MB eder), parçalar oradan kodlanır; ham dosya iş bitince silinir. Hata durumunda yazılanlar `directory`'de
+/// kalır; çağıran klasörü siler.
+public func writeHostedFlacChunks(source: URL, directory: URL, maxBytes: Int, maxSamples: Int, overlapSamples: Int) throws -> [AudioChunkFile] {
+    let pcmURL: URL = directory.appending(path: "samples.pcm")
+    let totalSamples: Int = try writeHostedPcm(source: source, destination: pcmURL)
+    let pcm: FileHandle
+    do {
+        pcm = try FileHandle(forReadingFrom: pcmURL)
+    } catch {
+        throw StorageError.readFailed(path: pcmURL.path, reason: error.localizedDescription)
+    }
+    var chunks: [AudioChunkFile] = []
+    var start: Int = 0
+    while start < totalSamples {
+        let url: URL = directory.appending(path: "chunk-\(chunks.count).flac")
+        var count: Int = min(maxSamples, totalSamples - start)
+        var bytes: Int = try encodeFlacChunk(pcm: pcm, pcmPath: pcmURL.path, startSample: start, sampleCount: count, destination: url)
+        while bytes > maxBytes {
+            count = try shortenedFlacSampleCount(sampleCount: count, encodedBytes: bytes, maxBytes: maxBytes, overlapSamples: overlapSamples)
+            bytes = try encodeFlacChunk(pcm: pcm, pcmPath: pcmURL.path, startSample: start, sampleCount: count, destination: url)
+        }
+        chunks.append(AudioChunkFile(url: url, span: AudioChunkSpan(startSample: start, sampleCount: count), bytes: bytes))
+        guard start + count < totalSamples else {
+            break
+        }
+        start += count - overlapSamples
+    }
+    do {
+        try pcm.close()
+        try FileManager.default.removeItem(at: pcmURL)
+    } catch {
+        throw StorageError.deleteFailed(path: pcmURL.path, reason: error.localizedDescription)
+    }
+    return chunks
+}
+
+/// Kayıt dosyasını 16 kHz mono 16 bit ham PCM (küçük uçlu, başlıksız) olarak `destination`'a akış halinde yazar ve
+/// örnek sayısını döndürür. Çok kanallı girişte kanalların ortalaması alınır.
+private func writeHostedPcm(source: URL, destination: URL) throws -> Int {
     let file: AVAudioFile
     do {
         file = try AVAudioFile(forReading: source)
@@ -170,14 +271,22 @@ public func writeHostedWavChunks(source: URL, directory: URL, maxBytes: Int, ove
           let converter = AVAudioConverter(from: file.processingFormat, to: output) else {
         throw AudioCaptureError.converterCreationFailed(inputDescription: file.processingFormat.description)
     }
-    // Çok kanallı girişte kanalların ortalaması.
     converter.downmix = true
     let inputCapacity: AVAudioFrameCount = 65_536
     let outputCapacity: AVAudioFrameCount = AVAudioFrameCount(hostedTranscribeSampleRate * 4)
     guard let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: inputCapacity) else {
         throw AudioCaptureError.conversionFailed(reason: "giriş tamponu oluşturulamadı")
     }
-    var writer: WavChunkWriter = WavChunkWriter(directory: directory, maxSamples: maxSamplesPerWavChunk(maxBytes: maxBytes), overlapSamples: overlapSamples)
+    guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+        throw StorageError.writeFailed(path: destination.path, reason: "dosya oluşturulamadı")
+    }
+    let handle: FileHandle
+    do {
+        handle = try FileHandle(forWritingTo: destination)
+    } catch {
+        throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
+    }
+    var totalSamples: Int = 0
     var reachedEnd: Bool = false
     var readError: (any Error)?
     while true {
@@ -215,114 +324,100 @@ public func writeHostedWavChunks(source: URL, directory: URL, maxBytes: Int, ove
             throw AudioCaptureError.conversionFailed(reason: conversionError.map { String(describing: $0) } ?? "bilinmeyen hata")
         }
         if let samples = buffer.int16ChannelData?[0], buffer.frameLength > 0 {
-            try writer.append(samples: UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength)))
+            // Örnekler bellekte küçük uçlu (Apple silikon ve Intel); dosya aynı cihazda geri okunur.
+            do {
+                try handle.write(contentsOf: Data(buffer: UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))))
+            } catch {
+                throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
+            }
+            totalSamples += Int(buffer.frameLength)
         }
         if status == .endOfStream {
             break
         }
     }
-    return try writer.finish()
+    do {
+        try handle.close()
+    } catch {
+        throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
+    }
+    return totalSamples
 }
 
-/// WAV parçalarını sırayla yazar: parça dolunca başlığı (veri boyutuyla) yazıp yenisine geçer; yeni parça öncekinin
-/// son `overlapSamples` örneğiyle başlar (yalnızca yeni örnek gelirse açılır).
-private struct WavChunkWriter {
-    let directory: URL
-    let maxSamples: Int
-    let overlapSamples: Int
-    private var finished: [WavChunkFile] = []
-    private var handle: FileHandle?
-    private var currentURL: URL?
-    private var currentStart: Int = 0
-    private var currentCount: Int = 0
-    /// Açık parçanın son `overlapSamples` örneği (sonraki parçanın başı).
-    private var tail: [Int16] = []
+/// Apple'ın yerleşik FLAC kodlayıcısının ayarları (macOS ve iOS): 16 kHz mono, 16 bit örnek. Kodlayıcı dosya
+/// kapanınca STREAMINFO'ya gerçek örnek sayısını yazar; `encodeFlacChunk` bunu doğrular.
+private let hostedFlacSettings: [String: Int] = [
+    AVFormatIDKey: Int(kAudioFormatFLAC),
+    AVSampleRateKey: hostedTranscribeSampleRate,
+    AVNumberOfChannelsKey: 1,
+    AVLinearPCMBitDepthKey: 16,
+]
 
-    init(directory: URL, maxSamples: Int, overlapSamples: Int) {
-        self.directory = directory
-        self.maxSamples = maxSamples
-        self.overlapSamples = overlapSamples
-    }
-
-    /// Örnekleri parçalara yazar; parça sınırında böler.
-    mutating func append(samples: UnsafeBufferPointer<Int16>) throws {
-        var index: Int = 0
-        while index < samples.count {
-            if handle == nil {
-                try open()
-            }
-            let take: Int = min(maxSamples - currentCount, samples.count - index)
-            let slice: UnsafeBufferPointer<Int16> = UnsafeBufferPointer(rebasing: samples[index..<(index + take)])
-            // Örnekler bellekte little-endian (Apple silikon ve Intel): WAV'ın bayt düzeniyle aynı.
-            try write(data: Data(buffer: slice))
-            tail = Array((tail + slice).suffix(overlapSamples))
-            currentCount += take
-            index += take
-            if currentCount == maxSamples {
-                try close()
-            }
-        }
-    }
-
-    /// Açık parçayı kapatır ve tüm parçaları döndürür.
-    mutating func finish() throws -> [WavChunkFile] {
-        if handle != nil {
-            try close()
-        }
-        return finished
-    }
-
-    private mutating func open() throws {
-        let url: URL = directory.appending(path: "chunk-\(finished.count).wav")
-        guard FileManager.default.createFile(atPath: url.path, contents: wavHeader(dataBytes: 0, sampleRate: hostedTranscribeSampleRate)) else {
-            throw StorageError.writeFailed(path: url.path, reason: "dosya oluşturulamadı")
-        }
+/// Ham PCM dosyasının `startSample`'dan başlayan `sampleCount` örneğini `destination`'a FLAC olarak yazar (varsa
+/// üzerine) ve dosyanın bayt boyutunu döndürür. Kapanıştan sonra STREAMINFO okunur: örnek sayısı, hız, kanal ya da bit
+/// beklenenden farklıysa hata (sunucu süreyi oradan hesaplar).
+private func encodeFlacChunk(pcm: FileHandle, pcmPath: String, startSample: Int, sampleCount: Int, destination: URL) throws -> Int {
+    if FileManager.default.fileExists(atPath: destination.path) {
         do {
-            let opened: FileHandle = try FileHandle(forWritingTo: url)
-            try opened.seekToEnd()
-            handle = opened
+            try FileManager.default.removeItem(at: destination)
         } catch {
-            throw StorageError.writeFailed(path: url.path, reason: error.localizedDescription)
-        }
-        currentURL = url
-        // Önceki parçanın sonu bu parçanın başına (ortak bölge).
-        let carried: [Int16] = tail
-        currentStart -= carried.count
-        currentCount = carried.count
-        if !carried.isEmpty {
-            try carried.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<Int16>) -> Void in
-                try write(data: Data(buffer: buffer))
-            }
+            throw StorageError.deleteFailed(path: destination.path, reason: error.localizedDescription)
         }
     }
-
-    private func write(data: Data) throws {
-        guard let handle, let currentURL else {
-            throw StorageError.writeFailed(path: directory.path, reason: "açık WAV parçası yok")
-        }
+    let file: AVAudioFile
+    do {
+        file = try AVAudioFile(forWriting: destination, settings: hostedFlacSettings, commonFormat: .pcmFormatInt16, interleaved: true)
+    } catch {
+        throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
+    }
+    let blockSamples: Int = 65_536
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(blockSamples)),
+          let samples = buffer.int16ChannelData?[0] else {
+        throw AudioCaptureError.conversionFailed(reason: "FLAC tamponu oluşturulamadı")
+    }
+    do {
+        try pcm.seek(toOffset: UInt64(startSample * 2))
+    } catch {
+        throw StorageError.readFailed(path: pcmPath, reason: error.localizedDescription)
+    }
+    var written: Int = 0
+    while written < sampleCount {
+        let take: Int = min(blockSamples, sampleCount - written)
+        let data: Data
         do {
-            try handle.write(contentsOf: data)
+            data = try pcm.read(upToCount: take * 2) ?? Data()
         } catch {
-            throw StorageError.writeFailed(path: currentURL.path, reason: error.localizedDescription)
+            throw StorageError.readFailed(path: pcmPath, reason: error.localizedDescription)
         }
-    }
-
-    /// Başlığı gerçek veri boyutuyla yeniden yazar ve parçayı kapatır.
-    private mutating func close() throws {
-        guard let handle, let currentURL else {
-            throw StorageError.writeFailed(path: directory.path, reason: "kapatılacak WAV parçası yok")
+        guard data.count == take * 2 else {
+            throw StorageError.readFailed(path: pcmPath, reason: "PCM dosyası beklenenden kısa (\(startSample + written). örnekten sonra \(data.count) bayt)")
         }
+        _ = data.copyBytes(to: UnsafeMutableBufferPointer(start: samples, count: take))
+        buffer.frameLength = AVAudioFrameCount(take)
         do {
-            try handle.seek(toOffset: 0)
-            try handle.write(contentsOf: wavHeader(dataBytes: currentCount * 2, sampleRate: hostedTranscribeSampleRate))
-            try handle.close()
+            try file.write(from: buffer)
         } catch {
-            throw StorageError.writeFailed(path: currentURL.path, reason: error.localizedDescription)
+            throw StorageError.writeFailed(path: destination.path, reason: error.localizedDescription)
         }
-        finished.append(WavChunkFile(url: currentURL, span: WavChunkSpan(startSample: currentStart, sampleCount: currentCount)))
-        currentStart += currentCount
-        self.handle = nil
-        self.currentURL = nil
-        currentCount = 0
+        written += take
     }
+    // Kapanışta kodlayıcı STREAMINFO'yu (örnek sayısı, MD5) dosyanın başına yazar.
+    file.close()
+    let header: Data
+    let bytes: Int
+    do {
+        let reader: FileHandle = try FileHandle(forReadingFrom: destination)
+        header = try reader.read(upToCount: flacStreamInfoHeaderBytes) ?? Data()
+        bytes = Int(try reader.seekToEnd())
+        try reader.close()
+    } catch {
+        throw StorageError.readFailed(path: destination.path, reason: error.localizedDescription)
+    }
+    let info: FlacStreamInfo = try flacStreamInfo(header: header)
+    let expected: FlacStreamInfo = FlacStreamInfo(sampleRate: hostedTranscribeSampleRate, channels: 1, bitsPerSample: 16, totalSamples: sampleCount)
+    guard info == expected else {
+        throw AudioCaptureError.conversionFailed(reason: "FLAC STREAMINFO beklenenden farklı: \(String(describing: info)), beklenen: \(String(describing: expected))")
+    }
+    return bytes
 }
+

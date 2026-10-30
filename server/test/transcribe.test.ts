@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
-import { base64UrlEncode, sha256Hex } from "../src/crypto";
-import { elevenLabsSpeechToTextUrl } from "../src/transcribe";
+import { base64Decode, base64UrlEncode, sha256Hex } from "../src/crypto";
+import { type FlacStreamInfo, elevenLabsSpeechToTextUrl, flacMaxBytes, flacStreamInfo } from "../src/transcribe";
+import { speechFlacBase64 } from "./flacFixture";
 import {
   type Harness,
   type Session,
@@ -416,5 +417,88 @@ describe("konuşma tanıma vekili", () => {
     expect((await upload(context, "", wavFile(16_000, 1, 16, 32_000 * 3), "audio/wav")).status).toBe(200);
     const meeting = await env.DB.prepare("SELECT audio_seconds FROM meeting_sessions WHERE id = ?").bind(context.meeting.meetingId).first<{ audio_seconds: number }>();
     expect(meeting?.audio_seconds).toBe(3);
+  });
+});
+
+/** Gerçek FLAC örneği (1 sn konuşma, 16000 örnek; bkz. `scripts/make-server-flac-fixture.sh`). */
+const speechFlac: Uint8Array = base64Decode(speechFlacBase64);
+
+/** Örneğin kopyası, STREAMINFO alanları verilen değerlerle (yalnızca başlık değişir; ses aynı kalır). */
+function flacWithStreamInfo(info: FlacStreamInfo): Uint8Array {
+  const file: Uint8Array = speechFlac.slice();
+  const view: DataView = new DataView(file.buffer);
+  const packed: number = (info.sampleRate << 12) | ((info.channels - 1) << 9) | ((info.bitsPerSample - 1) << 4) | Math.floor(info.totalSamples / 2 ** 32);
+  view.setUint32(18, packed >>> 0);
+  view.setUint32(22, info.totalSamples % 2 ** 32);
+  return file;
+}
+
+const speechInfo: FlacStreamInfo = { sampleRate: 16_000, channels: 1, bitsPerSample: 16, totalSamples: 16_000 };
+
+describe("FLAC yüklemesi", () => {
+  it("STREAMINFO 16 kHz mono 16 bit ve 16000 örnek okunur", () => {
+    expect(flacStreamInfo(speechFlac)).toEqual(speechInfo);
+    expect(flacStreamInfo(speechFlac.subarray(0, 41))).toBeNull();
+    expect(flacMaxBytes(16_000)).toBeGreaterThan(speechFlac.byteLength);
+  });
+
+  it("FLAC aynen audio.flac olarak iletilir; süre STREAMINFO'dan kesin ayrılır ve ücretlendirilir", async () => {
+    const context: Context = await setup(false);
+    let file: File | null = null;
+    context.harness.stub(elevenLabsSpeechToTextUrl, async (request: Request): Promise<Response> => {
+      const form: FormData = await request.formData();
+      const value: File | string | null = form.get("file");
+      file = typeof value === "string" ? null : value;
+      // Yanıtta süre yok: ücret son kelime (1,2 sn) ile ayrılan sürenin büyüğüdür; ayrılan 1 sn'den kısa olsaydı aşım olurdu.
+      return Response.json({ ...transcription, words: transcription.words.slice(0, 2), audio_duration_secs: null });
+    });
+    const response: Response = await upload(context, "?diarize=true", speechFlac, "audio/flac");
+    expect(response.status).toBe(200);
+    const sent = file as File | null;
+    expect(sent?.name).toBe("audio.flac");
+    expect(sent?.type).toBe("audio/flac");
+    expect(new Uint8Array((await sent?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(speechFlac);
+    const meeting = await env.DB.prepare("SELECT audio_seconds, transcription_closed FROM meeting_sessions WHERE id = ?")
+      .bind(context.meeting.meetingId)
+      .first<{ audio_seconds: number; transcription_closed: number }>();
+    expect(meeting).toEqual({ audio_seconds: 1, transcription_closed: 0 });
+  });
+
+  it("STREAMINFO'daki süre kalan aylık süreyi aşarsa ElevenLabs'e gitmeden reddedilir", async () => {
+    const context: Context = await setup(true);
+    await env.DB.prepare("INSERT INTO monthly_usage (user_id, month, audio_seconds) VALUES (?, ?, ?)")
+      .bind(context.session.userId, new Date(context.harness.clock.nowMs).toISOString().slice(0, 7), 10 * 3600 - 60)
+      .run();
+    // Dosya küçük ama STREAMINFO 70 saniye bildiriyor (> kalan 60 saniye): süre boyuttan değil başlıktan okunur.
+    await expectError(await upload(context, "", flacWithStreamInfo({ ...speechInfo, totalSamples: 16_000 * 70 }), "audio/flac"), 403, "monthly_cap_reached");
+    expect(context.harness.outbound.filter((request: Request): boolean => request.url.startsWith(elevenLabsSpeechToTextUrl))).toHaveLength(0);
+  });
+
+  it("bozuk ya da desteklenmeyen FLAC ElevenLabs'e gitmeden 400 alır, ayırma kalmaz", async () => {
+    const context: Context = await setup(false);
+    const badMagic: Uint8Array = speechFlac.slice();
+    badMagic[0] = 0x00;
+    const notStreamInfo: Uint8Array = speechFlac.slice();
+    notStreamInfo[4] = 0x04;
+    const rejected: readonly Uint8Array[] = [
+      flacWithStreamInfo({ ...speechInfo, totalSamples: 0 }),
+      flacWithStreamInfo({ ...speechInfo, sampleRate: 44_100 }),
+      flacWithStreamInfo({ ...speechInfo, channels: 2 }),
+      flacWithStreamInfo({ ...speechInfo, bitsPerSample: 24 }),
+      // STREAMINFO süreyi eksik bildiriyor: 100 örnek bu boyuta sığmaz.
+      flacWithStreamInfo({ ...speechInfo, totalSamples: 100 }),
+      badMagic,
+      notStreamInfo,
+      speechFlac.slice(0, 30),
+    ];
+    for (const audio of rejected) {
+      const body = await expectError(await upload(context, "", audio, "audio/flac"), 400, "invalid_body");
+      expect(body.error.message).toContain("FLAC");
+    }
+    // WAV başlıklı gövde FLAC olarak gönderilirse de reddedilir.
+    await expectError(await upload(context, "", wavFile(16_000, 1, 16, 32_000), "audio/flac"), 400, "invalid_body");
+    expect(context.harness.outbound.filter((request: Request): boolean => request.url.startsWith(elevenLabsSpeechToTextUrl))).toHaveLength(0);
+    const reservations = await env.DB.prepare("SELECT COUNT(*) AS count FROM usage_reservations WHERE meeting_id = ?").bind(context.meeting.meetingId).first<{ count: number }>();
+    expect(reservations?.count).toBe(0);
   });
 });

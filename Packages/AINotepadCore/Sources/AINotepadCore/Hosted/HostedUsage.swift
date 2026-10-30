@@ -157,10 +157,12 @@ public func hostedServerOverlapAllowanceSec(seconds: Double) -> Double {
     (seconds / 2900).rounded(.towardZero) * 60
 }
 
-/// Kaydın sunucuya gidecek toplam sesi (saniye): parçalar bir dakika örtüştüğü için süreden uzundur (bkz.
-/// `wavChunkSpans`). Saf fonksiyondur.
+/// Kaydın sunucuya gidecek toplam sesi (saniye): parçalar bir dakika örtüştüğü için süreden uzundur. 95 MB'lık WAV
+/// parçalamasıyla (~49,5 dk; `wavChunkSpans`) hesaplanır; sunucunun örtüşme payı da bu adıma dayanır. FLAC parçaları
+/// (en çok 60 dk, `writeHostedFlacChunks`) konuşma kayıtlarında bundan uzundur (daha az örtüşme), tahmin üst sınır
+/// kalır; yalnızca sıkışmayan seste (beyaz gürültü) FLAC parçası 95 MB'a sığmak için ~%1 kısalır. Saf fonksiyondur.
 public func hostedUploadedAudioSec(durationSec: Double) -> Double {
-    let spans: [WavChunkSpan] = wavChunkSpans(
+    let spans: [AudioChunkSpan] = wavChunkSpans(
         totalSamples: Int((durationSec * Double(hostedTranscribeSampleRate)).rounded(.up)),
         maxSamples: maxSamplesPerWavChunk(maxBytes: hostedTranscribeMaxBytes),
         overlapSamples: Int(hostedChunkOverlapSec * Double(hostedTranscribeSampleRate))

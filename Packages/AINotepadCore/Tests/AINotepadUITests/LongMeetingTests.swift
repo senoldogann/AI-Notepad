@@ -26,7 +26,7 @@ import AINotepadCore
         let runs: [(state: LiveViewState, elapsed: Duration)] = (0..<3).map { (_: Int) -> (state: LiveViewState, elapsed: Duration) in
             let started: ContinuousClock.Instant = .now
             let state: LiveViewState = makeLiveViewState(
-                transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], assistantCard: nil,
+                transcript: transcript, translations: [:], displayMode: .bilingual, failedTranslations: [], otherLanguageSegments: [], assistantCard: nil,
                 phase: .recording, newPersonNumber: 3, isPaused: false, isMicMuted: false, canToggleMic: true, isInPerson: false, canStart: false, startedAt: nil,
                 statusText: "", languageText: "", noteLanguageText: "Türkçe", errors: []
             )

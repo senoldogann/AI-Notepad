@@ -244,11 +244,14 @@ describe("deneme ses süresi birikimli sınırı", () => {
     await expectError(await transcribe(harness, session, meeting.meetingId, lying, "audio/wav", null), 400, "invalid_body");
   });
 
-  it("FLAC kabul edilmez", async () => {
+  it("sıkıştırılmış türlerden yalnızca süresi başlıktan okunan FLAC kabul edilir; başlıksız FLAC reddedilir", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);
     const meeting: StartedMeetingBody = await (await startMeeting(harness, session)).json<StartedMeetingBody>();
-    await expectError(await transcribe(harness, session, meeting.meetingId, new Uint8Array(1000), "audio/flac", null), 415, "unsupported_media_type");
+    await expectError(await transcribe(harness, session, meeting.meetingId, new Uint8Array(1000), "audio/flac", null), 400, "invalid_body");
+    for (const type of ["audio/mpeg", "audio/ogg", "audio/mp4"]) {
+      await expectError(await transcribe(harness, session, meeting.meetingId, new Uint8Array(1000), type, null), 415, "unsupported_media_type");
+    }
   });
 
   it("abonede aylık süre de birikimli ayrılır", async () => {

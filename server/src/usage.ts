@@ -51,10 +51,12 @@ export function transcriptionCostMicroUsd(seconds: number, usdPerHour: number): 
 }
 
 /**
- * Uzun kaydın parçaları (`TRANSCRIBE_MAX_BYTES`, ~49 dk) birer dakika örtüşür (istemci `hostedChunkOverlapSec`):
- * ortak bölgeler ikinci kez yazıya döküldüğü için toplantının ses hakkına her parça sınırı için bir dakika pay eklenir.
- * Sınır sayısı toplantının en uzun süresinin parça adımına (`chunkStepSeconds`, gerçek adımdan biraz kısa: yukarı
- * yuvarlar) bölümüdür; 49 dakikadan kısa toplantıda pay yoktur.
+ * Uzun kaydın parçaları birer dakika örtüşür (istemci `hostedChunkOverlapSec`): ortak bölgeler ikinci kez yazıya
+ * döküldüğü için toplantının ses hakkına her parça sınırı için bir dakika pay eklenir. Sınır sayısı toplantının en
+ * uzun süresinin parça adımına (`chunkStepSeconds`) bölümüdür; adım en kısa parçalamaya, eski sürümlerin
+ * `TRANSCRIBE_MAX_BYTES`'lık WAV parçasına (~49,5 dk) göredir (gerçek adımdan biraz kısa: yukarı yuvarlar). FLAC
+ * gönderen sürümlerin parçaları konuşmada daha uzundur (en çok 60 dk), pay onlar için gereğinden biraz fazladır; 49
+ * dakikadan kısa toplantıda pay yoktur.
  */
 export const chunkOverlapSeconds: number = 60;
 export const chunkStepSeconds: number = 2900;

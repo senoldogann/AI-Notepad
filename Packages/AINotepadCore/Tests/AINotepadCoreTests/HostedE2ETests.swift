@@ -212,27 +212,14 @@ private func genericHostedMessage(status: Int) -> String {
     hostedErrorMessage(error: HostedAPIError(code: nil, rawCode: "http_\(status)", status: status, serverMessage: "", path: "/"))
 }
 
-/// 1 sn sessiz 16 kHz mono 16 bit PCM WAV (sunucu süreyi başlıktan okur).
-private func silentWav() -> Data {
-    let sampleRate: UInt32 = 16_000
-    let dataBytes: UInt32 = sampleRate * 2
-    var data: Data = Data()
-    let append32: (UInt32) -> Void = { (value: UInt32) -> Void in withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
-    let append16: (UInt16) -> Void = { (value: UInt16) -> Void in withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
-    data.append(contentsOf: Array("RIFF".utf8))
-    append32(36 + dataBytes)
-    data.append(contentsOf: Array("WAVEfmt ".utf8))
-    append32(16)
-    append16(1)
-    append16(1)
-    append32(sampleRate)
-    append32(sampleRate * 2)
-    append16(2)
-    append16(16)
-    data.append(contentsOf: Array("data".utf8))
-    append32(dataBytes)
-    data.append(Data(count: Int(dataBytes)))
-    return data
+/// 1 sn sessiz 16 kHz mono 16 bit FLAC'ı (uygulamanın son geçişte gönderdiği biçim; sunucu süreyi STREAMINFO'dan
+/// okur) `directory`'ye yazar ve yolunu döndürür.
+private func silentFlac(directory: URL) throws -> URL {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let source: URL = directory.appending(path: "sessiz.wav")
+    try wavData(samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000).write(to: source)
+    let chunks: [AudioChunkFile] = try writeHostedFlacChunks(source: source, directory: directory, maxBytes: hostedTranscribeMaxBytes, maxSamples: 16_000, overlapSamples: 0)
+    return try #require(chunks.first?.url)
 }
 
 @Suite(.enabled(if: hostedE2EEnabled), .serialized) struct HostedE2ETests {
@@ -481,9 +468,9 @@ private func silentWav() -> Data {
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         try markTrialStarted(userID: user.userID, usedMeetings: 1, startedAtMs: nowMs())
         let started: HostedStartedMeeting = try await user.client.startMeeting(device: nil, deviceCheckToken: nil, clientRef: UUID().uuidString.lowercased(), deferred: false)
-        let wav: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString).wav", directoryHint: .notDirectory)
-        try silentWav().write(to: wav)
-        defer { try? FileManager.default.removeItem(at: wav) }
+        let audioDirectory: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: audioDirectory) }
+        let flac: URL = try silentFlac(directory: audioDirectory)
 
         let now: Int = nowMs()
         try executeLocalD1(sql: """
@@ -491,7 +478,7 @@ private func silentWav() -> Data {
             VALUES ('e2e-\(UUID().uuidString.lowercased())', '\(user.userID)', '\(started.meetingId)', 'audio', '\(utcMonthKey())', '\(utcDayKey())', 0, 0, 0, 1, 0, 1, \(now), \(now + 600_000));
             """)
         let inProgress: HostedAPIError? = await hostedError {
-            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
+            _ = try await user.client.transcribe(meetingID: started.meetingId, flacFile: flac, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
         }
         try executeLocalD1(sql: "DELETE FROM usage_reservations WHERE meeting_id = '\(started.meetingId)';")
         #expect(inProgress?.status == 409)
@@ -504,7 +491,7 @@ private func silentWav() -> Data {
 
         try executeLocalD1(sql: "UPDATE meeting_sessions SET transcription_closed = 1 WHERE id = '\(started.meetingId)';")
         let closed: HostedAPIError? = await hostedError {
-            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
+            _ = try await user.client.transcribe(meetingID: started.meetingId, flacFile: flac, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
         }
         #expect(closed?.code == .transcriptionClosed)
         _ = try await user.client.endMeeting(meetingID: started.meetingId)
@@ -553,11 +540,11 @@ private func silentWav() -> Data {
             WHERE id = '\(started.meetingId)';
             """
         try executeLocalD1(sql: ageMeeting)
-        let wav: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString).wav", directoryHint: .notDirectory)
-        try silentWav().write(to: wav)
-        defer { try? FileManager.default.removeItem(at: wav) }
+        let audioDirectory: URL = FileManager.default.temporaryDirectory.appending(path: "ainotepad-e2e-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: audioDirectory) }
+        let flac: URL = try silentFlac(directory: audioDirectory)
         let expired: HostedAPIError? = await hostedError {
-            _ = try await user.client.transcribe(meetingID: started.meetingId, wavFile: wav, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
+            _ = try await user.client.transcribe(meetingID: started.meetingId, flacFile: flac, languageCode: nil, keyterms: [], uploadKey: try makeUploadKey(), timeoutSec: 30)
         }
         #expect(expired?.code == .meetingNotActive)
 

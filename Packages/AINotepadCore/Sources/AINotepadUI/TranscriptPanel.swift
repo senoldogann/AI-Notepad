@@ -452,6 +452,7 @@ public struct TranscriptPanel: View {
                             turkish: blockTurkishText(block: block, translations: state.translations),
                             translations: state.translations,
                             failedTranslations: failedTranslationIDs(block: block, failed: state.failedTranslations),
+                            otherLanguage: state.otherLanguageSegments,
                             displayMode: state.displayMode,
                             persons: state.persons,
                             newPersonNumber: state.newPersonNumber,
@@ -669,6 +670,8 @@ struct BlockView: View {
     let translations: [SegmentID: String]
     /// Bu bloğun çevirisi başarısız bölümleri.
     let failedTranslations: [SegmentID]
+    /// Sabit toplantı dilinden başka dildeki bölümler (soluk ve eğik; çevrilmez, toplantıdan atlanır).
+    let otherLanguage: Set<SegmentID>
     let displayMode: DisplayMode
     /// Transkriptteki kişiler (düzeltme menüsü).
     let persons: [Int]
@@ -773,14 +776,21 @@ struct BlockView: View {
             }
     }
 
-    /// Bölümleri tek paragrafta birleştirir; kesinleşmemiş metin soluk.
+    /// Bölümleri tek paragrafta birleştirir; kesinleşmemiş metin soluk, başka dildeki bölüm soluk ve eğik (kayıt sürerken
+    /// gizlenmez: konuşma görünür kalır, metnin kesildiği sanılmaz; toplantı sayfasında atlanır).
     private var flowingText: Text {
         block.segments
             .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
             .enumerated()
             .reduce(Text("")) { (combined: Text, item: (offset: Int, element: LiveSegment)) -> Text in
                 let piece: Text = Text((item.offset == 0 ? "" : " ") + item.element.text)
-                let styled: Text = item.element.isFinal ? piece : piece.foregroundColor(Color.primary.opacity(DesignTokens.partialOpacity))
+                let styled: Text = if otherLanguage.contains(item.element.id) {
+                    piece.italic().foregroundColor(Color.primary.opacity(DesignTokens.partialOpacity))
+                } else if item.element.isFinal {
+                    piece
+                } else {
+                    piece.foregroundColor(Color.primary.opacity(DesignTokens.partialOpacity))
+                }
                 return Text("\(combined)\(styled)")
             }
     }
