@@ -161,6 +161,14 @@ final class AppModel {
     /// Kaydedilmiş toplantılar (yeniden eskiye) ve okunamayanlar.
     var meetings: [MeetingRecord] = []
     var meetingLoadFailures: [MeetingLoadFailure] = []
+    /// Toplantılar listesinde gösterilen okuma hataları: okunamayan toplantılar ve iCloud eşitlemesi başarısızsa nedeni.
+    /// iCloud durumu eşitlemeden okunur; toplantılar yeniden okununca silinmez.
+    var visibleLoadFailures: [MeetingLoadFailure] {
+        guard case .failed(let message) = cloud.state else {
+            return meetingLoadFailures
+        }
+        return meetingLoadFailures + [MeetingLoadFailure(folder: "iCloud", reason: message)]
+    }
     /// Kullanıcının kaydettiği tarifler (bkz. `recipes`).
     private(set) var userRecipes: [Recipe] = []
     /// iCloud eşitlemesi (Ayarlar › Genel › iCloud ile eşitle).
@@ -222,11 +230,9 @@ final class AppModel {
     #if HOSTED_EDITION
     /// Abonelik: toplantının süre sınırını izleyen görev (bkz. `watchRecordingLimit`).
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
-    #if HOSTED_EDITION
     /// Olağandan kısa toplantının bitiş anı (aylık sınıra az kaldı); kayıt panelinde kalan dakika gösterilir. Kısa
     /// değilse ya da kayıt yoksa nil.
     private(set) var shortMeetingDeadline: Date?
-    #endif
     #endif
 
     @ObservationIgnored private var engine: WhisperKitEngine?
@@ -293,7 +299,6 @@ final class AppModel {
         return state
     }
 
-    /// Kayıt yokken gösterilen durum metni.
     /// Panelde kayıt yokken gösterilen durum: hazırken boş (gereksiz yazı yok), yalnızca model hazırlanırken ya da
     /// hata varken dolu.
     private var statusText: String {
@@ -1254,6 +1259,9 @@ final class AppModel {
         if recordedOffline {
             // Çevrimdışı kayıt: ses ve canlı metin bu Mac'te; son geçiş ve not bağlantı gelince (kayıt silinmez).
             saveRecord(record: record.with(status: .queued, failureMessage: nil).with(notice: String(localized: "Çevrimdışı kaydedildi; bağlantı gelince konuşmacılar ve not hazırlanır.")), directory: finished.directory)
+            // Uyku engeli kayıtla biter: kuyruktaki kayıt sunucu kabul edene dek (belki hiç) işlenmeyebilir; işlenirken
+            // `process` yeniden alır.
+            allowSleep(meetingID: record.id)
             reloadMeetings()
             lastFinishedMeetingID = record.id
             return
@@ -1458,6 +1466,17 @@ final class AppModel {
         )
     }
 
+    /// Bu motorla tanınan kaydın son geçişi bu Mac'te mi (WhisperKit + SpeakerKit; konuşmacılar Mac'te ayrılır).
+    /// `finalPassPlan` ile aynı karar: abonelikte son geçiş hep sunucuda; kendi anahtarlı sürümde Mac'te tanınan kayıt,
+    /// cihaz içi mod dışında (Apple konuşma tanıma konuşmacı ayırmaz).
+    func finalPassRunsOnThisMac(engine: RecordingEngine?) -> Bool {
+        #if HOSTED_EDITION
+        false
+        #else
+        engine == .local && liveEngine != .appleSpeech
+        #endif
+    }
+
     /// Kaydın motoruna göre son geçiş; eski toplantılar (motor bilgisi yok) bulut sayılır.
     private func finalPassPlan(record: MeetingRecord) async -> FinalPassPlan {
         #if HOSTED_EDITION
@@ -1521,9 +1540,11 @@ final class AppModel {
         #endif
         // Son geçiş konuşmacıları yeniden numaralar; eski öneriler başka kişileri gösterirdi.
         closeSpeakerReview(meetingID: meetingID)
+        // Not, toplantının sağlayıcısıyla yazılır: abonelikte son geçişin yeniden açtığı oturum bütçesi (hakkı bitmiş
+        // kullanıcı da sunucunun izin verdiği sürede yeniden işleyebilir), kendi anahtarlı sürümde Ayarlar'daki sağlayıcı.
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
             process(record: record, directory: directory) { [weak self] () async -> LLMProvider? in
-                await self?.optionalLLMProvider()
+                await self?.optionalProvider { try await resolveRecordedMeetingLLMProvider(recordID: meetingID) }
             }
         }
     }
@@ -1607,6 +1628,20 @@ final class AppModel {
     }
     #endif
 
+    /// Abonelik: hakkı yoksa (deneme bitti, abonelik sona erdi) yapay zekâ isteği gönderilmez, abone olma teklifi hemen
+    /// açılır ve true döner; toplantının durumu ve notu değişmez. Kendi anahtarlı sürümde her zaman false.
+    private func isAIBlockedBySubscription() -> Bool {
+        #if HOSTED_EDITION
+        guard HostedAccount.shared.requiresSubscription else {
+            return false
+        }
+        HostedAccount.shared.requestSubscription()
+        return true
+        #else
+        return false
+        #endif
+    }
+
     /// Yalnızca notu yeniden üretir (ad verdikten sonra notta da adlar görünsün); ses gerekmez.
     func regenerateNote(meetingID: String) {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
@@ -1620,6 +1655,9 @@ final class AppModel {
     func editNote(meetingID: String, instruction: String) {
         let trimmed: String = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let record = meetings.first(where: { $0.id == meetingID }), record.note != nil, !isLocked(meetingID: meetingID) else {
+            return
+        }
+        guard !isAIBlockedBySubscription() else {
             return
         }
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
@@ -1654,7 +1692,15 @@ final class AppModel {
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
             return
         }
-        rewriteNote(record: record.with(myNotes: text), reason: String(localized: "Kendi notlarınla yeniden yazıldı"))
+        let withNotes: MeetingRecord = record.with(myNotes: text)
+        guard !isAIBlockedBySubscription() else {
+            // Not yeniden yazılamaz ama kullanıcının yazdığı notlar kaybolmaz: toplantıda saklanır.
+            withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
+                saveRecord(record: withNotes, directory: directory)
+            }
+            return
+        }
+        rewriteNote(record: withNotes, reason: String(localized: "Kendi notlarınla yeniden yazıldı"))
     }
 
     /// Notu başka bir şablonla yeniden yazar (şablon toplantıda saklanır).
@@ -1701,6 +1747,9 @@ final class AppModel {
 
     /// Notu verilen kayıtla (adlar, şablon) yeniden yazıp kaydeder; eski not `reason` ile geçmişe girer.
     private func rewriteNote(record: MeetingRecord, reason: String) {
+        guard !isAIBlockedBySubscription() else {
+            return
+        }
         let meetingID: String = record.id
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         withSessionDirectory(id: meetingID) { (directory: URL) -> Void in
@@ -1977,13 +2026,7 @@ final class AppModel {
             // Hata burada silinmez: izin reddedilince ayar kapanır ve neden görünür kalmalı.
             upcomingMeetings = []
             // Kapatılınca kurulu hatırlatmalar kaldırılır.
-            Task {
-                do {
-                    try await notifier.scheduleReminders(meetings: [])
-                } catch {
-                    Self.logger.error("Toplantı hatırlatmaları kaldırılamadı, hata: \(String(describing: error), privacy: .private)")
-                }
-            }
+            Task { await notifier.removeReminders() }
             return
         }
         let changes: NotificationCenter.Notifications = eventKit.changes
@@ -2041,32 +2084,56 @@ final class AppModel {
         }
         // Bildirim izni yalnızca hatırlatmalar için gerekir: reddedilse de takvim (bugünün toplantıları, brifing,
         // kendiliğinden kayıt) açık kalır; hatırlatmalar kapanır ve neden görünür.
+        await requestReminderPermission()
+        startCalendarServices()
+    }
+
+    /// Hatırlatmaları açar (kullanıcı): bildirim izni istenir (sonradan kapatılmış olabilir); izin yoksa hatırlatmalar
+    /// kapanır ve neden hatırlatma satırında görünür.
+    func enableMeetingReminders() async {
+        await requestReminderPermission()
+        startCalendarServices()
+    }
+
+    /// Hatırlatmalar için bildirim izni ister; alınamazsa hatırlatmalar kapanır, neden `notificationProblem`'da.
+    private func requestReminderPermission() async {
         do {
             try await notifier.requestAuthorization()
             notificationProblem = nil
         } catch {
+            Self.logger.warning("Bildirim izni alınamadı, hatırlatmalar kapandı, hata: \(String(describing: error), privacy: .private)")
             UserDefaults.standard.set(false, forKey: SettingsKey.meetingReminders)
             notificationProblem = notificationMessage(error: error)
         }
-        startCalendarServices()
     }
 
     /// Bugünün (biteni de: notu takvimden açılır) ve önümüzdeki 24 saatin toplantılarını okur, 3 saat içindekiler için
-    /// hatırlatma kurar.
+    /// hatırlatma kurar. Takvim hatası `calendarError`'da (liste yerine gösterilir), hatırlatma hatası
+    /// `notificationProblem`'da (hatırlatma satırında; okunan toplantılar görünmeye devam eder).
     private func refreshCalendar() async {
         do {
             let now: Date = Date()
             let dayStart: Date = Calendar.current.startOfDay(for: now)
             upcomingMeetings = try eventKit.meetings(from: dayStart, hours: now.timeIntervalSince(dayStart) / 3600 + 24)
-            let remind: [CalendarMeeting] = UserDefaults.standard.bool(forKey: SettingsKey.meetingReminders)
-                // Son bir dakikaya girmiş toplantı yeniden kurulmaz (hatırlatması zaten gösterildi; çift bildirim olmasın).
-                ? meetingsToRemind(meetings: upcomingMeetings, now: Date().addingTimeInterval(60), horizonSec: 3 * 3600)
-                : []
-            try await notifier.scheduleReminders(meetings: remind)
             calendarError = nil
         } catch {
             Self.logger.error("Takvim okunamadı, hata: \(String(describing: error), privacy: .private)")
-            calendarError = error is NotificationError ? notificationMessage(error: error) : eventKitMessage(error: error)
+            calendarError = eventKitMessage(error: error)
+            return
+        }
+        guard UserDefaults.standard.bool(forKey: SettingsKey.meetingReminders) else {
+            // Hatırlatmalar kapalı: kurulu olanlar kalkar; izin reddedilip kapandıysa neden görünür kalır.
+            await notifier.removeReminders()
+            return
+        }
+        // Son bir dakikaya girmiş toplantı yeniden kurulmaz (hatırlatması zaten gösterildi; çift bildirim olmasın).
+        let remind: [CalendarMeeting] = meetingsToRemind(meetings: upcomingMeetings, now: Date().addingTimeInterval(60), horizonSec: 3 * 3600)
+        do {
+            try await notifier.scheduleReminders(meetings: remind)
+            notificationProblem = nil
+        } catch {
+            Self.logger.error("Toplantı hatırlatmaları kurulamadı, hata: \(String(describing: error), privacy: .private)")
+            notificationProblem = notificationMessage(error: error)
         }
     }
 
@@ -2140,10 +2207,13 @@ final class AppModel {
         guard !trimmed.isEmpty, !isAnsweringArchive else {
             return
         }
+        guard !isAIBlockedBySubscription() else {
+            return
+        }
         #if HOSTED_EDITION
-        // Hakkı yoksa (deneme bitti, abonelik sona erdi) soru gönderilmez: abone olma teklifi hemen açılır.
-        guard !HostedAccount.shared.requiresSubscription else {
-            HostedAccount.shared.requestSubscription()
+        // Denemesi henüz başlamamış hesap soru soramaz (sunucu `trial_not_started` der); neden Sor sayfasında yazar.
+        if let reason = hostedAskUnavailableReason(account: .shared) {
+            Self.logger.info("Sor kullanılamıyor, soru gönderilmedi, neden: \(reason, privacy: .public)")
             return
         }
         #endif
@@ -3349,7 +3419,6 @@ final class AppModel {
         return Set(meetingSegments(record: record).compactMap(\.person))
     }
 
-    /// Ses dosyalarını siler; metin ve not kalır.
     /// Toplantıyı (metin, not ve ses) Çöp Sepeti'ne taşır ve listeden çıkarır; kayıttaki ya da işlenen toplantı silinmez.
     /// Hata, işlemin yapıldığı sayfada gösterilmek üzere döner.
     func deleteMeeting(meetingID: String) -> String? {
@@ -3363,6 +3432,8 @@ final class AppModel {
             return String(localized: "Toplantı silinemedi: \(userFacingMessage(error: error))")
         }
         closeSpeakerReview(meetingID: meetingID)
+        // Kuyruktaki (işlenmemiş) toplantının uyku engeli de toplantıyla biter.
+        allowSleep(meetingID: meetingID)
         meetings.removeAll { $0.id == meetingID }
         meetingReloader.invalidate()
         // Bu toplantıdan öğrenilen ses izleri de geri alınır (biyometrik veri toplantıdan uzun yaşamasın).
@@ -3386,6 +3457,7 @@ final class AppModel {
         }
     }
 
+    /// Ses dosyalarını siler; metin ve not kalır.
     func deleteAudio(meetingID: String) {
         // Kayıttaki toplantının sesi silinirse kayıt yazılmaya devam ederken dosyalar kaybolur.
         guard let record = meetings.first(where: { $0.id == meetingID }), !isLocked(meetingID: meetingID) else {
@@ -3539,13 +3611,11 @@ final class AppModel {
         cloud.activeLocation
     }
 
-    /// Açılışta iCloud seçiliyse eşitlemeyi başlatır; iCloud kullanılamıyorsa neden listede de görünür.
+    /// Açılışta iCloud seçiliyse eşitlemeyi başlatır; iCloud kullanılamıyorsa neden listede de görünür
+    /// (bkz. `visibleLoadFailures`).
     func startCloudSyncIfEnabled() {
         Task {
             await cloud.start(excluding: cloudMoveExclusions) { [weak self] in self?.reloadMeetings() }
-            if case .failed(let message) = cloud.state {
-                meetingLoadFailures.append(MeetingLoadFailure(folder: "iCloud", reason: message))
-            }
         }
     }
 

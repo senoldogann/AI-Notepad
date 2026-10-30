@@ -47,7 +47,10 @@ private func hostedPlanDiagnostics(entitlements: HostedEntitlements) -> [Diagnos
     case .subscribed(let renewsAt):
         return [DiagnosticsItem(label: planLabel, value: String(localized: "Abonelik, yenilenme \(renewsAt.formatted(.iso8601))")), usage]
     case .complimentary:
-        return [DiagnosticsItem(label: planLabel, value: String(localized: "Ücretsiz tam erişim")), usage]
+        guard let until = entitlements.subscription?.cancelAt else {
+            return [DiagnosticsItem(label: planLabel, value: String(localized: "Ücretsiz tam erişim")), usage]
+        }
+        return [DiagnosticsItem(label: planLabel, value: String(localized: "Ücretsiz tam erişim, bitiş \(until.formatted(.iso8601))")), usage]
     case .ending(let endsAt):
         return [DiagnosticsItem(label: planLabel, value: String(localized: "Abonelik iptal edildi, bitiş \(endsAt.formatted(.iso8601))")), usage]
     case .grace(let endsAt):

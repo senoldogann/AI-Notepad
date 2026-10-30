@@ -262,25 +262,17 @@ struct ProcessingOverlayHost: ViewModifier {
     /// Gösterilecek ilerleme: kayıt bitiriliyorsa ya da son biten toplantı işleniyorsa (kullanıcı kapatmadıysa).
     private var processingProgress: ProcessingProgress? {
         if model.phase == .finishing {
-            return model.finishingCardDismissed ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: finalPassOnThisMac)
+            // Bitirilen kayıt şimdiki motorla tanındı (motor kayıt sürerken değişmez).
+            let isLocal: Bool = model.finalPassRunsOnThisMac(engine: model.liveEngine.recordingEngine)
+            return model.finishingCardDismissed ? nil : ProcessingProgress(meetingID: nil, stepIndex: 0, isLocal: isLocal)
         }
         // Bitirilirken kapatıldıysa aynı kaydın işlemesi için de yeniden açılmaz.
         guard !model.finishingCardDismissed, let id = model.lastFinishedMeetingID, let step = model.processingSteps[id],
               !model.dismissedProgressIDs.contains(id) else {
             return nil
         }
-        // Cihaz içi modda son geçiş konuşmacı ayırmaz (bkz. `finalPassPlan`).
-        let isLocal: Bool = model.meetings.first { $0.id == id }?.engine == .local && finalPassOnThisMac
+        let isLocal: Bool = model.finalPassRunsOnThisMac(engine: model.meetings.first { $0.id == id }?.engine)
         return ProcessingProgress(meetingID: id, stepIndex: step.rawValue + 1, isLocal: isLocal)
-    }
-
-    /// Son geçiş bu Mac'te mi (WhisperKit + SpeakerKit); abonelik sürümünde sunucuda yapılır.
-    private var finalPassOnThisMac: Bool {
-        #if HOSTED_EDITION
-        false
-        #else
-        model.liveEngine == .whisperKit
-        #endif
     }
 }
 
@@ -373,8 +365,23 @@ private struct ProcessingOverlay: View {
     }
 }
 
+#if HOSTED_EDITION
+/// Katılımcılara kayıttan haber verme metni (toplantı sohbetine yapıştırılır). Gistsmith herkese açık ve İngilizce
+/// satılır: yalnızca İngilizce.
+let consentNoticeText: String = "Hi! I'm recording this meeting so I can take notes."
+#else
 /// Katılımcılara kayıttan haber verme metni (Fince ve İngilizce; toplantı sohbetine yapıştırılır).
 let consentNoticeText: String = "Hei! Tallennan tämän palaverin, jotta voin tehdä siitä muistiinpanot.\nHi! I'm recording this meeting so I can take notes."
+#endif
+
+/// Bildirimi kopyala düğmesinin ipucu: bildirimin dilleri sürüme göre.
+private var consentNoticeHint: LocalizedStringKey {
+    #if HOSTED_EDITION
+    "İngilizce kısa bildirim; toplantı sohbetine yapıştır"
+    #else
+    "Fince ve İngilizce kısa bildirim; toplantı sohbetine yapıştır"
+    #endif
+}
 
 /// Kayıt başında panelin üstünde: katılımcılara haber verme hatırlatması ve kopyalanabilir bildirim. Kapatılınca o
 /// kayıt boyunca görünmez; Ayarlar'dan tamamen kapatılabilir.
@@ -389,7 +396,7 @@ private struct ConsentBanner: View {
                 NSPasteboard.general.setString(consentNoticeText, forType: .string)
                 copied = true
             }
-            .hoverHint("Fince ve İngilizce kısa bildirim; toplantı sohbetine yapıştır", alignment: .trailing, edge: .bottom)
+            .hoverHint(consentNoticeHint, alignment: .trailing, edge: .bottom)
         }
     }
 }

@@ -110,7 +110,18 @@ struct HostedUpsellSheet: View {
                     Button {
                         hasAttempted = true
                         Task {
-                            if await account.subscribe(plan: plan, referralCode: invite.code) {
+                            // Yazılıp uygulanmamış ya da reddedilmiş kod sessizce düşmez (davet yalnızca ilk abonelikte
+                            // geçer, sonradan eklenemez): önce doğrulanır; geçersizse ödeme açılmaz, neden kod alanında.
+                            let referralCode: String?
+                            if isInviteOpen, invite.code == nil, !inviteInput.trimmingCharacters(in: .whitespaces).isEmpty {
+                                guard case .valid(let code) = await checkInvite() else {
+                                    return
+                                }
+                                referralCode = code
+                            } else {
+                                referralCode = invite.code
+                            }
+                            if await account.subscribe(plan: plan, referralCode: referralCode) {
                                 account.dismissUpsell()
                             }
                         }
@@ -231,18 +242,25 @@ struct HostedUpsellSheet: View {
         }
     }
 
-    /// Girilen kodu sunucuya doğrulatır.
+    /// "Uygula": girilen kodu sunucuya doğrulatır.
     private func applyInvite() {
+        Task { await checkInvite() }
+    }
+
+    /// Girilen kodu sunucuya doğrulatır; sonuç hem gösterilir hem döner (abone olmadan önce de kullanılır).
+    @discardableResult
+    private func checkInvite() async -> HostedInviteState {
         let input: String = inviteInput
         invite = .checking
-        Task {
-            switch await account.validateReferral(input: input) {
-            case .valid(let code):
-                invite = .valid(code: code)
-            case .invalid(let message):
-                invite = .invalid(message: message)
-            }
+        let result: HostedInviteState
+        switch await account.validateReferral(input: input) {
+        case .valid(let code):
+            result = .valid(code: code)
+        case .invalid(let message):
+            result = .invalid(message: message)
         }
+        invite = result
+        return result
     }
 
     /// Deneme sonu anı ve bu Mac'te en az bir toplantı var: özet gösterilir.
@@ -448,7 +466,7 @@ struct HostedReferralRow: View {
                     if referral.complimentary {
                         Text("Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Hesabın zaten ücretsiz olduğu için sana ödül yazılmaz.")
                     } else {
-                        Text("Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Onun ilk ödemesinden \(referral.holdDays) gün sonra sana da bir ay bedava: sonraki ödemenden \(hostedUSDText(cents: hostedMonthlyPriceCents)) düşülür (yılda en çok \(referral.rewardsPerYear)).")
+                        Text("Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Onun ilk ödemesinden \(referral.holdDays) gün sonra sana da bir ay bedava: sonraki ödemenden \(hostedUSDText(cents: Int((referral.rewardUsd * 100).rounded()))) düşülür (yılda en çok \(referral.rewardsPerYear)).")
                     }
                     Text(verbatim: code)
                         .font(.system(size: 17, weight: .semibold, design: .monospaced))

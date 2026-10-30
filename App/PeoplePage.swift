@@ -3,7 +3,7 @@ import AINotepadUI
 import SwiftUI
 
 /// Kişiler: toplantılarda adı verilen konuşmacılar ve elle eklenenler. Solda açılıp kapanan liste (arama ve "Kişi
-/// ekle"; son görüldüğü toplantıya göre; varsayılan kapalı), sağda kişinin sayfası (düzenle, kaldır) ya da ekleme formu.
+/// ekle"; son görüldüğü toplantıya göre; varsayılan açık), sağda kişinin sayfası (düzenle, kaldır) ya da ekleme formu.
 /// Liste kapalıyken üst çubuktaki menüden kişi seçilir.
 struct PeoplePage: View {
     let model: AppModel

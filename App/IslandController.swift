@@ -30,6 +30,9 @@ final class IslandController {
     private var settingsObserver: (any NSObjectProtocol)?
     /// Son uygulanan ada ayarı (her UserDefaults değişikliğinde yeniden göstermemek için).
     private var isEnabled: Bool = UserDefaults.standard.bool(forKey: SettingsKey.islandEnabled)
+    /// Ada açıkça gizlendi (panel ve adayı birlikte gizleme, giriş kapısı): ekran değişikliği ya da ayar değişikliği onu
+    /// yeniden göstermez; yalnızca `show()` gösterir.
+    private var isHiddenByUser: Bool = false
 
     init(model: AppModel, onTap: @escaping @MainActor () -> Void) {
         self.model = model
@@ -61,7 +64,7 @@ final class IslandController {
                     return
                 }
                 self.isEnabled.toggle()
-                self.show()
+                self.applyVisibility()
             }
         }
     }
@@ -107,18 +110,27 @@ final class IslandController {
 
     /// Adayı gösterir; Ayarlar'da kapatıldıysa gizli kalır.
     func show() {
-        guard UserDefaults.standard.bool(forKey: SettingsKey.islandEnabled) else {
+        isHiddenByUser = false
+        applyVisibility()
+    }
+
+    /// Adayı gizler; `show()` çağrılana dek ekran ya da ayar değişikliği yeniden göstermez.
+    func hide() {
+        isHiddenByUser = true
+        applyVisibility()
+    }
+
+    /// Pencereyi ayara ve açık gizleme durumuna göre öne getirir ya da gizler.
+    private func applyVisibility() {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.islandEnabled), !isHiddenByUser else {
             window?.orderOut(nil)
             return
         }
         window?.orderFrontRegardless()
     }
 
-    func hide() {
-        window?.orderOut(nil)
-    }
-
-    /// Yerleşimi menü çubuğunun bulunduğu ekrana göre günceller; görünüm yeniden kurulmaz.
+    /// Yerleşimi menü çubuğunun bulunduğu ekrana göre günceller; görünüm yeniden kurulmaz, görünürlük değişmez (gizlenen
+    /// ada gizli kalır).
     private func relayout() {
         guard let screen = NSScreen.screens.first else {
             islandLogger.error("Ekran bulunamadı; ada ekran bağlanınca kurulacak")
@@ -142,12 +154,12 @@ final class IslandController {
         guard let window, let layoutState else {
             window = makeWindow(layout: layout)
             applyRecordingState()
-            show()
+            applyVisibility()
             return
         }
         window.setFrame(layout.frame, display: true)
         layoutState.layout = layout
-        show()
+        applyVisibility()
     }
 }
 

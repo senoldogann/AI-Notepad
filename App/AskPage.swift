@@ -251,7 +251,7 @@ struct AskPage: View {
 
     /// Tarifi çalıştırır: etiketli toplantılar varsa onlara, yoksa tüm arşive.
     private func run(recipe: Recipe) {
-        guard !model.isAnsweringArchive else {
+        guard !model.isAnsweringArchive, unavailableReason == nil else {
             return
         }
         model.askArchive(question: recipe.prompt, meetingIDs: mentioned.map(\.id), recipeTitle: recipe.title)

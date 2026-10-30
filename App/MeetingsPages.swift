@@ -122,8 +122,8 @@ struct MeetingsListPage: View {
                 selectionBar(visible: visible)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            if !model.meetingLoadFailures.isEmpty {
-                NoticeText("\(model.meetingLoadFailures.count) toplantı okunamadı: \(model.meetingLoadFailures.map(\.folder).joined(separator: ", "))", severity: .error)
+            if !model.visibleLoadFailures.isEmpty {
+                NoticeText("\(model.visibleLoadFailures.count) toplantı okunamadı: \(model.visibleLoadFailures.map(\.folder).joined(separator: ", "))", severity: .error)
                     .appFont(size: 11, weight: .regular)
                     .padding(DesignTokens.Spacing.m)
             }
@@ -166,10 +166,13 @@ struct MeetingsListPage: View {
                     NSPasteboard.general.setString(meetingMarkdown(record: record), forType: .string)
                 }
                 Divider()
-                // Çöp Sepeti'ne taşır: Finder'dan geri alınabilir.
+                // Çöp Sepeti'ne taşır: Finder'dan geri alınabilir. Seç modu kapalıyken alt çubuk yoktur: hata sağ alttaki
+                // bildirimde görünür; silinen toplantı açıksa sayfası kapanır.
                 Button("Çöp Sepeti'ne taşı", systemImage: "trash", role: .destructive) {
                     if let error = model.deleteMeeting(meetingID: record.id) {
-                        deleteErrors = [error]
+                        ToastCenter.shared.show(kind: .warning, title: error, detail: nil, action: nil)
+                    } else {
+                        onDeleted([record.id])
                     }
                 }
                 .disabled(model.isLocked(meetingID: record.id))
@@ -177,46 +180,48 @@ struct MeetingsListPage: View {
         }
     }
 
-    /// Seç modunun alt çubuğu: tümünü seç, sayı, sil; silmede satır içi onay.
+    /// Seç modunun alt çubuğu: tümünü seç, sayı, sil; silmede satır içi onay. Yalnızca görünen işaretli toplantılar
+    /// sayılır ve silinir/taşınır: arama, klasör ya da süzgeç değişince gizlenen işaretliler işlemden çıkar.
     private func selectionBar(visible: [MeetingRecord]) -> some View {
         let selectable: Set<String> = Set(visible.map(\.id).filter { !model.isLocked(meetingID: $0) })
+        let effective: Set<String> = checked.intersection(Set(visible.map(\.id)))
         return VStack(alignment: .leading, spacing: DesignTokens.Spacing.s) {
             ForEach(deleteErrors, id: \.self) { (error: String) in
                 NoticeText(error, severity: .error).appFont(size: 11, weight: .regular)
             }
             if isConfirmingDelete {
-                Text("\(checked.count) toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?")
+                Text("\(effective.count) toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?")
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(NoticeSeverity.error.tint)
                 HStack(spacing: DesignTokens.Spacing.s) {
-                    Button("Sil", role: .destructive) { deleteChecked() }
+                    Button("Sil", role: .destructive) { deleteChecked(ids: effective) }
                     Button("Vazgeç") { isConfirmingDelete = false }
                 }
             } else {
                 HStack(spacing: DesignTokens.Spacing.s) {
-                    Button(checked.isSuperset(of: selectable) && !selectable.isEmpty ? "Seçimi kaldır" : "Tümünü seç") {
-                        checked = checked.isSuperset(of: selectable) ? [] : selectable
+                    Button(effective.isSuperset(of: selectable) && !selectable.isEmpty ? "Seçimi kaldır" : "Tümünü seç") {
+                        checked = effective.isSuperset(of: selectable) ? [] : selectable
                     }
                     .buttonStyle(.hoverPlain)
                     .foregroundStyle(.tint)
                     Spacer(minLength: 0)
-                    Text("\(checked.count) seçili")
+                    Text("\(effective.count) seçili")
                         .appFont(size: 11, weight: .regular)
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                     Menu {
                         ForEach(model.folders) { (item: FolderSummary) in
-                            Button(item.name, systemImage: "folder") { model.moveMeetings(ids: checked, to: item.name) }
+                            Button(item.name, systemImage: "folder") { model.moveMeetings(ids: effective, to: item.name) }
                         }
                         Divider()
-                        Button("Klasörden çıkar", systemImage: "folder.badge.minus") { model.moveMeetings(ids: checked, to: nil) }
+                        Button("Klasörden çıkar", systemImage: "folder.badge.minus") { model.moveMeetings(ids: effective, to: nil) }
                     } label: {
                         Label("Klasöre taşı", systemImage: "folder")
                     }
                     .fixedSize()
-                    .disabled(checked.isEmpty)
+                    .disabled(effective.isEmpty)
                     Button("Sil", systemImage: "trash", role: .destructive) { isConfirmingDelete = true }
-                        .disabled(checked.isEmpty)
+                        .disabled(effective.isEmpty)
                 }
             }
         }
@@ -243,8 +248,8 @@ struct MeetingsListPage: View {
         }
     }
 
-    private func deleteChecked() {
-        let ids: Set<String> = checked
+    /// Verilen (görünen ve işaretli) toplantıları siler; silinemeyenler işaretli kalır, hataları alt çubukta görünür.
+    private func deleteChecked(ids: Set<String>) {
         withAnimation(.snappy(duration: 0.3)) {
             deleteErrors = model.deleteMeetings(meetingIDs: ids)
             let remaining: Set<String> = Set(model.meetings.map(\.id))
@@ -579,7 +584,7 @@ struct MeetingDetailPage: View {
         if isProcessing || record.status == .processing {
             HStack(spacing: DesignTokens.Spacing.s) {
                 ProgressView().controlSize(.small)
-                Text(record.engine == .local
+                Text(model.finalPassRunsOnThisMac(engine: record.engine)
                     ? "Konuşmacılar Mac'te ayrılıyor ve not hazırlanıyor…"
                     : "Kaydın tamamı işleniyor ve not hazırlanıyor…")
                     .foregroundStyle(.secondary)
@@ -941,16 +946,16 @@ struct MeetingDetailPage: View {
             }
         }
         .disabled(record.note == nil || model.webhookStates[record.id] == .sending)
-        // Görevleri Linear ya da Jira'da iş olarak açar.
+        // Görevleri Linear ya da Jira'da iş olarak açar. Araç adı iki noktadan sonra: Türkçe ek ada göre değişir ("Jira'ya").
         Menu("Görevleri gönder", systemImage: "checklist") {
             if model.taskTrackers.isEmpty {
                 Text("Ayarlar › Bağlantılar › Görev araçları'ndan Linear ya da Jira bağla")
             } else {
                 ForEach(model.taskTrackers) { (tracker: TaskTracker) in
-                    Button("Bana düşenleri \(tracker.service.displayName)'e gönder") {
+                    Button("Bana düşenleri gönder: \(tracker.service.displayName)") {
                         Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, scope: .mine) }
                     }
-                    Button("Tüm görevleri \(tracker.service.displayName)'e gönder") {
+                    Button("Tüm görevleri gönder: \(tracker.service.displayName)") {
                         Task { await model.sendTasks(meetingID: record.id, trackerID: tracker.id, scope: .all) }
                     }
                 }
@@ -1147,7 +1152,10 @@ struct MeetingDetailPage: View {
                 Label("Ses kalıcı olarak silinsin mi? Metin ve not kalır; geri alınamaz.", systemImage: "speaker.slash")
                     .foregroundStyle(NoticeSeverity.error.tint)
                 Button("Sesi sil", role: .destructive) {
-                    player.stop()
+                    // Yalnızca bu toplantının çalması durur; başka toplantı dinleniyorsa sürer.
+                    if player.meetingID == record.id {
+                        player.stop()
+                    }
                     model.deleteAudio(meetingID: record.id)
                     export = .none
                 }
@@ -1160,7 +1168,10 @@ struct MeetingDetailPage: View {
                 Label("Toplantı (metin, not ve ses) Çöp Sepeti'ne taşınsın mı?", systemImage: "trash")
                     .foregroundStyle(NoticeSeverity.error.tint)
                 Button("Sil", role: .destructive) {
-                    player.stop()
+                    // Dosyalar taşınmadan önce bu toplantının çalması durur; başka toplantı dinleniyorsa sürer.
+                    if player.meetingID == record.id {
+                        player.stop()
+                    }
                     if let error = model.deleteMeeting(meetingID: record.id) {
                         export = .failed(error)
                     } else {
