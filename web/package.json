@@ -9,14 +9,20 @@
     "build:local": "PUBLIC_WEB_TARGET=local astro build",
     "preview": "astro preview --port 8788",
     "serve": "node scripts/serve.ts 8788",
-    "screenshots": "node scripts/screenshots.ts"
+    "screenshots": "node scripts/screenshots.ts",
+    "og:blog": "node scripts/make-blog-og.ts",
+    "indexnow": "node scripts/indexnow.ts"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "@astrojs/markdown-satteri": "0.4.6",
+    "@types/hast": "3.0.5",
     "@types/node": "26.6.6",
     "astro": "7.4.4",
     "marked": "18.1.2",
     "playwright-core": "1.64.1",
+    "satteri": "0.10.5",
+    "sharp": "0.35.5",
     "typescript": "5.9.3"
   },
   "engines": {

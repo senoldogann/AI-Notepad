@@ -20,6 +20,9 @@ yalnızca toplu sayfa görüntüleme, yönlendiren site, ülke ve cihaz türü s
 | `/download` | İndirme ve kurulum |
 | `/compare`, `/vs/granola`, `/vs/otter` | Karşılaştırma (rakip değerleri yalnızca kendi fiyat sayfalarından; `copy.ts` `compare`) |
 | `/blog`, `/blog/<kısa ad>`, `/blog/rss.xml` | Blog: yazılar `src/content/blog/*.md` (içerik koleksiyonu, `src/content.config.ts`); taslaklar ve tarihi derleme gününden sonra olan yazılar yayımlanmaz (aşağıda "Haftalık blog") |
+| `/blog/<kısa ad>/og.png` | Yazının paylaşım görseli (1200×630; derlemeden sonra `npm run og:blog` üretir, repoda yok) |
+| `/blog/<kısa ad>/<ad>.webp` | Yazının görselleri (`public/blog/<kısa ad>/`; yönetim panelinden yüklenir) |
+| `/<anahtar>.txt` | IndexNow anahtar dosyası (`config.ts` `indexNowKey`'den derlemede yazılır) |
 | `/mcp` | Uygulamanın yerel MCP sunucusu: araçlar, bağlama, yapılandırma |
 | `/sign-in` | Apple ve Google ile giriş; Apple dönüş adresi; Mac uygulaması `?app=1&nonce=<64 hex>` ile açar |
 | `/invite` | Davet bağlantısı (`?code=`; sunucu `inviteUrl` üretir): kod `localStorage`'da (`gistsmith.invite`) saklanır, hesap sayfası abone olurken doğrulayıp ödemeye taşır |
@@ -42,6 +45,7 @@ npm run dev           # http://localhost:8788, yerel yapılandırma (API: http:/
 npm run typecheck
 npm run build         # yayın yapılandırmasıyla dist/
 npm run build:local && npm run serve   # yerel yapılandırmayla derle, _headers başlıklarıyla (CSP dahil) sun
+npm run og:blog -- "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"   # derlemeden sonra: yazıların paylaşım görselleri
 npm run screenshots -- http://localhost:8788 /tmp/gistsmith-web "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # uçtan uca (giriş, uygulama adına giriş, hesap, sekme kopyası, CSP): build:local + serve, sunucu wrangler dev ile
 # (--var SITE_ORIGIN:<site adresi>; ayrıntı betiğin başında)
@@ -55,9 +59,18 @@ betikteki örnek verilerle karşılanır (yalnızca görünüm denetimi; sunucu 
 
 Yalnızca kaynak değişince elle çalıştırılanlar (çıktıları repodadır): `scripts/subset-font.sh` (yazı tipi),
 `node scripts/make-grain.ts <chrome>` (film greni, `scripts/grain.svg`'den), `node scripts/make-og.ts <site> <chrome>`
-(paylaşım kartı `public/og.png`, site sunulurken; ürün adını `productName`'den alır). Betiğin çıktısı ~1,1 MB'tır;
-bazı önizleyiciler (ör. WhatsApp) büyük görseli atladığı için repodaki kopya 128 renkli paletli PNG'ye indirilir (300 KB
-altı, ör. Pillow: `Image.open(p).convert("RGB").quantize(colors=128, method=Image.Quantize.MAXCOVERAGE).save(p, optimize=True)`).
+(paylaşım kartı `public/og.png`, site sunulurken; ürün adını `productName`'den alır).
+
+**Paylaşım görselleri.** Chrome'un 1200×630 ekran görüntüsü gren yüzünden ~1,1 MB'tır; bazı önizleyiciler (ör. WhatsApp)
+300 KB'tan büyük görseli atladığı için `scripts/og-image.ts` görüntüyü bütçeye sığan en çok renkli paletli PNG'ye indirir
+(sharp/libimagequant; 128 renkten 32'ye; en küçüğü de sığmazsa hata). Blog yazılarının görselleri derlemede değil,
+derlemeden sonra üretilir (`npm run og:blog -- <chrome>`, `scripts/make-blog-og.ts`): site haritasındaki her yazının
+sayfası Chrome'da dist/'ten açılır, sayfanın kapağı (`BlogCover.astro`, `[data-og-cover]`) 1200 px genişlikte yalnız
+bırakılır, logo, ürün adı ve alan adı eklenir. Kapak sitenin kendi CSS'iyle çizildiği için görsel sayfadakiyle aynıdır;
+satori + resvg gibi saf çiziciler kapağın katmanlı radyal gradyanlarını, `color-mix`'ini, gren ve kenar kararması
+karışımlarını (`mix-blend-mode`) çizemediği için Chrome seçildi (GitHub'ın ubuntu-latest runner'ında
+`/usr/bin/google-chrome` kurulu gelir). Görseli olmayan yazı sayfası bozuk `og:image` verir: yayından önce bu adım
+çalışmalı (iş akışı ve elle yayın komutu çalıştırır).
 
 ## Yapılandırma
 
@@ -100,8 +113,9 @@ betiği `/sign-in`'de, Turnstile `/contact`'ta (Google ile giriş Google'a yönl
 birden çok kurala uyan adreste virgülle birleştirir ve tarayıcı iki politikayı birlikte uygular: `/*` tüm hizmetlere izin
 veren geniş politikayı (sayfası olmayan adresler için), her sayfanın kuralı dar politikayı taşır. Her sayfada çalışan
 Cloudflare Web Analytics işaretçisi bu yüzden iki katmanın da tüm politikalarında açıktır:
-`script-src https://static.cloudflareinsights.com`, `connect-src https://cloudflareinsights.com`. `npm run serve`
-başlıkları aynı biçimde birleştirir.
+`script-src https://static.cloudflareinsights.com`, `connect-src https://cloudflareinsights.com`. Yönetim panelinde
+`img-src` ayrıca `blob:`'a izin verir: blog düzenleyicisi yüklenecek görseli ve bu oturumda yüklenenleri (site yeniden
+derlenene dek) tarayıcıdaki kopyasından gösterir. `npm run serve` başlıkları aynı biçimde birleştirir.
 
 ## Yayın (Cloudflare Pages, doğrudan yükleme)
 
@@ -113,9 +127,10 @@ yapar:
 - her gün 06:00 UTC'de (zamanlanmış blog yazıları tarihlerinde yayımlansın);
 - elle: GitHub → Actions → "Deploy web" → Run workflow.
 
-İş `npm ci && npm run build` (üretim yapılandırması) sonra
-`npx wrangler pages deploy dist --project-name ainotepad --branch main` çalıştırır; yayınlar üst üste binmez
-(`concurrency`). Depo gizli değerleri (GitHub → Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN`
+İş `npm ci && npm run build` (üretim yapılandırması), `npm run og:blog -- /usr/bin/google-chrome` (yazıların paylaşım
+görselleri; yukarıda "Paylaşım görselleri") sonra
+`npx wrangler pages deploy dist --project-name ainotepad --branch main` çalıştırır; yükleme başarılıysa son adım
+`npm run indexnow`'dur (aşağıda "IndexNow"). Yayınlar üst üste binmez (`concurrency`). Depo gizli değerleri (GitHub → Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN`
 (Cloudflare → My Profile → API Tokens → yalnızca "Account › Cloudflare Pages › Edit" yetkili jeton) ve
 `CLOUDFLARE_ACCOUNT_ID`. GitHub, 60 gün değişiklik görmeyen herkese açık depoda zamanlanmış iş akışlarını kapatır;
 kapanırsa Actions sekmesinden yeniden açılır.
@@ -123,8 +138,23 @@ kapanırsa Actions sekmesinden yeniden açılır.
 Elle yayın aynı komutlardır (`npx wrangler login` sonrası):
 
 ```bash
-cd web && npm ci && npm run build && npx wrangler pages deploy dist --project-name ainotepad --branch main
+cd web && npm ci && npm run build \
+  && npm run og:blog -- "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  && npx wrangler pages deploy dist --project-name ainotepad --branch main \
+  && npm run indexnow
 ```
+
+**IndexNow.** Yükleme başarılı olunca `scripts/indexnow.ts` yeni ve değişen blog yazılarını
+`https://api.indexnow.org/indexnow`'a bildirir (Bing, Yandex, Seznam, Naver… paylaşır; Google IndexNow kullanmaz, site
+haritasını ve `<lastmod>`'u okur). Adresler derlemenin site haritasından seçilir: `<lastmod>`'u (yazının `updated` ya
+da `published` günü) bugün ya da dün (UTC) olan yazılar, varsa blog dizini ve site haritası da. Durum tutulmaz:
+zamanlanmış yazı tarihindeki 06:00 derlemesinde, yeni ya da `updated`'ı ilerletilmiş yazı o gün ve ertesi günün
+yayınlarında bildirilir (aynı adresin yeniden bildirilmesi zararsızdır); `updated` değişmeden yapılan düzeltme ve silinen
+yazı bildirilmez. Değişen yazı yoksa istek gönderilmez. 429, 5xx, ağ hatası ve zaman aşımı uyarıyla (`indexnow_retry`)
+3 kez denenir; denemeler biterse ya da kalıcı ret (400, 403 anahtar geçersiz, 422…) olursa durum, gövde ve adreslerle
+çıkış kodu 1 (yayın zaten bitmiştir, iş kırmızı görünür). Anahtar açıktır ve depodadır (`src/config.ts` `indexNowKey`);
+derleme `/<anahtar>.txt` dosyasını bu değerden yazar, betik dosyanın varlığını ve içeriğini denetler. Anahtarı
+değiştirmek için yeni 32 onaltılık karakter yazmak yeter (eski dosya bir sonraki yayında kalkar).
 
 Derleme `../App` altındaki yazı tipi lisansını ve uygulama simgesini kopyalar (depo bütün olarak çekilir).
 `_headers` (CSP, HSTS, Referrer-Policy, Permissions-Policy, önbellek) derlemede yapılandırmadan yazılır.
@@ -132,15 +162,35 @@ Derleme `../App` altındaki yazı tipi lisansını ve uygulama simgesini kopyala
 ## Haftalık blog
 
 Her yazı `src/content/blog/<kısa ad>.md`'dir; ön bilgi alanları `title` (10–90), `description` (50–170), `author`,
-`published` (`YYYY-MM-DD`) ve `draft`'tır (her yazıda açıkça). Derleme taslakları ve `published` günü derleme gününden
-(UTC) sonra olan yazıları dizinden, yazı sayfalarından, RSS'ten ve site haritasından çıkarır
-(`src/lib/blog.ts` → `isBlogPostPublic`; tüm sayfalar `blogEntries`'i kullanır).
+`published` (`YYYY-MM-DD`) ve `draft`'tır (her yazıda açıkça); isteğe bağlı olanlar `updated` (`YYYY-MM-DD`,
+`published`'dan önce olamaz) ve `cover`'dır (`sunset`, `coral`, `ocean`, `mint`, `rose`, `violet`). Derleme taslakları ve
+`published` günü derleme gününden (UTC) sonra olan yazıları dizinden, yazı sayfalarından, RSS'ten ve site haritasından
+çıkarır (`src/lib/blog.ts` → `isBlogPostPublic`; tüm sayfalar `blogEntries`'i kullanır).
+
+- **Kapak:** her yazının kapağı durgun pastel film gradyanı, başlık ve kısa addan sabit ses dalgasıdır
+  (`BlogCover.astro`). Aile ve yerleşim kısa addan seçilir (`src/lib/film.ts` `coverFilm`; aynı kısa ad her derlemede ve
+  panelde aynı kapağı verir); `cover` yalnızca aileyi değiştirir. Kapak yazı sayfasının başıdır (başlık `h1`), dizinde ve
+  yazı sonundaki "More from the blog"da kart görselidir; paylaşım görseli aynı kapaktan üretilir.
+- **Görseller:** panelden yüklenen WebP'ler `public/blog/<kısa ad>/<ad>.webp`'dir. Markdown derlenirken her görsele
+  dosyadan okunan `width`/`height`, `loading="lazy"` ve `decoding="async"` yazılır (`src/lib/blog-images.ts`; yer kayması
+  olmaz). Görsel yalnızca yazının kendi klasöründen olabilir; dış adres ya da eksik dosya derlemeyi hatayla durdurur.
+  Yazı silinince klasörü de aynı commit'te silinir.
+- **Arama motorları:** yazı sayfası `og:type article`, `article:published_time`/`article:modified_time`, kendi
+  `og:image`/`twitter:image`'ı (`summary_large_image`), `BlogPosting` (`image`, `dateModified` = `updated` ya da
+  `published`) ve `BreadcrumbList` JSON-LD taşır; sonunda en çok 3 ilgili yazı vardır (kısa adlarında ortak sözcüğü çok
+  olan, sonra yeni olan; `relatedPosts`). Site haritası yazılara ve blog dizinine `<lastmod>` yazar; RSS her öğeye
+  paylaşım görselini `media:content` ile ekler.
 
 Akış:
 
 1. **Yaz:** yönetim paneli → Blog → New post (ya da dosyayı elle ekle). Düzenleyici başlıktan kısa ad türetir, açıklama
    için karakter sayar, Markdown'ı güvenli önizler; önerilen tarih bugün ile son yayında ya da zamanlanmış yazının 7 gün
-   sonrasının büyüğüdür, yazar son yazınınkidir.
+   sonrasının büyüğüdür, yazar son yazınınkidir. Cover: "Auto" ya da bir aile (küçük önizlemeyle); Last updated isteğe
+   bağlıdır. **Add image** (yazı bir kez kaydedildikten sonra): PNG, JPEG ya da WebP seçilir, tarayıcı en çok 1600 px
+   genişliğe küçültüp WebP'ye çevirir (600 KB'ı aşarsa yüklemez), alternatif metin zorunludur, dosya adı ondan türer;
+   görsel hemen `main`'e commit'lenir (`blog: image <kısa ad>/<ad>`) ve `![alt](/blog/<kısa ad>/<ad>.webp)` imlecin yerine
+   eklenir (yazı ayrıca kaydedilir). Blog görünümünde "Open blog" dizini, yayındaki yazının satırındaki ve
+   düzenleyicisindeki simge yazıyı yeni sekmede açar.
 2. **Zamanla:** gelecek tarihli kaydet (ya da taslak bırak). Kayıt sunucu üzerinden `main`'e bir commit'tir
    (`blog: <başlık>`; bkz. `server/README.md` "Blog yayını"). Liste, son yazının tarihini ve önümüzdeki 7 günde
    zamanlanmış yazı yoksa uyarıyı gösterir.

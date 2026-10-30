@@ -7,11 +7,14 @@
 // kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir. Sayfa sonundaki
 // çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
 // denetlenir.
-// Yönetim panelinin blog görünümü listeyle (haftalık düzen uyarısı dahil), kaydedilmiş yayındaki yazının düzenleyicisiyle
-// (sonuç bildirimi ve paylaşım bağlantıları) ve Markdown önizlemesiyle çekilir.
+// Yönetim panelinin blog görünümü listeyle (haftalık düzen uyarısı, sitede aç bağlantıları dahil), kaydedilmiş yayındaki yazının
+// düzenleyicisiyle (sonuç bildirimi, paylaşım bağlantıları, kapak seçici), görsel ekleme bölümüyle (WebP'ye çevrilmiş örnek
+// görsel) ve görsel eklendikten sonraki Markdown önizlemesiyle çekilir. Blog dizini kapaklı kartlarla, yazı sayfaları
+// kapakları ve ilgili yazılarla çekilir.
 // Kullanım: node scripts/screenshots.ts <site adresi> <çıktı klasörü> <Chrome yolu>
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, type CDPSession, type ConsoleMessage, type Page, type Route, chromium } from "playwright-core";
 import { siteConfigs } from "../src/config.ts";
 
@@ -96,6 +99,10 @@ const targets: readonly Target[] = [
 /** Örnek blog yazısının kısa adı (listede yayında; düzenleyici bunu açar ve kaydeder). */
 const exampleBlogSlug: string = "turn-a-meeting-into-a-task-list";
 
+/** Düzenleyicide eklenen örnek görselin alternatif metni ve ondan türeyen dosya adı (admin-blog-image.ts). */
+const exampleImageAlt: string = "Task list in a shared doc";
+const exampleImageName: string = "task-list-in-a-shared-doc.webp";
+
 /** Örnek kullanıcıların kimlikleri (liste, ayrıntı ve açık toplantılar aynı kimlikleri kullanır). */
 const exampleUserIds: readonly string[] = [
   "3f2a9c1e-7b4d-4e8a-9c21-5d6e7f8a9b0c",
@@ -115,6 +122,9 @@ const userDetailTargets: Readonly<Record<string, { readonly row: number; readonl
 
 /** Yerel derlemenin API adresi (istekler buraya gider ve örnek verilerle karşılanır). */
 const apiBase: string = siteConfigs.local.apiBase;
+
+/** Sitenin `public/` klasörü (düzenleyiciye örnek görsel olarak paylaşım kartı yüklenir). */
+const publicDir: string = fileURLToPath(new URL("../public/", import.meta.url));
 
 /** Son 30 gün (`YYYY-MM-DD`, UTC). Saf fonksiyondur. */
 function last30Days(now: Date): string[] {
@@ -183,25 +193,35 @@ function meFixture(state: AccountState, now: Date): object {
 /** Örnek blog yazıları: yayında, taslak ve 7 günden sonraya zamanlanmış (haftalık düzen uyarısı görünür). Saf fonksiyondur. */
 function blogFixtures(now: Date): Readonly<Record<string, object>> {
   const day = (offset: number): string => new Date(now.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
-  const post = (slug: string, title: string, published: number, draft: boolean, status: string): object => ({
+  const post = (slug: string, title: string, published: number, draft: boolean, status: string, cover: string | null): object => ({
     slug,
     title,
     description: "A five-step method for leaving every meeting with a clear list of who does what, by when. Works anywhere.",
     author: "Senol Dogan",
     published: day(published),
+    updated: null,
+    cover,
     draft,
     status,
     sha: `${slug.length.toString(16).padStart(2, "0")}${"a1b2c3d4e5".repeat(4)}`.slice(0, 40),
   });
-  const live: object = post(exampleBlogSlug, "Turn a meeting into a task list: a simple method", -2, false, "live");
+  const live: object = { ...post(exampleBlogSlug, "Turn a meeting into a task list: a simple method", -2, false, "live", "violet"), updated: day(-1) };
   return {
+    // Düzenleyicide eklenen görselin yükleme yanıtı (aynı yol her yöntemde aynı örneği alır).
+    [`/v1/admin/blog/posts/${exampleBlogSlug}/images/${exampleImageName}`]: {
+      path: `/blog/${exampleBlogSlug}/${exampleImageName}`,
+      sha: "f".repeat(40),
+      bytes: 48_213,
+      width: 1200,
+      height: 630,
+    },
     "/v1/admin/blog/posts": {
       today: day(0),
       posts: [
-        post("what-to-ask-before-recording-a-call", "What to ask before you record a call with a client", 12, false, "scheduled"),
-        post("weekly-notes-template", "A weekly notes template that people actually read", 3, true, "draft"),
+        post("what-to-ask-before-recording-a-call", "What to ask before you record a call with a client", 12, false, "scheduled", null),
+        post("weekly-notes-template", "A weekly notes template that people actually read", 3, true, "draft", "mint"),
         live,
-        post("meeting-notes-on-mac-without-a-bot", "How to take meeting notes on a Mac without a bot joining the call", -9, false, "live"),
+        post("meeting-notes-on-mac-without-a-bot", "How to take meeting notes on a Mac without a bot joining the call", -9, false, "live", null),
       ],
     },
     [`/v1/admin/blog/posts/${exampleBlogSlug}`]: {
@@ -742,10 +762,33 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
         await page.evaluate((): void => window.scrollTo(0, 0));
         await capture(page, outDir, `${shot}-granted`, findings);
       }
-      // Düzenleyicinin önizleme sekmesi: Markdown öğeleri, kaçışlı HTML ve düz metne dönen güvensiz bağlantı.
+      // Görsel ekleme: imleç ilk paragrafın sonuna konur, bölüm açılır, PNG seçilir (tarayıcıda WebP'ye çevrilir),
+      // alternatif metin yazılır (dosya adı ondan türer) ve çekilir; sonra yüklenir ve bağlantı gövdeye eklenir.
+      if (target.name === "admin-blog-editor") {
+        await page.$eval("#blog-body", (body: HTMLTextAreaElement): void => {
+          const cursor: number = body.value.indexOf("\n\n## The format");
+          body.setSelectionRange(cursor, cursor);
+        });
+        await page.click("#blog-image-open");
+        await page.setInputFiles("#blog-image-file", { name: "task-list.png", mimeType: "image/png", buffer: await readFile(join(publicDir, "og.png")) });
+        await page.waitForSelector("#blog-image-preview img");
+        await page.fill("#blog-image-alt", exampleImageAlt);
+        await page.waitForSelector("#blog-image-upload:enabled");
+        await page.evaluate((): void => document.getElementById("blog-image")?.scrollIntoView({ block: "start" }));
+        await capture(page, outDir, `${shot}-image`, findings);
+        await page.click("#blog-image-upload");
+        await page.waitForSelector("#blog-image.hidden", { state: "attached" });
+        const inserted: boolean = await page.$eval("#blog-body", (body: HTMLTextAreaElement, link: string): boolean => body.value.includes(link), `![${exampleImageAlt}](/blog/${exampleBlogSlug}/${exampleImageName})`);
+        if (!inserted) {
+          findings.push({ shot, problem: "yüklenen görselin bağlantısı gövdeye eklenmedi" });
+        }
+      }
+      // Düzenleyicinin önizleme sekmesi: Markdown öğeleri, yüklenen görsel (tarayıcıdaki kopyası), kaçışlı HTML ve düz
+      // metne dönen güvensiz bağlantı.
       if (target.name === "admin-blog-editor") {
         await page.click("#blog-tab-preview");
         await page.waitForSelector("#blog-preview:not(.hidden) h2");
+        await page.waitForSelector("#blog-preview img");
         await page.evaluate((): void => document.getElementById("blog-tab-preview")?.scrollIntoView({ block: "start" }));
         await capture(page, outDir, `${shot}-preview`, findings);
       }

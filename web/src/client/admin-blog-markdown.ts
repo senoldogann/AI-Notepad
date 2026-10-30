@@ -2,14 +2,17 @@
 // doğrudan kurulur (`innerHTML` yok). Metinler `textContent` ile yazılır: Markdown içindeki HTML olduğu gibi metin olarak
 // görünür, çalışmaz. Bağlantılar yalnızca http(s) ya da site içi (`/…`) adreslerse bağlantı olur, değilse düz metin;
 // görseller yalnızca site içindeyse gösterilir (yönetim sayfasının CSP'si dış görsele izin vermez), dış görselin yerine
-// kısa bir not yazılır. Önizleme yaklaşıktır: yayımlanan sayfayı Astro derler.
+// kısa bir not yazılır. Bu oturumda yüklenen görseller site henüz yeniden derlenmediği için tarayıcıdaki kopyalarından
+// (`blob:` adresi) gösterilir. Önizleme yaklaşıktır: yayımlanan sayfayı Astro derler.
 import { type MarkedToken, type Token, type Tokens, lexer } from "marked";
 import { fill } from "./copy";
 
-/** Önizlemenin metinleri. */
-export interface PreviewText {
+/** Önizlemenin metinleri ve bu oturumda yüklenen görseller. */
+export interface PreviewOptions {
   /** `{alt}`: gösterilmeyen dış görsel. */
   readonly image: string;
+  /** Sitedeki yol (`/blog/<kısa ad>/<ad>.webp`) → tarayıcıdaki kopyanın `blob:` adresi. */
+  readonly localImages: ReadonlyMap<string, string>;
 }
 
 /**
@@ -45,12 +48,12 @@ function elementWith<Tag extends keyof HTMLElementTagNameMap>(tag: Tag, children
 }
 
 /** Satır içi parçaların düğümleri. */
-function inlineNodes(tokens: readonly Token[], text: PreviewText): Node[] {
+function inlineNodes(tokens: readonly Token[], text: PreviewOptions): Node[] {
   return tokens.map((token: Token): Node => inlineNode(known(token), text));
 }
 
 /** Satır içi parça (metin, vurgu, kod, bağlantı, görsel, satır sonu). */
-function inlineNode(token: MarkedToken, text: PreviewText): Node {
+function inlineNode(token: MarkedToken, text: PreviewOptions): Node {
   switch (token.type) {
     case "strong":
       return elementWith("strong", inlineNodes(token.tokens, text));
@@ -80,7 +83,7 @@ function inlineNode(token: MarkedToken, text: PreviewText): Node {
         return note;
       }
       const image: HTMLImageElement = document.createElement("img");
-      image.src = token.href;
+      image.src = text.localImages.get(token.href) ?? token.href;
       image.alt = token.text;
       return image;
     }
@@ -95,17 +98,17 @@ function inlineNode(token: MarkedToken, text: PreviewText): Node {
 }
 
 /** Blok parçaların düğümleri (boşluk ve bağlantı tanımları çizilmez). */
-function blockNodes(tokens: readonly Token[], text: PreviewText): Node[] {
+function blockNodes(tokens: readonly Token[], text: PreviewOptions): Node[] {
   return tokens.map((token: Token): Node | null => blockNode(known(token), text)).filter((node: Node | null): node is Node => node !== null);
 }
 
 /** Tablo hücresi. */
-function tableCell(cell: Tokens.TableCell, text: PreviewText): HTMLTableCellElement {
+function tableCell(cell: Tokens.TableCell, text: PreviewOptions): HTMLTableCellElement {
   return elementWith(cell.header ? "th" : "td", inlineNodes(cell.tokens, text));
 }
 
 /** Blok parça (başlık, paragraf, liste, alıntı, kod, tablo, çizgi); çizilmeyen parçada null. */
-function blockNode(token: MarkedToken, text: PreviewText): Node | null {
+function blockNode(token: MarkedToken, text: PreviewOptions): Node | null {
   switch (token.type) {
     case "space":
     case "def":
@@ -151,6 +154,6 @@ function blockNode(token: MarkedToken, text: PreviewText): Node | null {
 }
 
 /** Markdown'ın önizleme düğümleri (GFM, `marked` varsayılanları). */
-export function markdownPreview(source: string, text: PreviewText): Node[] {
+export function markdownPreview(source: string, text: PreviewOptions): Node[] {
   return blockNodes(lexer(source, { gfm: true }), text);
 }

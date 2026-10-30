@@ -1,83 +1,153 @@
 ---
-// Blog yazısı: başlık, yazar, tarih ve okuma süresi, Markdown gövdesi, `BlogPosting` JSON-LD ve sonda indirme çağrısı.
-// Yazılar src/content/blog'dan; kısa ad dosya adıdır.
+// Blog yazısı: kapak (başlık kapağın üstünde, h1), özet, yazar, tarih (ve varsa güncelleme), okuma süresi, Markdown
+// gövdesi, `BlogPosting` ve `BreadcrumbList` JSON-LD, sonda ilgili yazılar ve indirme çağrısı. Paylaşım kartı yazının
+// kendi görselidir (`/blog/<kısa ad>/og.png`, derlemeden sonra scripts/make-blog-og.ts üretir). Yazılar
+// src/content/blog'dan; kısa ad dosya adıdır.
 import type { GetStaticPaths } from "astro";
 import { type CollectionEntry, render } from "astro:content";
 import Base from "../../layouts/Base.astro";
+import BlogCard from "../../components/BlogCard.astro";
+import BlogCover from "../../components/BlogCover.astro";
 import CtaBand from "../../components/CtaBand.astro";
 import Icon from "../../components/Icon.astro";
+import { fill } from "../../client/copy";
 import { productName } from "../../config";
 import { copy, type BlogCopy } from "../../copy";
 import { operator } from "../../legal/operator";
-import { type BlogPost, blogEntries, blogPost, publishedIso, publishedText } from "../../lib/blog";
+import { type BlogPost, blogEntries, blogPost, publishedIso, publishedText, relatedPosts } from "../../lib/blog";
+import type { ArticleCard } from "../../lib/social";
 import { blogPostingStructuredData, structuredDataJson } from "../../lib/structured-data";
-import { blogPostPath, routes } from "../../routes";
+import { blogOgImagePath, blogPostPath, routes } from "../../routes";
 import { siteConfig } from "../../site";
 
 interface Props {
   readonly entry: CollectionEntry<"blog">;
+  /** Yayımlanan tüm yazılar (ilgili yazılar bunlardan seçilir). */
+  readonly posts: readonly BlogPost[];
 }
 
-export const getStaticPaths = (async () =>
-  (await blogEntries()).map((entry: CollectionEntry<"blog">) => ({ params: { slug: entry.id }, props: { entry } }))) satisfies GetStaticPaths;
+export const getStaticPaths = (async () => {
+  const entries: CollectionEntry<"blog">[] = await blogEntries();
+  const posts: readonly BlogPost[] = entries.map(blogPost);
+  return entries.map((entry: CollectionEntry<"blog">) => ({ params: { slug: entry.id }, props: { entry, posts } }));
+}) satisfies GetStaticPaths;
 
-const { entry } = Astro.props;
+/** Yazının sonunda gösterilen en çok ilgili yazı sayısı. */
+const relatedCount: number = 3;
+
+const { entry, posts } = Astro.props;
 const text: BlogCopy = copy.blog;
 const post: BlogPost = blogPost(entry);
+const more: readonly BlogPost[] = relatedPosts(posts, post.slug, relatedCount);
 const { Content } = await render(entry);
-const url: string = `${siteConfig.siteOrigin}${blogPostPath(post.slug)}`;
+const origin: string = siteConfig.siteOrigin;
+const url: string = `${origin}${blogPostPath(post.slug)}`;
+const social: ArticleCard = {
+  kind: "article",
+  image: `${origin}${blogOgImagePath(post.slug)}`,
+  imageAlt: fill(text.coverAlt, { title: post.title }),
+  published: publishedIso(post.published),
+  modified: publishedIso(post.modified),
+};
 const structuredData: string = structuredDataJson(
   blogPostingStructuredData(siteConfig, operator, {
     url,
     title: post.title,
     description: post.description,
     author: post.author,
-    published: publishedIso(post.published),
+    published: social.published,
+    modified: social.modified,
+    image: social.image,
+    blogName: text.eyebrow,
   }),
 );
 ---
 
-<Base page={{ blogPostSlug: post.slug }} meta={{ title: `${post.title} — ${productName}`, description: post.description }} indexed={true}>
+<Base page={{ blogPostSlug: post.slug }} meta={{ title: `${post.title} — ${productName}`, description: post.description }} indexed={true} social={social}>
   {/* Veri bloğu: Astro işlemez ve paketlemez (`is:inline`), tarayıcı çalıştırmaz; CSP'ye takılmaz. */}
   <script is:inline type="application/ld+json" set:html={structuredData} />
-  <article class="narrow post">
+  <article class="post">
     <header class="post__head">
       <a class="text-link small post__back" href={routes.blog}>{text.backToBlog}</a>
-      <h1 class="title-xl">{post.title}</h1>
-      <p class="lead">{post.description}</p>
-      <p class="small muted post__meta">
-        <span>{text.byline} {post.author}</span>
-        <span aria-hidden="true">·</span>
-        <time datetime={publishedIso(post.published)}>{publishedText(post.published)}</time>
-        <span aria-hidden="true">·</span>
-        <span>{post.minutes} {text.minutesRead}</span>
-      </p>
+      <BlogCover post={post} class="post__cover">
+        <h1 class="blog-cover__title">{post.title}</h1>
+      </BlogCover>
+      <div class="narrow post__intro">
+        <p class="lead">{post.description}</p>
+        <p class="small muted post__meta">
+          <span>{text.byline} {post.author}</span>
+          <span aria-hidden="true">·</span>
+          <time datetime={publishedIso(post.published)}>{publishedText(post.published)}</time>
+          {
+            post.updated !== null && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {text.updated} <time datetime={publishedIso(post.updated)}>{publishedText(post.updated)}</time>
+                </span>
+              </>
+            )
+          }
+          <span aria-hidden="true">·</span>
+          <span>{post.minutes} {text.minutesRead}</span>
+        </p>
+      </div>
     </header>
-    <div class="prose post__body">
+    <div class="narrow prose post__body">
       <Content />
     </div>
-    <a class="text-link post__back-end" href={routes.blog}>{text.backToBlog} <Icon name="arrow-right" size={16} class="" /></a>
   </article>
+
+  {
+    more.length > 0 && (
+      <section class="page post-more" aria-labelledby="post-more-title">
+        <div class="post-more__head">
+          <h2 class="title-m post-more__title" id="post-more-title">
+            {text.moreTitle}
+          </h2>
+          <a class="text-link small" href={routes.blog}>
+            {text.backToBlog} <Icon name="arrow-right" size={14} class="" />
+          </a>
+        </div>
+        <ul class="post-more__grid">
+          {more.map((related: BlogPost) => (
+            <li>
+              <BlogCard post={related} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
 
   <CtaBand id="post-cta-title" title={text.ctaTitle} text={text.ctaText} palette="coral" layout="clouds-left" />
 </Base>
 
 <style>
   .post {
-    padding-top: clamp(40px, 7vw, 88px);
+    padding-top: clamp(32px, 6vw, 72px);
   }
 
   .post__head {
     display: grid;
-    gap: 16px;
-    justify-items: start;
+    gap: 22px;
+    width: min(960px, 100% - 2 * var(--gutter));
+    margin-inline: auto;
     padding-bottom: 28px;
     margin-bottom: 8px;
-    border-bottom: 1px solid var(--line);
   }
 
-  .post__head h1 {
-    font-size: clamp(2rem, 4.4vw, 3rem);
+  .post__back {
+    justify-self: start;
+  }
+
+  .post__intro {
+    display: grid;
+    gap: 14px;
+    width: min(760px, 100%);
+    padding-top: 10px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
   }
 
   .post__meta {
@@ -102,6 +172,17 @@ const structuredData: string = structuredDataJson(
 
   .post__body :global(li > p) {
     margin: 0;
+  }
+
+  /* Panelden yüklenen görseller (public/blog/<kısa ad>/): boyutları derlemede yazılır (src/lib/blog-images.ts), yer kayması olmaz. */
+  .post__body :global(img) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 8px auto;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--line);
+    background: var(--soft);
   }
 
   .post__body :global(blockquote) {
@@ -141,7 +222,35 @@ const structuredData: string = structuredDataJson(
     font-size: inherit;
   }
 
-  .post__back-end {
-    margin-top: 32px;
+  .post-more {
+    margin-top: clamp(56px, 8vw, 96px);
+    padding-top: clamp(32px, 4vw, 48px);
+    border-top: 1px solid var(--line);
+  }
+
+  .post-more__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin-bottom: 24px;
+  }
+
+  .post-more__title {
+    font-size: clamp(1.375rem, 2.4vw, 1.75rem);
+  }
+
+  .post-more__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: 36px clamp(20px, 2.6vw, 32px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-more__grid > li {
+    min-width: 0;
   }
 </style>

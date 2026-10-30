@@ -2,6 +2,7 @@
 // Bir rakiple karşılaştırma sayfası (/vs/granola, /vs/otter): giriş ve kaynak satırı, yan yana tablo, rakibin güçlü
 // olduğu yerler, "kim hangisini seçmeli" ve indirme çağrısı. Metinler ve değerler copy.ts `compare`'den.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import ComparisonTable from "./ComparisonTable.astro";
 import CtaBand from "./CtaBand.astro";
 import Icon from "./Icon.astro";
@@ -23,7 +24,7 @@ const pricingAddress: URL = new URL(them.pricingUrl);
 const sourceLabel: string = `${pricingAddress.host.replace(/^www\./, "")}${pricingAddress.pathname}`;
 ---
 
-<Base page={page} meta={them.meta} indexed={true}>
+<Base page={page} meta={them.meta} indexed={true} social={websiteCard}>
   <section class="page narrow-intro">
     <a class="eyebrow eyebrow--link" href={routes.compare}>{text.eyebrow}</a>
     <h1 class="title-xl">{them.title}</h1>

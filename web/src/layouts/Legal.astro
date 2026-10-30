@@ -3,6 +3,7 @@
 // bölümler (src/components/LegalSection.astro). Bölüm başlıkları sayfanın `sections` dizisinden gelir: içindekiler ve
 // başlıklar tek kaynaktan.
 import Base from "./Base.astro";
+import { websiteCard } from "../lib/social";
 import { siteLocale } from "../config";
 import { copy, type PageMeta } from "../copy";
 import { type LegalSectionInfo } from "../lib/legal";
@@ -19,7 +20,7 @@ const { page, meta, title, sections } = Astro.props;
 const updated: string = new Intl.DateTimeFormat(siteLocale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${legalUpdated}T00:00:00Z`));
 ---
 
-<Base page={page} meta={meta} indexed={true}>
+<Base page={page} meta={meta} indexed={true} social={websiteCard}>
   <div class="page legal">
     <header class="legal__head">
       <h1 class="title-xl">{title}</h1>

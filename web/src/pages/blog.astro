@@ -1,16 +1,18 @@
 ---
-// Blog dizini: yazılar yeniden eskiye (başlık, özet, tarih, okuma süresi) ve RSS bağlantısı.
+// Blog dizini: yazılar yeniden eskiye kart olarak (kapak, başlık, özet, tarih, okuma süresi) ve RSS bağlantısı.
 import Base from "../layouts/Base.astro";
+import BlogCard from "../components/BlogCard.astro";
 import Icon from "../components/Icon.astro";
 import { copy, type BlogCopy } from "../copy";
-import { type BlogPost, blogEntries, blogPost, publishedIso, publishedText } from "../lib/blog";
-import { blogFeedPath, blogPostPath } from "../routes";
+import { type BlogPost, blogEntries, blogPost } from "../lib/blog";
+import { websiteCard } from "../lib/social";
+import { blogFeedPath } from "../routes";
 
 const text: BlogCopy = copy.blog;
 const posts: readonly BlogPost[] = (await blogEntries()).map(blogPost);
 ---
 
-<Base page="blog" meta={text.meta} indexed={true}>
+<Base page="blog" meta={text.meta} indexed={true} social={websiteCard}>
   <section class="page blog-intro">
     <p class="eyebrow">{text.eyebrow}</p>
     <h1 class="title-xl">{text.title}</h1>
@@ -18,25 +20,13 @@ const posts: readonly BlogPost[] = (await blogEntries()).map(blogPost);
     <a class="text-link small" href={blogFeedPath}>{text.feedLink} <Icon name="arrow-right" size={14} class="" /></a>
   </section>
 
-  <section class="page" aria-labelledby="blog-list-title">
+  <section class="page blog-posts" aria-labelledby="blog-list-title">
     <h2 class="visually-hidden" id="blog-list-title">{text.title}</h2>
-    <ol class="blog-list">
+    <ol class="blog-grid">
       {
         posts.map((post: BlogPost) => (
-          <li class="blog-item">
-            <article>
-              <p class="small muted blog-item__meta">
-                <time datetime={publishedIso(post.published)}>{publishedText(post.published)}</time>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {post.minutes} {text.minutesRead}
-                </span>
-              </p>
-              <h3 class="title-m blog-item__title">
-                <a href={blogPostPath(post.slug)}>{post.title}</a>
-              </h3>
-              <p class="muted">{post.description}</p>
-            </article>
+          <li>
+            <BlogCard post={post} />
           </li>
         ))
       }
@@ -52,40 +42,20 @@ const posts: readonly BlogPost[] = (await blogEntries()).map(blogPost);
     padding-block: clamp(48px, 8vw, 96px) clamp(28px, 4vw, 48px);
   }
 
-  .blog-list {
+  .blog-intro .lead {
+    max-width: 44rem;
+  }
+
+  .blog-grid {
     display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    gap: clamp(36px, 4vw, 48px) clamp(20px, 2.6vw, 32px);
     margin: 0;
     padding: 0;
     list-style: none;
-    border-top: 1px solid var(--line);
-    max-width: 52rem;
   }
 
-  .blog-item {
-    padding-block: 28px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .blog-item article {
-    display: grid;
-    gap: 8px;
-  }
-
-  .blog-item__meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .blog-item__title {
-    font-size: clamp(1.25rem, 2.2vw, 1.5rem);
-  }
-
-  .blog-item__title a {
-    text-decoration: none;
-  }
-
-  .blog-item__title a:hover {
-    text-decoration: underline;
+  .blog-grid > li {
+    min-width: 0;
   }
 </style>

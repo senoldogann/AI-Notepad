@@ -48,6 +48,7 @@ export type ErrorCode =
   | "blog_post_exists"
   | "blog_conflict"
   | "blog_post_invalid"
+  | "blog_image_exists"
   | "webhook_invalid"
   | "internal_error";
 
@@ -100,6 +101,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   blog_post_exists: 409,
   blog_conflict: 409,
   blog_post_invalid: 500,
+  blog_image_exists: 409,
   webhook_invalid: 400,
   internal_error: 500,
 };

@@ -3,8 +3,11 @@
 # - her gün 06:00 UTC'de: zamanlanmış blog yazıları tarihleri geldiğinde yayımlansın (derleme, tarihi derleme gününden
 #   sonra olan ve taslak yazıları atlar; web/src/lib/blog.ts → isBlogPostPublic);
 # - elle (workflow_dispatch).
-# Derleme elle yayınla aynıdır (`npm run build`, üretim yapılandırması). Gizli değerler: CLOUDFLARE_API_TOKEN (yalnızca
-# "Cloudflare Pages: Edit" yetkili API jetonu) ve CLOUDFLARE_ACCOUNT_ID (bkz. web/README.md).
+# Derleme elle yayınla aynıdır (`npm run build`, üretim yapılandırması); ardından her yayımlanan blog yazısının paylaşım
+# görseli runner'ın Google Chrome'uyla üretilir (`npm run og:blog`, ubuntu-latest'te /usr/bin/google-chrome kurulu gelir).
+# Yükleme başarılı olunca yeni ve değişen blog yazıları IndexNow'a bildirilir (`npm run indexnow`; bildirim hatası yayını
+# geri almaz, iş kırmızı görünür). Gizli değerler: CLOUDFLARE_API_TOKEN (yalnızca "Cloudflare Pages: Edit" yetkili API
+# jetonu) ve CLOUDFLARE_ACCOUNT_ID (bkz. web/README.md). IndexNow anahtarı açıktır ve depodadır (web/src/config.ts).
 name: Deploy web
 
 on:
@@ -44,9 +47,17 @@ jobs:
         run: npm ci
       - name: Derleme
         run: npm run build
+      # Görseller sayfaların kendi kapağından çizilir (web/scripts/make-blog-og.ts); Chrome yoksa adım açık hatayla durur.
+      - name: Blog paylaşım görselleri
+        run: |
+          /usr/bin/google-chrome --version
+          npm run og:blog -- /usr/bin/google-chrome
       # Wrangler sürümü sunucununkiyle (server/package.json) aynı tutulur: yayın aracı sessizce değişmez.
       - name: Cloudflare Pages'e yükle
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx --yes wrangler@4.154.0 pages deploy dist --project-name ainotepad --branch main
+      # Yalnızca yükleme başarılıysa çalışır (önceki adım düşerse iş durur); ayrıntı web/scripts/indexnow.ts.
+      - name: IndexNow bildirimi
+        run: npm run indexnow

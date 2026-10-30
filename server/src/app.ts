@@ -9,15 +9,22 @@ import { adminOperations } from "./adminOps";
 import { adminUserDetail, listAdminUsers, parseAdminUserFilter } from "./adminUsers";
 import {
   type ActiveBlog,
+  type DecodedBlogImage,
+  type SavedBlogImage,
   type SavedBlogPost,
+  blogImageInputSchema,
+  blogImageRequestMaxBytes,
   blogPostInputSchema,
   blogRequestMaxBytes,
+  decodeBlogImage,
   deleteBlogPost,
   getBlogPost,
   listBlogPosts,
+  parseBlogImageName,
   parseBlogSha,
   parseBlogSlug,
   requireBlog,
+  saveBlogImage,
   saveBlogPost,
 } from "./blog";
 import { requireCloudflareAccess } from "./auth/access";
@@ -508,6 +515,7 @@ const adminReportPath: RegExp = /^\/v1\/admin\/reports\/([0-9a-f-]{36})$/;
 const adminUserPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})$/;
 const adminComplimentaryPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})\/complimentary$/;
 const adminBlogPostPath: RegExp = /^\/v1\/admin\/blog\/posts\/([^/]+)$/;
+const adminBlogImagePath: RegExp = /^\/v1\/admin\/blog\/posts\/([^/]+)\/images\/([^/]+)$/;
 
 /**
  * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
@@ -541,9 +549,22 @@ async function routeAdmin(request: Request, env: Env, config: Config, context: R
     }
     const sha: string = parseBlogSha(new URL(request.url));
     await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
-    await deleteBlogPost(context.platform, blog, slug, sha);
-    log("info", "blog_post_deleted", { slug, userId: user.userId });
+    const images: number = await deleteBlogPost(context.platform, blog, slug, sha);
+    log("info", "blog_post_deleted", { slug, images, userId: user.userId });
     return new Response(null, { status: 204 });
+  }
+  // Yazının görseli: `PUT` yazının klasörüne yeni bir WebP yazar (bkz. `saveBlogImage`); yazımlar yazılarla aynı sınırda.
+  const imageMatch: RegExpExecArray | null = adminBlogImagePath.exec(path);
+  if (imageMatch !== null && imageMatch[1] !== undefined && imageMatch[2] !== undefined && method === "PUT") {
+    const blog: ActiveBlog = requireBlog(config.blog);
+    const slug: string = parseBlogSlug(imageMatch[1]);
+    const name: string = parseBlogImageName(imageMatch[2]);
+    const body = await readJsonBody(request, blogImageInputSchema, blogImageRequestMaxBytes);
+    const image: DecodedBlogImage = decodeBlogImage(body.data);
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    const saved: SavedBlogImage = await saveBlogImage(context.platform, blog, slug, name, image);
+    log("info", "blog_image_saved", { slug, name, bytes: saved.bytes, width: saved.width, height: saved.height, userId: user.userId });
+    return jsonResponse(201, saved);
   }
   if (path === "/v1/admin/stats" && method === "GET") {
     return jsonResponse(200, await adminStats(db, config, now));

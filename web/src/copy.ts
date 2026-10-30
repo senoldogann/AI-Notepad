@@ -648,6 +648,12 @@ export interface BlogCopy {
   /** "6 min read" gibi okuma süresinin eki. */
   readonly minutesRead: string;
   readonly backToBlog: string;
+  /** Yazının `updated` günü varsa tarihin önündeki etiket. */
+  readonly updated: string;
+  /** Yazı sonundaki ilgili yazılar bölümünün başlığı. */
+  readonly moreTitle: string;
+  /** Yazının paylaşım görselinin alternatif metni; `{title}` yazının başlığı. */
+  readonly coverAlt: string;
   readonly ctaTitle: string;
   readonly ctaText: string;
 }
@@ -1220,6 +1226,9 @@ export const copy: Copy = {
     byline: "By",
     minutesRead: "min read",
     backToBlog: "All posts",
+    updated: "Updated",
+    moreTitle: "More from the blog",
+    coverAlt: `“{title}” in large type on a soft pastel gradient, with the ${productName} logo and a small sound wave.`,
     ctaTitle: `Try ${productName}`,
     ctaText: "A meeting notepad for Mac. 3 meetings or 7 days free, then $5.99 a month or $49 a year, taxes included.",
   },

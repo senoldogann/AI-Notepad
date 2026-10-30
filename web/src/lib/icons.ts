@@ -15,8 +15,10 @@ export type IconName =
   | "clock"
   | "disk"
   | "download"
+  | "external"
   | "gift"
   | "globe"
+  | "image"
   | "inbox"
   | "laptop"
   | "lock"
@@ -74,11 +76,13 @@ export const icons: Readonly<Record<IconName, IconShape>> = {
     body: '<path d="M3.75 13.5 6.2 6.1A2.5 2.5 0 0 1 8.57 4.5h6.86a2.5 2.5 0 0 1 2.37 1.6l2.45 7.4"/><rect x="3.75" y="13.5" width="16.5" height="6" rx="2.5"/><path d="M16.5 16.5h.01"/>',
   },
   download: { style: "stroke", body: '<path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19.5h14"/>' },
+  external: { style: "stroke", body: '<path d="M13.5 4.5h6v6M19.5 4.5l-8.25 8.25"/><path d="M17.25 13.5v4.25a2 2 0 0 1-2 2H6.25a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h4.25"/>' },
   gift: {
     style: "stroke",
     body: '<rect x="3.75" y="8.25" width="16.5" height="4" rx="1.25"/><path d="M5.25 12.25v6.5a1.5 1.5 0 0 0 1.5 1.5h10.5a1.5 1.5 0 0 0 1.5-1.5v-6.5M12 8.25v12M12 8.25C10.8 5 8 4 7.1 5.4c-.8 1.3.8 2.85 4.9 2.85Zm0 0c1.2-3.25 4-4.25 4.9-2.85.8 1.3-.8 2.85-4.9 2.85Z"/>',
   },
   globe: { style: "stroke", body: '<circle cx="12" cy="12" r="8.75"/><path d="M3.25 12h17.5M12 3.25c2.3 2.4 3.5 5.3 3.5 8.75s-1.2 6.35-3.5 8.75c-2.3-2.4-3.5-5.3-3.5-8.75S9.7 5.65 12 3.25Z"/>' },
+  image: { style: "stroke", body: '<rect x="3.75" y="4.75" width="16.5" height="14.5" rx="2.5"/><circle cx="9" cy="10" r="1.75"/><path d="m20.25 15.5-4.6-4.6a1.5 1.5 0 0 0-2.1 0L5.5 19"/>' },
   inbox: { style: "stroke", body: '<path d="M3.75 13.5h4.5l1.5 2.5h4.5l1.5-2.5h4.5"/><path d="M5.6 6.1A2.5 2.5 0 0 1 7.9 4.5h8.2a2.5 2.5 0 0 1 2.3 1.6l1.85 5.15v6a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25v-6Z"/>' },
   laptop: { style: "stroke", body: '<rect x="4.75" y="5" width="14.5" height="10" rx="2"/><path d="M2.75 18.75h18.5"/>' },
   lock: { style: "stroke", body: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.25 10.5V7.75a3.75 3.75 0 0 1 7.5 0v2.75M12 14.5v2"/>' },
