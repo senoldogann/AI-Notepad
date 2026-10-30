@@ -16160,6 +16160,94 @@
           }
         }
       }
+    },
+    "konuşmacı (+%lld kısa)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "speakers (+%lld brief)"
+          }
+        }
+      }
+    },
+    "Kısa konuşmalar (%lld)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brief speakers (%lld)"
+          }
+        }
+      }
+    },
+    "Kısa konuşmaları gizle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide brief speakers"
+          }
+        }
+      }
+    },
+    "Az konuşan kişileri tek tek göster": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show brief speakers individually"
+          }
+        }
+      }
+    },
+    "Başka dilde %lld bölüm atlandı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld segments in another language skipped"
+          }
+        }
+      }
+    },
+    "Toplantı dili %@ seçildi: başka dildeki konuşma transkripte, nota ve Sor'a girmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting language set to %@: speech in other languages is left out of the transcript, the note and Ask."
+          }
+        }
+      }
+    },
+    "Gizle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
+          }
+        }
+      }
+    },
+    "Göster": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
