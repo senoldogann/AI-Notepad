@@ -115,7 +115,7 @@ export const homeFi: HomeCopy = {
     live: {
       label: "Kokouksen aikana",
       title: "Jokainen lause heti, kun se sanotaan",
-      alt: `Kuvakaappaus ${productName}-sovelluksen reaaliaikaisesta paneelista suomenkielisen kokouksen aikana: puhujien lauseet ja oma englanninkielinen puheenvuoro litteroituna, sekä painike ”What did I miss?” paneelin alareunassa.`,
+      alt: `Kuvakaappaus ${productName}-sovelluksen reaaliaikaisesta paneelista suomenkielisen kokouksen aikana: kunkin puhujan suomenkieliset lauseet ja niiden alla englanninkielinen käännös, omat puheenvuorosi englanniksi ja painike ”What did I miss?” paneelin alareunassa.`,
     },
     ask: {
       label: "Milloin tahansa myöhemmin",
@@ -228,7 +228,7 @@ export const homeFi: HomeCopy = {
     {
       question: "Miten ilmainen kokeilu toimii?",
       answer:
-        "Kokeilu on maksuton eikä vaadi korttia: 3 kokousta tai 7 päivää ensimmäisestä kokouksesta, kumpi täyttyy ensin. Yksi kokeilukokous voi kestää enintään 90 minuuttia. Sen jälkeen tilaus maksaa 5,99 $ kuussa tai 49 $ vuodessa, verot sisältyvät hintaan.",
+        "Kokeilu on maksuton eikä vaadi korttia: 3 kokousta tai 7 päivää ensimmäisestä kokouksesta, kumpi täyttyy ensin. Käyttämättömät kokeilukokoukset vanhenevat silloin. Yksi kokeilukokous voi kestää enintään 90 minuuttia. Sen jälkeen tilaus maksaa 5,99 $ kuussa tai 49 $ vuodessa, verot sisältyvät hintaan.",
     },
     {
       question: "Liittyykö kokoukseeni botti?",
@@ -245,7 +245,7 @@ export const homeFi: HomeCopy = {
     },
     {
       question: "Miten maksu ja verot toimivat Suomessa?",
-      answer: `Maksun hoitaa Stripe ja myynnin Link, Stripen maksupalvelu. Hinta 5,99 $ kuussa tai 49 $ vuodessa sisältää arvonlisäveron: Link laskee sijaintisi mukaisen veron ja tilittää sen puolestamme, ja kassa näyttää sisältyvän veron ennen maksua. Veloitus näkyy tiliotteellasi nimellä ${cardStatementDescriptor}, ja kuitti tulee Linkiltä sähköpostiisi. Korttitietosi jäävät Stripelle ja Linkille eivätkä koskaan tule meille.`,
+      answer: `Maksun hoitaa Stripe ja myynnin Link, Stripen maksupalvelu. Hinta 5,99 $ kuussa tai 49 $ vuodessa sisältää arvonlisäveron: Link laskee sijaintisi mukaisen veron ja tilittää sen puolestamme, ja kassa näyttää sisältyvän veron ennen maksua. Kassalla hinta voi näkyä myös euroina. Veloitus näkyy tiliotteellasi nimellä ${cardStatementDescriptor}, ja kuitti tulee Linkiltä sähköpostiisi. Korttitietosi jäävät Stripelle ja Linkille eivätkä koskaan tule meille.`,
     },
   ],
   finalTitle: "Anna sen kirjoittaa muistiinpano seuraavasta kokouksestasi.",
