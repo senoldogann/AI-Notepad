@@ -741,7 +741,7 @@ export const copy: Copy = {
     meta: {
       title: `${productName} — ${tagline}`,
       description:
-        "A meeting notepad for Mac: a live transcript, optional live translation, and a note that starts with your tasks the moment the meeting ends. 3 meetings or 7 days free.",
+        "A meeting notepad for Mac: a live transcript, optional live translation, and a note that starts with your tasks when the meeting ends. 3 meetings or 7 days free.",
     },
     eyebrow: "A meeting notepad for Mac",
     title: tagline,
@@ -932,7 +932,7 @@ export const copy: Copy = {
   },
   pricing: {
     meta: {
-      title: `Pricing — ${productName}`,
+      title: `${productName} pricing: Mac meeting notes from $5.99 a month`,
       description: "$5.99 a month or $49 a year, taxes included. 3 meetings or 7 days free, up to 10 hours a month, up to 4 hours per meeting, cancel anytime.",
     },
     title: "Simple pricing, monthly or yearly.",
@@ -1012,7 +1012,7 @@ export const copy: Copy = {
   },
   download: {
     meta: {
-      title: `Download — ${productName}`,
+      title: `Download ${productName} for Mac: AI meeting notes`,
       description: `Download ${productName} for your Mac: macOS 15 or later on Apple silicon. 3 meetings or 7 days free.`,
     },
     title: `Download ${productName}`,
@@ -1182,7 +1182,7 @@ export const copy: Copy = {
   },
   blog: {
     meta: {
-      title: `Blog — ${productName}`,
+      title: `${productName} blog: meeting notes and calls on a Mac`,
       description: `Practical guides on meeting notes, task lists and recording calls on a Mac, from the team behind ${productName}.`,
     },
     eyebrow: "Blog",
@@ -1201,7 +1201,7 @@ export const copy: Copy = {
   },
   mcp: {
     meta: {
-      title: `MCP server — ${productName}`,
+      title: `${productName} MCP server: your meetings in Claude and Cursor`,
       description: `${productName} includes a local, read-only MCP server. Let Claude, Cursor, VS Code and other MCP apps list, search and read your meeting notes and tasks.`,
     },
     eyebrow: "MCP",

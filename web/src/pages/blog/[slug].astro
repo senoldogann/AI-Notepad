@@ -11,10 +11,9 @@ import BlogCover from "../../components/BlogCover.astro";
 import CtaBand from "../../components/CtaBand.astro";
 import Icon from "../../components/Icon.astro";
 import { fill } from "../../client/copy";
-import { productName } from "../../config";
 import { copy, type BlogCopy } from "../../copy";
 import { operator } from "../../legal/operator";
-import { type BlogPost, blogEntries, blogPost, publishedIso, publishedText, relatedPosts } from "../../lib/blog";
+import { type BlogPost, blogEntries, blogPageTitle, blogPost, publishedIso, publishedText, relatedPosts } from "../../lib/blog";
 import type { ArticleCard } from "../../lib/social";
 import { blogPostingStructuredData, structuredDataJson } from "../../lib/structured-data";
 import { blogOgImagePath, blogPostPath, routes } from "../../routes";
@@ -63,7 +62,7 @@ const structuredData: string = structuredDataJson(
 );
 ---
 
-<Base page={{ blogPostSlug: post.slug }} meta={{ title: `${post.title} — ${productName}`, description: post.description }} indexed={true} social={social}>
+<Base page={{ blogPostSlug: post.slug }} meta={{ title: blogPageTitle(post.title), description: post.description }} indexed={true} social={social}>
   {/* Veri bloğu: Astro işlemez ve paketlemez (`is:inline`), tarayıcı çalıştırmaz; CSP'ye takılmaz. */}
   <script is:inline type="application/ld+json" set:html={structuredData} />
   <article class="post">
