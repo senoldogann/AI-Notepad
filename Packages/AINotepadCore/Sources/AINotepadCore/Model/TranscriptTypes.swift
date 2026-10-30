@@ -168,3 +168,10 @@ public struct LiveSegment: Sendable, Equatable, Identifiable {
         self.person = person
     }
 }
+
+/// Akış durunca ekrandaki geçici metni silen boş kesin bölüm: akış o bölümün kesin sonucunu artık göndermeyecek
+/// (reducer boş, hatasız kesin bölümü listeden çıkarır; geçici metin yoksa etkisizdir). O sesin metni son geçişte
+/// yazılır. Saf fonksiyondur.
+func clearingPartial(id: SegmentID) -> LiveSegment {
+    LiveSegment(id: id, startSec: 0, endSec: 0, text: "", isFinal: true, failureMessage: nil, person: nil)
+}

@@ -107,7 +107,8 @@ public func diarizeFile(
     )
 }
 
-/// ElevenLabs Scribe v2 isteği: 3 deneme, 4xx denenmez.
+/// ElevenLabs Scribe v2 isteği: 3 deneme, 4xx denenmez. 2xx yanıt yeniden gönderilmez (yazıya dökme faturalanmıştır):
+/// ayrıştırılamazsa hata hemen fırlatılır.
 private func postToElevenLabs(
     apiKey: String,
     audio: Data,
@@ -130,7 +131,7 @@ private func postToElevenLabs(
     request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
     request.httpBody = multipartBody(boundary: boundary, fields: fields, file: audio, fileName: fileName, mimeType: mimeType)
 
-    var result: DiarizationResult?
+    var body: Data?
     var rejection: CloudSTTError?
     try await retryWithBackoff(
         attempts: 3,
@@ -140,7 +141,8 @@ private func postToElevenLabs(
             let (data, response): (Data, URLResponse) = try await URLSession.shared.data(for: request)
             let status: Int = (response as? HTTPURLResponse)?.statusCode ?? 0
             if (200..<300).contains(status) {
-                result = try parseElevenLabsResponse(data: data)
+                // Ayrıştırma denemelerin dışında: bozuk yanıt aynı sesi yeniden faturalatmasın.
+                body = data
             } else if isPermanentHTTPRejection(status: status) {
                 // Yeniden denemenin anlamı yok; denemeyi bitir, aşağıda fırlat.
                 rejection = .http(service: "elevenlabs", status: status, body: String(decoding: data, as: UTF8.self))
@@ -156,10 +158,10 @@ private func postToElevenLabs(
     if let rejection {
         throw rejection
     }
-    guard let result else {
+    guard let body else {
         throw CloudSTTError.malformedMessage(service: "elevenlabs", body: "boş sonuç")
     }
-    return result
+    return try parseElevenLabsResponse(data: body)
 }
 
 /// `multipart/form-data` gövdesi: metin alanları + `file` alanında WAV.

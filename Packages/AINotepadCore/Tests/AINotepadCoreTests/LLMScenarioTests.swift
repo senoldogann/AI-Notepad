@@ -246,5 +246,18 @@ struct LLMScenarioTests {
         #expect(next.decisions == ["A", "B"])
         #expect(next.glossary.map(\.term) == ["raportti", "budjetti"])
         #expect(next.partSummaries.last == "[10:00–20:00] Erteleme.")
+        // Yalnızca kapsam değişti (tarih boş): eski tarih kalır; yalnızca tarih değişti (açıklama boş): eski açıklama kalır.
+        let widened: ChunkedNoteState = applyNoteChunk(
+            state: next,
+            chunk: NoteChunk(summary: "Kapsam.", decisions: [], newTasks: [], changedTasks: [TaskChange(number: 1, description: "Rapor + Q3", dueDate: nil, isCancelled: false)], glossary: []),
+            startSec: 1200, endSec: 1800
+        )
+        #expect(widened.tasks.first == NoteTask(owner: "Sen", description: "Rapor + Q3", dueDate: "Pazartesi", isMine: true))
+        let moved: ChunkedNoteState = applyNoteChunk(
+            state: widened,
+            chunk: NoteChunk(summary: "Tarih.", decisions: [], newTasks: [], changedTasks: [TaskChange(number: 1, description: " ", dueDate: "Salı", isCancelled: false)], glossary: []),
+            startSec: 1800, endSec: 2400
+        )
+        #expect(moved.tasks.first == NoteTask(owner: "Sen", description: "Rapor + Q3", dueDate: "Salı", isMine: true))
     }
 }

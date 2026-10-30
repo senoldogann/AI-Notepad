@@ -302,14 +302,14 @@ public func hostedClientMessage(error: HostedClientError) -> String {
     case .keychainServiceNotConfigured:
         String(localized: "Uygulamanın Anahtar Zinciri ayarı eksik; uygulamayı yeniden kur.")
     case .offlineNotAllowed:
-        String(localized: "Sunucuya ulaşılamıyor ve hesap durumun son 7 günde doğrulanmadı. Kayıt için internete bağlan.")
+        String(localized: "Sunucuya ulaşılamıyor ve son bilinen hesap durumun çevrimdışı kayda izin vermiyor (7 günden eski ya da kayıt hakkın kalmamış). Kayıt için internete bağlan.")
     case .offlineRecording:
         String(localized: "Kayıt çevrimdışı sürüyor: canlı çeviri kapalı; not ve konuşmacılar bağlantı gelince hazırlanır.")
     case .noActiveMeeting:
         String(localized: "Yapay zekâ özellikleri bir toplantı sırasında ve bittikten kısa süre sonrasına kadar kullanılabilir; önce bir toplantı başlat.")
     case .network:
         String(localized: "Sunucuya ulaşılamadı; internet bağlantını kontrol et.")
-    case .malformedResponse(_, let status, _):
+    case .malformedResponse:
         String(localized: "Sunucudan beklenmeyen bir yanıt geldi. Uygulamayı güncelleyip yeniden dene.")
     case .serverOutdated:
         String(localized: "Sunucu bu işlemi henüz desteklemiyor (güncelleniyor). Toplantı işlenmedi; biraz sonra \"Tekrar işle\" ile yeniden dene.")

@@ -297,6 +297,9 @@ public enum HostedPlanStatus: Sendable, Equatable {
     case ending(endsAt: Date)
     /// Ödeme gecikti; erişim ek süre boyunca sürer.
     case grace(endsAt: Date)
+    /// Ödeme alınamadı ve ek süre bitti, ama abonelik Stripe'ta sürüyor (`past_due`, `unpaid`): ödeme yeniden denenir;
+    /// yeni kayıt için kart "Hesabı yönet"ten güncellenir (yeni abonelik açılamaz, sunucu `subscription_exists` der).
+    case paymentOverdue
     /// Abonelik sona erdi (iptal edildi ya da ödenmedi) ve deneme hakkı kalmadı: yeni kayıt için yeniden abone olunmalı.
     case expired(endedAt: Date)
 }
@@ -326,7 +329,11 @@ public func isHostedTrialRefusalActive(refusedAt: Date?, now: Date, maxAgeSec: D
     return now.timeIntervalSince(refusedAt) < maxAgeSec
 }
 
-/// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Saf fonksiyondur.
+/// Ödemesi alınamamış ama Stripe'ta süren aboneliğin durumları: erişim ek süreden sonra kapanır, abonelik bitmez.
+private let hostedUnpaidSubscriptionStatuses: Set<String> = ["past_due", "unpaid"]
+
+/// Hak yanıtından arayüz durumu: erişimi olan abonelik önce gelir, yoksa deneme. Erişimi kapanmış abonelikte deneme
+/// hakkı kalmadıysa ödemesi alınamamış (`paymentOverdue`) ya da bitmiş (`expired`) abonelik. Saf fonksiyondur.
 public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStatus {
     if let subscription = entitlements.subscription {
         switch subscription.access {
@@ -341,8 +348,12 @@ public func hostedPlanStatus(entitlements: HostedEntitlements) -> HostedPlanStat
         case .grace:
             return .grace(endsAt: subscription.graceEndsAt ?? subscription.currentPeriodEnd)
         case .none:
-            // Eski abone: deneme hakkı kalmadıysa "deneme bitti" değil "abonelik sona erdi".
+            // Eski abone: deneme hakkı kalmadıysa "deneme bitti" değil "abonelik sona erdi". Stripe yenilemede dönem sonunu
+            // hemen ilerlettiği için ödemesi alınamamış abonelikte dönem sonu gelecektedir: "sona erdi" denmez.
             if entitlements.trialMeetingsLeft == 0 {
+                if hostedUnpaidSubscriptionStatuses.contains(subscription.status) {
+                    return .paymentOverdue
+                }
                 return .expired(endedAt: subscription.cancelAt ?? subscription.currentPeriodEnd)
             }
         }

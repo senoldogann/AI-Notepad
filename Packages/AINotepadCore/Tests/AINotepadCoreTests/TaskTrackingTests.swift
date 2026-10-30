@@ -65,6 +65,20 @@ import Testing
         #expect(withCarriedTaskMarks(old: rewritten, new: rewritten).sentTaskKeys == nil)
     }
 
+    // Değişmeden kalan işaretsiz görev, çok değişmiş işaretli kardeşinin işaretini devralmaz (araçta açılmamış görev
+    // gönderilmiş görünmesin).
+    @Test func unchangedUnmarkedTaskDoesNotInheritMark() {
+        let marked: NoteTask = NoteTask(owner: "Senol", description: "Send budget report to Aino", dueDate: nil, isMine: true)
+        let sibling: NoteTask = NoteTask(owner: "Senol", description: "Send budget report to Mikko", dueDate: nil, isMine: true)
+        let reworded: NoteTask = NoteTask(owner: "Senol", description: "Email the Q3 budget report to Aino Virtanen by Friday", dueDate: nil, isMine: true)
+        let carried: [String] = carriedTaskKeys(oldTasks: [marked, sibling], newTasks: [reworded, sibling], keys: [taskKey(task: marked)])
+        #expect(!carried.contains(taskKey(task: sibling)))
+        let sent: MeetingRecord = withCarriedTaskMarks(
+            old: record(tasks: [marked, sibling]).markingTaskSent(trackerID: "linear", task: marked), new: record(tasks: [reworded, sibling])
+        )
+        #expect(sent.sentTaskKeys?["linear"]?.contains(taskKey(task: sibling)) != true)
+    }
+
     // Uzun not işi sürerken diğer cihazda konan işaretler (eski notun görevlerine) işin sonucuna taşınır; gönderim
     // işaretleri eklenir, Apple Notlar anının en eskisi kalır.
     @Test func jobResultKeepsMarksMadeDuringJob() {

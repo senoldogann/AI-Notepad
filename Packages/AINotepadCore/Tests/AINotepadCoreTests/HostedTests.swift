@@ -136,6 +136,8 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
     @Test func keytermsMatchServerRules() {
         #expect(hostedKeyterms(terms: [" Aino ", "aino", "", "a{b}", String(repeating: "x", count: 50), "bir iki üç dört beş altı", "Kone Oyj"], limit: 5) == ["Aino", "Kone Oyj"])
         #expect(hostedKeyterms(terms: ["a", "b", "c"], limit: 2) == ["a", "b"])
+        // Sunucu uzunluğu UTF-16 birimiyle sayar: 30 emoji (60 birim) 49'u aşar.
+        #expect(hostedKeyterms(terms: [String(repeating: "🎉", count: 30), "Aino"], limit: 5) == ["Aino"])
     }
 
     // Anahtar terimler adreste değil, başlıkta: UTF-8 JSON dizisinin dolgusuz base64url'i.
@@ -361,6 +363,17 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
             .replacingOccurrences(of: #""access":"grace","graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""access":"active","graceEndsAt":null"#)
             .replacingOccurrences(of: #""status":"past_due","#, with: #""status":"active","cancelAt":"2026-10-01T00:00:00.000Z","#)
         #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(ending.utf8))) == .ending(endsAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        // Ek süresi bitmiş ödenmemiş abonelik "sona erdi" değil: ödeme alınamadı, kayıt kart güncellenene dek başlamaz.
+        let overdueJSON: String = trial.replacingOccurrences(of: #""trialMeetingsLeft":1"#, with: #""trialMeetingsLeft":0"#)
+            .replacingOccurrences(of: #""graceEndsAt":"2026-10-08T00:00:00.000Z""#, with: #""graceEndsAt":null"#)
+        let overdue: HostedEntitlements = try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(overdueJSON.utf8))
+        #expect(hostedPlanStatus(entitlements: overdue) == .paymentOverdue)
+        #expect(hostedStartBlock(entitlements: overdue) == .paymentOverdue)
+        let canceled: String = overdueJSON.replacingOccurrences(of: #""status":"past_due""#, with: #""status":"canceled""#)
+        #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(canceled.utf8))) == .expired(endedAt: try Date.ISO8601FormatStyle().parse("2026-10-01T00:00:00Z")))
+        // Yöneticinin verdiği ücretsiz erişim: yenileme ya da iptal tarihi değil "ücretsiz erişim".
+        let complimentary: String = ending.replacingOccurrences(of: #""complimentary":false"#, with: #""complimentary":true"#)
+        #expect(hostedPlanStatus(entitlements: try hostedJSONDecoder().decode(HostedEntitlements.self, from: Data(complimentary.utf8))) == .complimentary)
         // Toplantı dışı yapay zekâ payı yeni alan: yoksa nil, varsa okunur.
         #expect(entitlements.accountTokensCap == nil)
         let withTokens: String = json.replacingOccurrences(of: #""monthlyHoursCap":10,"#, with: #""monthlyHoursCap":10,"accountTokensUsed":250,"accountTokensCap":1000,"#)

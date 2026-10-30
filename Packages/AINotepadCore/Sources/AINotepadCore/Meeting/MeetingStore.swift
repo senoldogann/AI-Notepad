@@ -293,17 +293,23 @@ public func deleteMeetingDirectory(directory: URL) throws {
 /// Aramada alanları ayıran karakter (birim ayırıcı): kullanıcının sorgusunda bulunmaz.
 private let searchFieldSeparator: String = "\u{1F}"
 
-/// Aramada katlama: büyük/küçük harf ve aksan duyarsız. Yerel ayardan bağımsız (`locale: nil`): Türkçe yerel ayarda
-/// "I" → "ı" olur ve Fince/İngilizce metinde "RAPORTTI" bulunamazdı.
-private let searchFolding: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+/// Aramada katlanmış metin: büyük/küçük harf ve aksan duyarsız, Türkçe noktasız "ı" da "i" olur ("Işık", "ışık" ve
+/// "isik" aynı). Yerel ayardan bağımsız (`locale: nil`): Türkçe yerel ayarda "I" → "ı" olur ve Fince/İngilizce metinde
+/// "RAPORTTI" bulunamazdı. Uygulamadaki tüm aramalar (toplantı listesi, @ seçici, tarifler, arşiv soruları) bunu
+/// kullanır. Saf fonksiyondur.
+func searchFolded(_ text: String) -> String {
+    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        .replacingOccurrences(of: "ı", with: "i", options: .literal)
+}
 
-/// Başlık, not ve transkriptte büyük/küçük harf duyarsız arama; boş sorgu hepsini döndürür. Saf fonksiyondur.
+/// Başlık, not ve transkriptte büyük/küçük harf, aksan ve ı/i duyarsız arama (`searchFolded`); boş sorgu hepsini
+/// döndürür. Saf fonksiyondur.
 public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingRecord] {
     let needle: String = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !needle.isEmpty else {
         return records
     }
-    let folded: String = needle.folding(options: searchFolding, locale: nil)
+    let folded: String = searchFolded(needle)
     return records.filter { (record: MeetingRecord) -> Bool in
         // Listede görünen başlık notun başlığıdır; görevler, konuşmacı adları ve kendi notların da aranır.
         let haystack: [String] = [record.title, record.note?.title ?? "", record.note?.summary ?? "", record.myNotes ?? ""]
@@ -315,8 +321,7 @@ public func filterMeetings(records: [MeetingRecord], query: String) -> [MeetingR
         // Alanlar tek metinde birleşir, büyük/küçük harf ve aksanlar bir kez katlanır, sonra düz karşılaştırılır
         // (her bölümde ayrı harf duyarsız arama 500 toplantıda tuş başına saniyeyi aşıyordu). Ayırıcı sorguda
         // bulunmayan bir denetim karakteridir, eşleşme iki alanın sınırını aşamaz.
-        return haystack.joined(separator: searchFieldSeparator)
-            .folding(options: searchFolding, locale: nil)
+        return searchFolded(haystack.joined(separator: searchFieldSeparator))
             .range(of: folded, options: .literal) != nil
     }
 }

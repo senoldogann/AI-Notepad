@@ -34,9 +34,16 @@ public final class MeetingAudioPlayer {
     public private(set) var currentSecond: Int = 0
     public private(set) var duration: Double = 0
     public private(set) var rate: Float = 1
+    /// Son çalma denemesinin hatası; yalnızca `errorMeetingID` toplantısının sayfasında gösterilir.
     public private(set) var errorMessage: String?
+    /// Hatanın ait olduğu toplantı (çalar tek; başka toplantının sayfası bu hatayı göstermez).
+    public private(set) var errorMeetingID: String?
 
     @ObservationIgnored private var players: [AVAudioPlayer] = []
+    #if os(iOS)
+    /// Çalma için ses oturumunu bu çalar açtı: durunca bırakılır, diğer uygulamaların sesi (müzik) sürer.
+    @ObservationIgnored private var ownsAudioSession: Bool = false
+    #endif
     @ObservationIgnored private var loadedURLs: [URL] = []
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
@@ -55,7 +62,9 @@ public final class MeetingAudioPlayer {
                 }
             } catch {
                 playerLogger.error("Ses açılamadı, toplantı: \(meetingID, privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                // `stop()` hatayı temizler; hata ondan sonra bu toplantıya yazılır.
                 errorMessage = userFacingMessage(error: StorageError.readFailed(path: urls.first?.path ?? meetingID, reason: error.localizedDescription))
+                errorMeetingID = meetingID
                 players = []
                 return
             }
@@ -64,14 +73,17 @@ public final class MeetingAudioPlayer {
             duration = players.map(\.duration).max() ?? 0
         }
         errorMessage = nil
+        errorMeetingID = nil
         #if os(iOS)
         do {
             // Sessiz modda da çalar; konuşma için ayarlı oturum.
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
             try AVAudioSession.sharedInstance().setActive(true)
+            ownsAudioSession = true
         } catch {
             playerLogger.error("Çalma oturumu açılamadı, hata: \(String(describing: error), privacy: .private)")
             errorMessage = userFacingMessage(error: AudioCaptureError.playbackSessionFailed(code: Int32((error as NSError).code)))
+            errorMeetingID = meetingID
             return
         }
         #endif
@@ -120,7 +132,8 @@ public final class MeetingAudioPlayer {
         players.forEach { $0.rate = rate }
     }
 
-    /// Çalmayı bitirir ve dosyaları bırakır (toplantı değişince ya da ses silinince).
+    /// Çalmayı bitirir, dosyaları ve hatayı bırakır (toplantı değişince ya da ses silinince). iPhone'da çalma için açılan
+    /// ses oturumu kapatılır; diğer uygulamaların sesi (müzik, podcast) kaldığı yerden sürer.
     public func stop() {
         ticker?.cancel()
         ticker = nil
@@ -131,6 +144,18 @@ public final class MeetingAudioPlayer {
         isPlaying = false
         setPosition(seconds: 0)
         duration = 0
+        errorMessage = nil
+        errorMeetingID = nil
+        #if os(iOS)
+        if ownsAudioSession {
+            ownsAudioSession = false
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                playerLogger.error("Çalma oturumu kapatılamadı, hata: \(String(describing: error), privacy: .private)")
+            }
+        }
+        #endif
     }
 
     /// Tüm kayıtları aynı konumdan, aynı anda başlatır (kayıtlar arası kayma olmasın).

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// Hataları kullanıcıya gösterilecek, ne yapılacağını söyleyen Türkçe metne çevirir (anahtar ve toplantı metni içermez).
 /// Panel, ada, menü ve Toplantılar penceresindeki tüm hata metinleri buradan geçer. Saf fonksiyondur.
@@ -34,7 +35,7 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Konuşmacı ayırma modeli çalışmadı (ilk kullanımda internet gerekir)")
     case OllamaError.unreachable:
         return String(localized: "Ollama'ya ulaşılamadı. Ollama uygulamasının açık olduğunu ve adresin doğru olduğunu kontrol et.")
-    case OllamaError.http(_, let status, _):
+    case OllamaError.http:
         return String(localized: "Ollama isteği reddetti. Adresi ve Ollama sürümünü kontrol edip yeniden dene.")
     case OllamaError.malformed:
         return String(localized: "Ollama'nın yanıtı anlaşılamadı. Ollama'yı güncelleyip yeniden dene.")
@@ -46,7 +47,7 @@ public func userFacingMessage(error: any Error) -> String {
         return String(localized: "Klip kaydedilemedi: \(reason)")
     case WebhookError.invalidURL:
         return String(localized: "Webhook adresi geçersiz: https:// ile başlayan tam adresi yapıştır.")
-    case WebhookError.http(let host, let status, _):
+    case WebhookError.http(let host, _, _):
         return String(localized: "\(host) webhook'u kabul etmedi. Adresin doğru ve etkin olduğunu kontrol et.")
     case WebhookError.network(let host, _):
         return String(localized: "\(host) adresine ulaşılamadı; internet bağlantını kontrol et.")
@@ -107,11 +108,11 @@ private func channelMessage(error: ChannelAuthError) -> String {
         String(localized: "\(service.displayName) girişi tamamlanmadı (izin verilmedi). Yeniden dene.")
     case .stateMismatch(let service):
         String(localized: "\(service.displayName) girişi başka bir denemeden döndü; yeniden dene.")
-    case .http(let service, let status, _):
+    case .http(let service, _, _):
         String(localized: "\(service.displayName) isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
     case .api(.slack, "not_in_channel"), .api(.slack, "channel_not_found"):
         String(localized: "Slack kanalına yazılamadı: kanalın üyesi değilsin ya da kanal silinmiş. Ayarlar › Bağlantılar'dan başka bir kanal seç.")
-    case .api(let service, let code):
+    case .api(let service, _):
         String(localized: "\(service.displayName) isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
     case .network(let service, _):
         String(localized: "\(service.displayName) adresine ulaşılamadı; internet bağlantını kontrol et.")
@@ -128,7 +129,7 @@ private func mcpRemoteMessage(error: MCPRemoteError) -> String {
     switch error {
     case .noAuthorizationMetadata(let server), .noDynamicRegistration(let server):
         String(localized: "\(server) tek tıkla girişi desteklemiyor.")
-    case .http(let server, let status, _):
+    case .http(let server, _, _):
         String(localized: "\(server) isteği kabul etmedi. Yeniden dene; sürerse bağlantıyı kaldırıp yeniden bağlan.")
     case .network(let server, _):
         String(localized: "\(server) adresine ulaşılamadı; internet bağlantını kontrol et.")
@@ -162,8 +163,6 @@ private func audioMessage(error: AudioCaptureError) -> String {
         String(localized: "Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'da bu uygulamaya izin ver.")
     case .microphoneStartFailed(let code):
         String(localized: "Mikrofon başlatılamadı (kod \(Int(code))). Giriş cihazını kontrol edip kaydı yeniden başlat.")
-    case .systemAudioPermissionDenied:
-        String(localized: "Sistem sesi kaydı izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Ekran ve Sistem Sesi Kaydı'nda bu uygulamaya izin ver.")
     case .coreAudio(let operation, let status):
         String(localized: "Sistem sesi yakalanamadı (\(operation), kod \(Int(status))). Çıkış cihazını kontrol edip kaydı yeniden başlat.")
     case .alreadyRunning:
@@ -182,20 +181,32 @@ private func keychainMessage(error: KeychainError) -> String {
     case .notFound(_, let account):
         String(localized: "\(serviceName(account: account)) anahtarı kayıtlı değil. Ayarlar'dan ekle.")
     case .unexpectedStatus(let operation, let status):
-        String(localized: "Anahtar Keychain'den okunamadı (\(operation), kod \(Int(status))). İzin penceresinde \"Her Zaman İzin Ver\"i seç.")
+        keychainStatusMessage(operation: operation, status: status)
     }
+}
+
+/// Keychain durum kodunun metni: Mac'te okuma izni reddedildiyse (izin penceresinde "Reddet" ya da pencere
+/// gösterilemedi) "Her Zaman İzin Ver" önerilir; yazma, silme, iPhone ve diğer güvenlik işlemlerinde (rastgele sayı)
+/// işlem ve kodla genel metin. Saf fonksiyondur.
+private func keychainStatusMessage(operation: String, status: Int32) -> String {
+    #if os(macOS)
+    if operation.hasPrefix("SecItemCopyMatching"), [errSecAuthFailed, errSecUserCanceled, errSecInteractionNotAllowed].contains(status) {
+        return String(localized: "Anahtar Keychain'den okunamadı (\(operation), kod \(Int(status))). İzin penceresinde \"Her Zaman İzin Ver\"i seç.")
+    }
+    #endif
+    return String(localized: "Güvenlik işlemi tamamlanamadı (\(operation), kod \(Int(status))). Uygulamayı yeniden açıp tekrar dene; sürerse geri bildirim gönder.")
 }
 
 private func llmMessage(error: LLMError) -> String {
     switch error {
     case .http(let status, _, let model, _) where status == 401 || status == 403:
         String(localized: "\(providerName(model: model)) anahtarı kabul edilmedi. Ayarlar'dan anahtarı kontrol et.")
-    case .http(let status, _, let model, _):
+    case .http(_, _, let model, _):
         String(localized: "\(providerName(model: model)) şu an yanıt veremedi. Biraz sonra yeniden dene.")
-    case .truncated(let model):
+    case .truncated:
         // Düşünme de çıktı sınırından harcar: aynı ayarla tekrar denemek aynı sonucu verir.
         String(localized: "Yanıt uzunluk sınırına takılıp yarıda kesildi. İsteği kısaltıp ya da daha az toplantı seçip yeniden dene.")
-    case .streamFailed(let errorType, _, let model):
+    case .streamFailed(_, _, let model):
         String(localized: "\(providerName(model: model)) yanıtı yarıda kesildi. Biraz sonra yeniden dene.")
     case .refusal:
         String(localized: "Model bu isteği yanıtlamadı (güvenlik denetimi).")
@@ -223,6 +234,15 @@ private func cloudMessage(error: CloudSTTError) -> String {
     }
 }
 
+/// iCloud kullanılamıyor metni: düzeltme sistemin ayarlarında (uygulamanın Ayarlar'ında değil). Saf fonksiyondur.
+private func iCloudUnavailableMessage() -> String {
+    #if os(macOS)
+    String(localized: "iCloud kullanılamıyor. Sistem Ayarları › Apple Hesabı › iCloud'da iCloud Drive'ı aç.")
+    #else
+    String(localized: "iCloud kullanılamıyor. Ayarlar › Apple Hesabı › iCloud'da iCloud Drive'ı aç.")
+    #endif
+}
+
 private func storageMessage(error: StorageError) -> String {
     switch error {
     case .readFailed(let path, _):
@@ -234,7 +254,7 @@ private func storageMessage(error: StorageError) -> String {
     case .directoryUnavailable(let path, _):
         String(localized: "Klasöre erişilemedi: \((path as NSString).lastPathComponent).")
     case .iCloudUnavailable:
-        String(localized: "iCloud kullanılamıyor. Ayarlar'da iCloud'a giriş yapıp iCloud Drive'ı aç.")
+        iCloudUnavailableMessage()
     case .alreadyExists(let path):
         String(localized: "Aynı toplantı hedefte zaten var: \((path as NSString).lastPathComponent). İki kopyayı karşılaştırıp birini sil.")
     case .moveFailed(let path, _):

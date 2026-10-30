@@ -72,18 +72,7 @@ let readingPieceMinSec: Double = 8
 /// Bölümleri paragraflara toplar: konuşmacı (ya da kişi) değişince ya da paragraf `readingParagraphMaxSec`'i geçecekse
 /// yeni paragraf. Uzun bölümler önce cümle sonlarından parçalanır (bkz. `readingPieces`). Saf fonksiyondur.
 public func transcriptParagraphs(record: MeetingRecord) -> [TranscriptParagraph] {
-    let pieces: [StoredSegment] = meetingSegments(record: record).flatMap { (segment: StoredSegment) -> [StoredSegment] in
-        readingPieces(segment: segment)
-    }
-    let groups: [[StoredSegment]] = pieces.reduce(into: [[StoredSegment]]()) { (groups: inout [[StoredSegment]], segment: StoredSegment) -> Void in
-        if let first = groups.last?.first, first.speaker == segment.speaker, first.person == segment.person,
-           segment.endSec - first.startSec <= readingParagraphMaxSec {
-            groups[groups.count - 1].append(segment)
-        } else {
-            groups.append([segment])
-        }
-    }
-    return groups.compactMap { (group: [StoredSegment]) -> TranscriptParagraph? in
+    readingGroups(record: record).compactMap { (group: [StoredSegment]) -> TranscriptParagraph? in
         guard let first = group.first, let last = group.last else {
             return nil
         }
@@ -97,6 +86,21 @@ public func transcriptParagraphs(record: MeetingRecord) -> [TranscriptParagraph]
             }
         )
     }
+}
+
+/// Okuma paragraflarının bölüm grupları: aynı konuşmacının art arda bölümleri (uzun bölüm `readingPieces` ile
+/// bölünmüş), grup `readingParagraphMaxSec`'i geçmeden. Paragraf ve konuşma payı bu gruplardan kurulur. Saf fonksiyondur.
+private func readingGroups(record: MeetingRecord) -> [[StoredSegment]] {
+    meetingSegments(record: record)
+        .flatMap { (segment: StoredSegment) -> [StoredSegment] in readingPieces(segment: segment) }
+        .reduce(into: [[StoredSegment]]()) { (groups: inout [[StoredSegment]], segment: StoredSegment) -> Void in
+            if let first = groups.last?.first, first.speaker == segment.speaker, first.person == segment.person,
+               segment.endSec - first.startSec <= readingParagraphMaxSec {
+                groups[groups.count - 1].append(segment)
+            } else {
+                groups.append([segment])
+            }
+        }
 }
 
 /// Kelimeleri bilinen uzun bölümü parçalara böler: parça `readingPieceMinSec`'i geçtikten sonraki ilk cümle sonunda,
@@ -161,9 +165,24 @@ let spanJoinGapSec: Double = 3
 
 /// Konuşma payları, çok konuşandan aza; eşitlikte kişi numarasına göre. Konuşma yoksa boş. Saf fonksiyondur.
 public func speakerShares(paragraphs: [TranscriptParagraph]) -> [SpeakerShare] {
-    let seconds: [SpeakerKey: Double] = paragraphs.reduce(into: [SpeakerKey: Double]()) { (totals: inout [SpeakerKey: Double], paragraph: TranscriptParagraph) -> Void in
+    sharesFromSeconds(seconds: paragraphs.reduce(into: [SpeakerKey: Double]()) { (totals: inout [SpeakerKey: Double], paragraph: TranscriptParagraph) -> Void in
         totals[SpeakerKey(speaker: paragraph.speaker, person: paragraph.person), default: 0] += max(0, paragraph.endSec - paragraph.startSec)
-    }
+    })
+}
+
+/// Konuşmacıların payı doğrudan kayıttan; `speakerShares(paragraphs: transcriptParagraphs(record:))` ile aynı sonuç,
+/// ama paragraf metni ve kelime zamanları kurulmaz (Kişiler tüm arşiv için hesaplar). Saf fonksiyondur.
+public func speakerShares(record: MeetingRecord) -> [SpeakerShare] {
+    sharesFromSeconds(seconds: readingGroups(record: record).reduce(into: [SpeakerKey: Double]()) { (totals: inout [SpeakerKey: Double], group: [StoredSegment]) -> Void in
+        guard let first = group.first, let last = group.last else {
+            return
+        }
+        totals[SpeakerKey(speaker: first.speaker, person: first.person), default: 0] += max(0, last.endSec - first.startSec)
+    })
+}
+
+/// Konuşmacı başına saniyeden paylar: en çok konuşan önce (eşitlikte numara sırası). Saf fonksiyondur.
+private func sharesFromSeconds(seconds: [SpeakerKey: Double]) -> [SpeakerShare] {
     let total: Double = seconds.values.reduce(0, +)
     guard total > 0 else {
         return []

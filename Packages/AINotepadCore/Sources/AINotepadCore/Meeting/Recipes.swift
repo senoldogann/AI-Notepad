@@ -18,7 +18,8 @@ public struct Recipe: Sendable, Equatable, Codable, Identifiable {
     }
 }
 
-/// Yerleşik tarifler (başlık ve istem arayüz dilinde; cevap not dilinde). Saf fonksiyondur.
+/// Yerleşik tarifler (başlık ve istem arayüz dilinde; cevap not dilinde, yalnızca takip e-postası taslağı katılımcılara
+/// gideceği için toplantının konuşulduğu dilde; bkz. `archiveAnswerRequest`'in dil kuralı). Saf fonksiyondur.
 public func builtInRecipes() -> [Recipe] {
     [
         Recipe(
@@ -74,10 +75,7 @@ public func recipeCandidates(recipes: [Recipe], query: String) -> [Recipe] {
 
 /// Büyük/küçük harf, aksan ve Türkçe ı/i farkı gözetmeden içerir mi ("SATIS" → "Satış"). Saf fonksiyondur.
 public func looselyContains(text: String, needle: String) -> Bool {
-    let fold: (String) -> String = { (value: String) -> String in
-        value.replacing("ı", with: "i").replacing("İ", with: "I")
-    }
-    return fold(text).range(of: fold(needle), options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: nil) != nil
+    searchFolded(text).range(of: searchFolded(needle), options: .literal) != nil
 }
 
 /// Sorudan yeni kullanıcı tarifi: başlık sorunun ilk altı kelimesi. Saf fonksiyondur.

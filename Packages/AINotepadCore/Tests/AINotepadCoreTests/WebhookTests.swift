@@ -65,6 +65,20 @@ private let sampleNote: MeetingNote = MeetingNote(
         #expect(html.contains("A &amp; B") && html.contains("Senol") && html.contains("Perşembe"))
         #expect(meetingHTML(record: sampleRecord(), note: note, language: .german, appName: "AI-Notepad").contains("Entscheidungen"))
     }
+
+    // Sayfanın dili notun dilidir; sağdan sola dillerde sayfa `dir="rtl"`; çeviride konu akışı ve sözlük o dilin
+    // başlıklarıyla kalır.
+    @Test func pageLanguageDirectionAndTranslatedSections() {
+        let note: MeetingNote = MeetingNote(
+            title: "Budget", summary: "S", decisions: [], tasks: [], glossary: [GlossaryEntry(term: "budjetti", meaning: "Budget")]
+        ).with(outline: [OutlineItem(startSec: 5, title: "Opening", summary: "Hello.")]).with(language: .english)
+        let original: String = meetingHTML(record: sampleRecord(), note: note, language: nil, appName: "Gistsmith")
+        #expect(original.contains("<html lang=\"en\">"))
+        let arabic: String = meetingHTML(record: sampleRecord(), note: note, language: .arabic, appName: "Gistsmith")
+        #expect(arabic.contains("<html lang=\"ar\" dir=\"rtl\">"))
+        let german: String = meetingHTML(record: sampleRecord(), note: note, language: .german, appName: "Gistsmith")
+        #expect(german.contains("Themenverlauf") && german.contains("Opening") && german.contains("Glossar") && german.contains("budjetti"))
+    }
 }
 
 /// Gerçek HTTP: `AINOTEPAD_WEBHOOK_TEST_URL` (ör. yerel bir dinleyici) verilmişse genel webhook gövdesi gönderilir.
@@ -100,6 +114,20 @@ struct WebhookLiveTests {
         let folder: URL = try temporaryDirectory()
         let file: URL = try exportMarkdown(record: record, folder: folder)
         #expect(String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("# Plan: Q4/2026?"))
+    }
+
+    // Başlık değişince klasörde toplantının tek dosyası kalır (eski adlı kopya silinir); aynı dakikadaki başka dosyaya
+    // (kullanıcının ya da başka toplantının) dokunulmaz.
+    @Test func renamedMeetingKeepsOneFolderCopy() throws {
+        let folder: URL = try temporaryDirectory()
+        let record: MeetingRecord = sampleRecord().with(note: MeetingNote(title: "Taslak", summary: "Özet", decisions: [], tasks: [], glossary: []))
+        let first: URL = try exportMarkdown(record: record, folder: folder)
+        let foreign: URL = folder.appending(path: first.lastPathComponent.replacing("Taslak", with: "Kendi notum"))
+        try Data("# Kendi notum".utf8).write(to: foreign)
+        let renamed: URL = try exportMarkdown(record: record.with(title: "Bütçe planı"), folder: folder)
+        let names: Set<String> = Set(try FileManager.default.contentsOfDirectory(atPath: folder.path))
+        #expect(names == [renamed.lastPathComponent, foreign.lastPathComponent])
+        #expect(String(decoding: try Data(contentsOf: renamed), as: UTF8.self).contains("# Bütçe planı"))
     }
 }
 

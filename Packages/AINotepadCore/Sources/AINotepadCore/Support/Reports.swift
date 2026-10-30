@@ -84,15 +84,13 @@ public func reportMessageLength(text: String) -> Int {
     text.utf16.count
 }
 
-/// Basit e-posta denetimi: boşluksuz, tek `@`, iki yanı dolu, alan adında nokta var, en çok 254 karakter. Saf fonksiyondur.
+/// E-posta denetimi: sunucunun kuralıyla aynı (`server/src/reports.ts`, zod `z.email().max(254)`): `@` öncesi ASCII
+/// harf, rakam ve `_ ' + -`, boş olmayan noktalı parçalar; alan adı harf ya da rakamla başlayan etiketler ve en az iki
+/// harfli uzantı; en çok 254 karakter. Sunucunun reddedeceği adres burada `invalidEmail` olur ("sürüm uyuşmuyor"
+/// görünmez). Saf fonksiyondur.
 public func isPlausibleEmail(text: String) -> Bool {
-    let parts: [Substring] = text.split(separator: "@", omittingEmptySubsequences: false)
-    guard text.count <= reportEmailLimit, parts.count == 2, !parts[0].isEmpty,
-          !text.contains(where: { (character: Character) -> Bool in character.isWhitespace }) else {
-        return false
-    }
-    let domain: Substring = parts[1]
-    return domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
+    let pattern: Regex = /(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+\-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}/
+    return text.utf16.count <= reportEmailLimit && text.wholeMatch(of: pattern) != nil
 }
 
 /// Geri bildirim raporu: mesaj ve e-posta kırpılır; mesaj boşsa ya da sınırı aşıyorsa, e-posta yazılmış ama geçersizse

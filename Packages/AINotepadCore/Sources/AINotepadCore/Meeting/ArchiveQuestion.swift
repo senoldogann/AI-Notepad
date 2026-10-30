@@ -77,10 +77,10 @@ public func archivePassages(records: [MeetingRecord]) -> [ArchivePassage] {
     }
 }
 
-/// Aramada kullanılan sözcükler: küçük harf, aksanlar sadeleşmiş (ä→a, ş→s), 3 harften kısalar atılmış. Saf fonksiyondur.
+/// Aramada kullanılan sözcükler: küçük harf, aksanlar sadeleşmiş (ä→a, ş→s, ı→i; bkz. `searchFolded`), 3 harften
+/// kısalar atılmış. Saf fonksiyondur.
 func searchTokens(text: String) -> [String] {
-    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en"))
-        .replacingOccurrences(of: "ı", with: "i")
+    searchFolded(text)
         .split { !$0.isLetter && !$0.isNumber }
         .map(String.init)
         .filter { $0.count >= 3 }
@@ -220,7 +220,9 @@ public func archiveAnswerRequest(
         - \(language.promptName) dilinde, kısa ve doğrudan yaz: önce bir cümlelik cevap, gerekiyorsa ardından en fazla 6 kısa madde (soru ayrıntı
           istemiyorsa toplam 150 sözcüğü geçme). Hangi toplantıda (adı ve tarihi) geçtiğini belirt. Önemli adları ve
           tarihleri **kalın** yazabilirsin; başlık (#) kullanma.
-        - Başka dilde sözcük bırakma: kurum ve kişi adları dışında her şeyi \(language.promptName) dilinde yaz.
+        - Başka dilde sözcük bırakma: kurum ve kişi adları dışında her şeyi \(language.promptName) dilinde yaz. Tek istisna:
+          soru açıkça başka bir dilde metin isterse (ör. toplantının dilinde e-posta taslağı) o metni istenen dilde yaz;
+          açıklamaların \(language.promptName) kalır.
         - Her bilginin hemen ardına dayandığı parçanın numarasını köşeli parantezle yaz: [2] ya da [1][3] (aralık
           yazma). Numarasız kaynak listesi ekleme.
         - Başka dilde alıntı gerekiyorsa tırnak içinde ver ve \(language.promptName) çevirisini de yaz.

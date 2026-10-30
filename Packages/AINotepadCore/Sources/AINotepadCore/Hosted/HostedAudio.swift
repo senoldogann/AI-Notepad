@@ -139,15 +139,16 @@ public struct WavChunkFile: Sendable, Equatable {
     public let span: WavChunkSpan
 }
 
-/// Sunucuya gönderilebilecek anahtar terimler: kırpılır, 1–49 karakter, en çok 5 kelime, `<>{}[]\` içermeyen,
-/// tekrarsız ilk `limit` terim (sunucu geçersiz terimde tüm isteği reddeder). Saf fonksiyondur.
+/// Sunucuya gönderilebilecek anahtar terimler: kırpılır, 1–49 UTF-16 birimi (sunucudaki JS `length` gibi; emoji iki
+/// birim sayılır), en çok 5 kelime, `<>{}[]\` içermeyen, tekrarsız ilk `limit` terim (sunucu geçersiz terimde tüm isteği
+/// reddeder). Saf fonksiyondur.
 public func hostedKeyterms(terms: [String], limit: Int) -> [String] {
     let forbidden: Set<Character> = ["<", ">", "{", "}", "[", "]", "\\"]
     var seen: Set<String> = []
     return terms
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { (term: String) -> Bool in
-            !term.isEmpty && term.count <= 49 && !term.contains(where: forbidden.contains)
+            !term.isEmpty && term.utf16.count <= 49 && !term.contains(where: forbidden.contains)
                 && term.split(whereSeparator: \.isWhitespace).count <= 5
         }
         .filter { seen.insert($0.lowercased()).inserted }

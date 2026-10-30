@@ -12,6 +12,8 @@ import Testing
 
     @Test func enabledSystemShortcutIsTaken() {
         #expect(isTakenBySystem(keyCode: 49, modifiers: 0x1800, systemShortcuts: system))
+        // Sistem kaydındaki ilgisiz bit (0x20000) yok sayılır: ⌃R dolu.
+        #expect(isTakenBySystem(keyCode: 15, modifiers: 0x1000, systemShortcuts: system))
     }
 
     @Test func disabledOrDifferentShortcutIsFree() {

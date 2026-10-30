@@ -30,7 +30,8 @@ public func signInToMCP(service: MCPService, appName: String, openBrowser: @Send
     return MCPConnection(serverURL: server, clientID: clientID, tokenEndpoint: metadata.tokenEndpoint, tokens: tokens)
 }
 
-/// Dönüş adresinden yetki kodu: `error` varsa `denied`, `state` farklıysa `denied`. Saf fonksiyondur.
+/// Dönüş adresinden yetki kodu: `error` varsa `denied`, `state` farklıysa `foreignCallback`, kod yoksa
+/// `invalidResponse`. Saf fonksiyondur.
 func mcpCallbackCode(url: URL, expectedState: String, server: String) throws -> String {
     let items: [URLQueryItem] = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
     let value: (String) -> String? = { (name: String) -> String? in items.first { $0.name == name }?.value }

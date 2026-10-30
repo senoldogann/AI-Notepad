@@ -230,7 +230,7 @@ public struct TranscriptPanel: View {
     }
 
     private func copyAll() {
-        copyToPasteboard(text: plainText(blocks: state.blocks))
+        copyToPasteboard(text: displayedPlainText(blocks: state.blocks, translations: state.translations, displayMode: state.displayMode))
     }
 
     /// ⋯ menüsündeki gezinme eylemleri.
@@ -640,7 +640,9 @@ struct StatusLabel: View {
                 .foregroundStyle(NoticeSeverity.attention.tint)
         } else if state.isRecording, let startedAt = state.startedAt {
             HStack(spacing: 6) {
+                // Etiket noktada: birleşik öğe "Kayıtta, 01:23" okunur (dıştaki etiket süreyi örtüyordu).
                 Circle().fill(.red).frame(width: 7, height: 7)
+                    .accessibilityLabel("Kayıtta")
                 TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
                     Text(timestamp(seconds: context.date.timeIntervalSince(startedAt)))
                         .appFont(size: 12, weight: .medium)
@@ -648,7 +650,6 @@ struct StatusLabel: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Kayıtta")
         } else if !state.statusText.isEmpty {
             Text(state.statusText)
                 .appFont(size: 12, weight: .medium)
@@ -745,7 +746,7 @@ struct BlockView: View {
         .accessibilityLabel(speakerLabel(speaker: block.speaker, person: block.person))
         .contextMenu {
             Button("Kopyala") {
-                copyToPasteboard(text: plainText(blocks: [block]))
+                copyToPasteboard(text: displayedPlainText(blocks: [block], translations: translations, displayMode: displayMode))
             }
         }
     }

@@ -306,6 +306,12 @@ public actor DestinationVault {
         return fresh
     }
 
+    /// Yeni yenilenmiş erişim jetonu da reddedildi (izin serviste geri alınmış): hedef hâlâ bu bağlantıysa "yeniden
+    /// bağlan" olarak işaretlenir; otomatik gönderim ölü izne her saat yeniden denemesin.
+    func markRejected(id: String, connection: ChannelConnection) throws {
+        try markReconnect(id: id, refreshToken: connection.tokens.refreshToken)
+    }
+
     /// Oturum reddedildi: hedef hâlâ aynı bağlantıysa "yeniden bağlan" olarak işaretlenir.
     private func markReconnect(id: String, refreshToken: String) throws {
         guard let stored = try all().first(where: { $0.id == id }), case .account(let current) = stored.target,
@@ -393,7 +399,7 @@ public actor DestinationVault {
 }
 
 /// Notu hedefe gönderir. Hesap bağlantısında erişim jetonu süresinden önce geri alındıysa (401) bir kez zorla yenilenip
-/// yeniden denenir; ikinci ret hedefi "yeniden bağlan" yapar.
+/// yeniden denenir; yenileme reddedilirse ya da yeni jeton da reddedilirse hedef "yeniden bağlan" olur ve hata fırlatılır.
 public func deliverNote(vault: DestinationVault, destination: NoteDestination, record: MeetingRecord, note: MeetingNote) async throws {
     switch destination.target {
     case .account:
@@ -402,7 +408,14 @@ public func deliverNote(vault: DestinationVault, destination: NoteDestination, r
             try await postNote(connection: connection, record: record, note: note)
         } catch ChannelAuthError.expired {
             let fresh: ChannelConnection = try await vault.refreshedConnection(id: destination.id)
-            try await postNote(connection: fresh, record: record, note: note)
+            do {
+                try await postNote(connection: fresh, record: record, note: note)
+            } catch let error as ChannelAuthError {
+                if case .expired = error {
+                    try await vault.markRejected(id: destination.id, connection: fresh)
+                }
+                throw error
+            }
         }
         try await vault.clearReconnect(id: destination.id)
     case .webhook(let url), .discordSignIn(let url):

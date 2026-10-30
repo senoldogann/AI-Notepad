@@ -146,6 +146,8 @@ extension CloudTests {
         #expect(speakerSpans(paragraphs: paragraphs).map(\.startSec) == [0, 65, 80, 90])
         #expect(speakerShares(paragraphs: paragraphs).map(\.key) == [first, SpeakerKey(speaker: .others, person: 2), SpeakerKey(speaker: .me, person: nil)])
         #expect(speakerShares(paragraphs: paragraphs).first?.seconds == 12)
+        // Kayıttan doğrudan hesaplanan pay paragraflardan hesaplananla aynı (Kişiler sayfası bunu kullanır).
+        #expect(speakerShares(record: record) == speakerShares(paragraphs: paragraphs))
     }
 
     // Sessizliksiz iki dakikalık konuşma cümle sonlarından ≤30 sn paragraflara bölünür (çalarken vurgu ekrandan kaçmasın).

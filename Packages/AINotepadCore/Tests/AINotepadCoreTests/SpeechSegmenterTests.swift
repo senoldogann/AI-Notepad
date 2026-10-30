@@ -96,7 +96,7 @@ func runSegmenter(samples: [Float], chunkSize: Int) -> [ClosedSegment] {
         #expect(output.closed.first?.samples.count == 17600)
     }
 
-    // Ön-kayıt kısa sesleri konuşma saymaz: 0.1 sn ses + ön-kayıt yine atılır.
+    // Ön-kayıt konuşma sayılmaz: 0.2 sn ses + 0.1 sn ön-kayıt eşiğe (0.3 sn) ulaşsa da bölüm atılır.
     @Test func preRollDoesNotCountAsSpeech() {
         let output: SegmenterOutput = segmentAudio(
             state: .initial,

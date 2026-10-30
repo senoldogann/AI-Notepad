@@ -1,7 +1,7 @@
 import Observation
 import SwiftUI
 
-/// Panel metninin yazı tipi ailesi (SF tasarımları; her Mac'te var).
+/// Panel metninin yazı tipi ailesi: uygulamaya gömülü Inter ya da SF tasarımları (her Mac'te var).
 public enum PanelFontDesign: String, Sendable, CaseIterable {
     /// Inter (uygulamaya gömülü; ElevenLabs'in gövde yazısı). Varsayılan.
     case inter
@@ -102,7 +102,7 @@ public struct PanelAppearance: Equatable, Sendable {
         self.surfaceOpacity = surfaceOpacity
     }
 
-    /// Tasarım belgesindeki varsayılanlar (§4.3).
+    /// Varsayılan görünüm: Inter, turuncu vurgu, dolu yüzey (cam yüzey seçilebilir).
     public static let standard: PanelAppearance = PanelAppearance(
         fontChoice: .design(.inter), uiScale: 1, textSize: 14, lineSpacing: 4, bottomSpacing: 32, accent: .orange,
         surface: .solid, surfaceOpacity: 0.7

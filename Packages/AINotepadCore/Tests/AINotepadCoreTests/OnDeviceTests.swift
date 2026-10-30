@@ -193,6 +193,28 @@ import Testing
         #expect(noteLimits(provider: .onDevice(OnDeviceConfig(contextTokens: 8192, languageCodes: []))).chunkChars > local.chunkChars)
     }
 
+    // Not düzenleme: uzun toplantının transkripti 4096 token'lık cihaz içi modele sığmaz, yalnızca not gider ve istem
+    // yanıta yer bırakır; bulutta transkript tam gider; kısa toplantıda cihaz içinde de transkript gider.
+    @Test func noteEditFitsOnDeviceContext() {
+        let note: MeetingNote = MeetingNote(
+            title: "Bütçe", summary: "Bütçe konuşuldu.", decisions: ["Bütçe artar."],
+            tasks: [NoteTask(owner: "Aino", description: "Raporu gönder", dueDate: "Cuma", isMine: false)], glossary: []
+        )
+        let sentence: String = "Budjetti on 10 000 euroa ja raportti valmistuu perjantaina."
+        let long: MeetingRecord = record(id: "a", startedAt: Date(), status: .done, audioDeleted: false)
+            .with(finalSegments: (0..<300).map { stored("final-\($0)", .others, 1, Double($0 * 3), sentence) }, language: .finnish)
+            .with(note: note)
+        let local: NoteLimits = noteLimits(provider: .onDevice(config))
+        let onDevice: LLMRequest = meetingNoteEditRequest(record: long, note: note, instruction: "Kısalt.", limits: local, userName: "Senol")
+        #expect(!onDevice.userText.contains(sentence))
+        let schemaTokens: Int = 350
+        #expect(estimatedOnDeviceTokens(text: onDevice.system + onDevice.userText) + schemaTokens < 4096 - onDeviceMinResponseTokens)
+        let inCloud: LLMRequest = meetingNoteEditRequest(record: long, note: note, instruction: "Kısalt.", limits: noteLimits(provider: cloud), userName: "Senol")
+        #expect(inCloud.userText.contains(sentence))
+        let short: MeetingRecord = long.with(finalSegments: [stored("final-0", .others, 1, 0, sentence)], language: .finnish)
+        #expect(meetingNoteEditRequest(record: short, note: note, instruction: "Kısalt.", limits: local, userName: "Senol").userText.contains(sentence))
+    }
+
     @Test func condensesPartSummariesButKeepsTasks() {
         let task: NoteTask = NoteTask(owner: "Ada", description: "Raporu gönder", dueDate: nil, isMine: true)
         let state: ChunkedNoteState = ChunkedNoteState(
