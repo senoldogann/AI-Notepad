@@ -7,9 +7,11 @@ import { log } from "./log";
  * Ücretsiz tam erişim: yöneticinin verdiği, Stripe'tan faturalanmayan abonelik satırı (`subscriptions.complimentary =
  * 1`; göç 0039). Satır ödeyen aylık abonenin satırıyla aynı görünür (`status = 'active'`, `plan = 'monthly'`): haklar,
  * `/v1/me` ve davet kodu ödeyen aboneyle aynıdır. Stripe kimlikleri yapaydır (`comp_cus_<uuid>`, `comp_sub_<uuid>`),
- * Stripe'a hiç gönderilmez ve `stripe_customers` satırı yazılmaz. Portal açılmaz (`complimentary_subscription`), hesap
- * silmede Stripe çağrılmaz, davet ödülü Stripe'a gitmez, webhook süren ücretsiz erişimi ezmez ve yönetim
- * istatistikleri gelir saymaz.
+ * Stripe'a hiç gönderilmez ve `stripe_customers` satırı yazılmaz. Portal Stripe'a gitmeden sitedeki hesap sayfasını
+ * döner, Checkout `complimentary_subscription` ile reddedilir (`billing.ts`); hesap silmede Stripe çağrılmaz, davet
+ * ödülü Stripe'a gitmez, webhook süren ücretsiz erişimi ezmez ve yönetim istatistikleri gelir saymaz. Erişim bitince
+ * (süresi dolunca ya da yönetici kaldırınca) satır kalır: hesap yeniden abone olabilir, ama davet kodu kullanamaz
+ * (davet yalnızca hiç abonelik ya da ücretsiz erişim satırı olmamış hesaplar içindir, `referrals.requireReferral`).
  */
 
 /** Süresiz ücretsiz erişimin dönem sonu: verilişten 100 yıl sonra. */
@@ -26,7 +28,7 @@ export const complimentaryRequestSchema = z
   })
   .refine((body: { grant: boolean; until?: string | undefined }): boolean => body.grant || body.until === undefined, { path: ["until"] });
 
-/** Ücretsiz erişimi olan hesabın Stripe'ta yönetilecek aboneliği yok (Portal, Checkout). */
+/** Ücretsiz erişimi olan hesap Stripe aboneliği açamaz (Checkout). */
 export function complimentaryAccessError(): ApiError {
   return new ApiError("complimentary_subscription", "This account has free access; there is nothing to manage.");
 }
@@ -84,11 +86,20 @@ export async function grantComplimentaryAccess(db: D1Database, userId: string, u
 }
 
 /**
- * Hesabın ücretsiz erişimini kaldırır (satır silinir: hesap denemeye ya da plansız duruma döner; yeniden abone
- * olabilir). Ücretsiz erişimi yoksa `not_found`; Stripe aboneliğinin satırına dokunulmaz.
+ * Hesabın süren ücretsiz erişimini şimdi bitirir: satır silinmez, dönem sonu ve `cancel_at` şimdi olur (süresi kendiliğinden
+ * dolmuş erişimle aynı durum: `isTerminalSubscription`). Hesap denemeye ya da plansız duruma döner ve yeniden abone
+ * olabilir (Checkout ve webhook bitmiş satırın yerine Stripe aboneliğini yazar); davet kodu kullanamaz (satırı var).
+ * Süren ücretsiz erişimi yoksa `not_found`; Stripe aboneliğinin satırına dokunulmaz.
  */
-export async function revokeComplimentaryAccess(db: D1Database, userId: string, adminUserId: string): Promise<void> {
-  const result: D1Result = await db.prepare("DELETE FROM subscriptions WHERE user_id = ? AND complimentary = 1").bind(userId).run();
+export async function revokeComplimentaryAccess(db: D1Database, userId: string, adminUserId: string, now: Date): Promise<void> {
+  const nowMs: number = now.getTime();
+  const result: D1Result = await db
+    .prepare(
+      `UPDATE subscriptions SET current_period_end = ?2, cancel_at = ?2, updated_at = ?2
+       WHERE user_id = ?1 AND complimentary = 1 AND current_period_end > ?2`,
+    )
+    .bind(userId, nowMs)
+    .run();
   if (result.meta.changes !== 1) {
     throw new ApiError("not_found", "This account has no free access to remove.");
   }

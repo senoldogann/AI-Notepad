@@ -12,6 +12,8 @@ describe("sağlık, hata biçimi, güvenlik başlıkları ve CORS", () => {
     expect(response.headers.get("strict-transport-security")).toContain("max-age=");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+    // Geçerli yapılandırılmış alan sözlüğü (`özellik=()`); yalın `()` tarayıcıda yok sayılırdı.
+    expect(response.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=(), payment=(), usb=()");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
   });

@@ -199,6 +199,8 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
     lastActiveAt: index === 3 ? null : now.getTime() - (index + 1) * 3_600_000,
     failedMeetings: index === 1 ? 1 : index === 2 ? 3 : 0,
     lastFailureCode: index === 1 ? "upstream_rejected:elevenlabs" : index === 2 ? "meeting_budget_exhausted" : null,
+    // İlk hesap davetle abone oldu (rozet "Invite").
+    invite: index === 0 ? "invited" : null,
   }));
   // Yalın ayrıntı: tek toplantı, rapor ve iptal yok.
   const plainUserDetail = (user: object, timeline: readonly object[]): object => ({
@@ -211,6 +213,8 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       { id: "m7", kind: "subscription", state: "ended", startedAt: now.getTime() - 7_200_000, durationMinutes: 44, deferred: false, reprocessCount: 0, audioMinutes: 43.5, tokensUsed: 120_000, tokenBudget: 900_000, attested: true, deepgram: true, noteCompleted: true, failureCount: 0, lastFailureCode: null, lastFailureAt: null },
     ],
     reports: [],
+    invitedBy: null,
+    invites: null,
     timeline,
   });
   return {
@@ -224,7 +228,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       users: { total: 412, newLast30Days: days.map((day: string, index: number) => ({ day, count: wave(index + 5, 3) })), byProvider: { apple: 251, google: 161 } },
       trials: { activeTrialUsers: 96, exhaustedTrialUsers: 188 },
       subscriptions: { active: 71, grace: 2, ending: 5, canceledTotal: 14, monthly: 46, yearly: 18, mrrUsd: 349.04, complimentary: 3, freeInviteMonth: 2 },
-      referrals: { joined: 9, pending: 3, granted: 5, voided: 1 },
+      referrals: { joined: 9, pending: 3, granted: 5, voided: 2, voidedByReason: [{ reason: "card_reused", count: 1 }, { reason: "refunded", count: 1 }] },
       meetings: { last30Days: days.map((day: string, index: number) => ({ day, trial: wave(index, 4), subscription: wave(index + 2, 7) })), hoursThisMonth: 213.5 },
       spend: { todayUsd: 6.42, ceilingUsd: 25, last30Days: days.map((day: string, index: number) => ({ day, usd: wave(index + 1, 2.4) + 0.5 })) },
       tokens: { thisMonth: 48_210_000 },
@@ -290,6 +294,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         lastActiveAt: now.getTime() - 3_600_000,
         failedMeetings: 1,
         lastFailureCode: "upstream_unavailable:anthropic",
+        invite: "invited",
       },
       trialDeviceVerifiedAt: at(-12),
       stripeCustomerId: "cus_ExampleCustomer01",
@@ -301,13 +306,47 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         { id: "m3", kind: "trial", state: "expired", startedAt: now.getTime() - 9 * 86_400_000, durationMinutes: 90, deferred: false, reprocessCount: 0, audioMinutes: 0, tokensUsed: 0, tokenBudget: 400_000, attested: false, deepgram: false, noteCompleted: false, failureCount: 1, lastFailureCode: "meeting_not_active", lastFailureAt: now.getTime() - 9 * 86_000_000 },
       ],
       reports: [{ id: "rep_1", kind: "feedback", status: "open", createdAt: now.getTime() - 3_600_000, summary: "Would love a keyboard shortcut to start recording" }],
+      // Davetle gelen yıllık abone; kendisi de iki arkadaş davet etti (biri ödülü bekliyor, biri kart yüzünden düştü).
+      invitedBy: {
+        referrerUserId: exampleUserIds[2],
+        code: "K7M2QX9D",
+        status: "qualified",
+        voidReason: null,
+        inFreeMonth: false,
+        cardChecked: true,
+        createdAt: at(-12),
+        joinedAt: at(-12),
+        qualifiedAt: at(-12),
+        rewardDueAt: at(18),
+        rewardedAt: null,
+        updatedAt: at(-12),
+      },
+      invites: {
+        code: "P4W8NZ3R",
+        joined: 2,
+        pending: 1,
+        rewarded: 0,
+        voided: 1,
+        rewardsLeftThisYear: 12,
+        rewardsPerYear: 12,
+        nextRewardAt: at(26),
+        friends: [
+          { userId: exampleUserIds[3], status: "joined", voidReason: null, createdAt: at(-4), joinedAt: at(-4), qualifiedAt: null, rewardDueAt: null, rewardedAt: null, updatedAt: at(-4) },
+          { userId: null, status: "void", voidReason: "card_reused", createdAt: at(-3), joinedAt: at(-3), qualifiedAt: null, rewardDueAt: null, rewardedAt: null, updatedAt: at(-3) },
+        ],
+      },
       timeline: [
         { kind: "subscription_period_end", at: at(20), detail: "active" },
         { kind: "subscription_cancel_at", at: at(20), detail: null },
+        { kind: "invite_reward_due", at: at(18), detail: null },
         { kind: "subscription_updated", at: at(-1), detail: "active" },
+        { kind: "invite_friend_joined", at: at(-4), detail: exampleUserIds[3] },
         { kind: "trial_ends", at: at(-5), detail: null },
         { kind: "trial_device_verified", at: at(-12), detail: null },
         { kind: "trial_started", at: at(-12), detail: null },
+        { kind: "invite_first_payment", at: at(-12), detail: null },
+        { kind: "invite_joined", at: at(-12), detail: null },
+        { kind: "invite_checkout", at: at(-12), detail: null },
         { kind: "account_created", at: at(-12), detail: null },
       ],
     },
@@ -364,6 +403,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
           { step: "first_note", count: 104 },
           { step: "three_meetings", count: 58 },
           { step: "subscribed", count: 17 },
+          { step: "subscribed_via_invite", count: 4 },
           { step: "canceled", count: 3 },
         ],
       },
@@ -398,6 +438,22 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         recent: [
           { userId: exampleUserIds[0], at: at(-1), reason: "cancellation_requested", feedback: "too_expensive", comment: "Great notes, but I only have a few meetings a month." },
           { userId: exampleUserIds[2], at: at(-6), reason: "cancellation_requested", feedback: "missing_features", comment: null },
+        ],
+      },
+      invites: {
+        days: 30,
+        checkouts: 9,
+        joined: 5,
+        firstPayments: 3,
+        granted: 2,
+        voided: [
+          { detail: "card_reused", count: 1 },
+          { detail: "canceled_before_payment", count: 1 },
+        ],
+        inFreeMonth: 2,
+        topReferrers: [
+          { userId: exampleUserIds[2], joined: 4, pending: 1, granted: 3, voided: 0 },
+          { userId: exampleUserIds[0], joined: 2, pending: 1, granted: 0, voided: 1 },
         ],
       },
     },

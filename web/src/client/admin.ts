@@ -46,13 +46,17 @@ interface ChartDay {
   readonly title: string;
 }
 
-/** Bildirim kutusunun durumu. */
+/**
+ * Bildirim kutusunun durumu. `listRequest` her liste isteğinde artar: sekme ya da süzgeç değiştikten sonra gelen eski
+ * sayfa çizilmez.
+ */
 interface InboxState {
   kind: ReportKind;
   status: ReportStatus;
   items: ReportSummary[];
   nextBefore: number | null;
   selectedId: string | null;
+  listRequest: number;
 }
 
 const text: ClientCopy = clientCopy;
@@ -330,7 +334,7 @@ function prettyPayload(payload: string): string {
   }
 }
 
-/** Ayrıntı panelini çizer. */
+/** Ayrıntı panelini çizer; "bitti/yeniden aç" düğmesi bu bildirimin kimliğini taşır (`data-report-id`). */
 function renderDetail(report: ReportDetail): void {
   element("detail-empty", HTMLElement).classList.add("hidden");
   const body: HTMLElement = element("detail-body", HTMLElement);
@@ -344,6 +348,7 @@ function renderDetail(report: ReportDetail): void {
   element("detail-payload-block", HTMLElement).classList.toggle("hidden", report.payload === null);
   element("detail-payload", HTMLElement).textContent = report.payload === null ? "" : prettyPayload(report.payload);
   const toggle: HTMLButtonElement = element("detail-toggle", HTMLButtonElement);
+  toggle.dataset["reportId"] = report.id;
   toggle.dataset["next"] = report.status === "open" ? "done" : "open";
   toggle.textContent = report.status === "open" ? toggle.dataset["labelDone"] ?? "" : toggle.dataset["labelReopen"] ?? "";
   element("detail-status", HTMLElement).textContent = report.status === "open" ? element("status-open", HTMLButtonElement).textContent : element("status-done", HTMLButtonElement).textContent;
@@ -419,14 +424,18 @@ async function main(): Promise<void> {
   const firstStats: AdminStats = await fetchStats();
   mountDashboard();
   const notice: HTMLElement = element("admin-error", HTMLElement);
-  const state: InboxState = { kind: "feedback", status: "open", items: [], nextBefore: null, selectedId: null };
+  const state: InboxState = { kind: "feedback", status: "open", items: [], nextBefore: null, selectedId: null, listRequest: 0 };
   const view: { current: AdminView } = { current: "overview" };
 
+  // Yanıtlar sırasız gelebilir: yalnızca hâlâ seçili olan bildirimin ayrıntısı çizilir.
   const select = (id: string): void => {
     state.selectedId = id;
     renderList(state, select);
     fetchReport(id)
       .then((report: ReportDetail): void => {
+        if (state.selectedId !== id) {
+          return;
+        }
         renderDetail(report);
         // Dar ekranda ayrıntı listenin altında: görünür alana kaydırılır.
         element("inbox-detail", HTMLElement).scrollIntoView({ block: "nearest" });
@@ -435,7 +444,12 @@ async function main(): Promise<void> {
   };
 
   const loadList = async (append: boolean): Promise<void> => {
+    state.listRequest += 1;
+    const request: number = state.listRequest;
     const page: ReportPage = await fetchReports(state.kind, state.status, append ? state.nextBefore : null);
+    if (request !== state.listRequest) {
+      return;
+    }
     state.items = append ? [...state.items, ...page.items] : [...page.items];
     state.nextBefore = page.nextBefore;
     renderList(state, select);
@@ -517,15 +531,19 @@ async function main(): Promise<void> {
   });
   const toggle: HTMLButtonElement = element("detail-toggle", HTMLButtonElement);
   toggle.addEventListener("click", (): void => {
-    const id: string | null = state.selectedId;
+    // Hedef, ayrıntıda çizilen bildirimdir (`data-report-id`); durum ondan okunduğu için kimlik de ondan alınır.
+    const id: string | undefined = toggle.dataset["reportId"];
     const next: string | undefined = toggle.dataset["next"];
-    if (id === null || (next !== "open" && next !== "done")) {
+    if (id === undefined || id !== state.selectedId || (next !== "open" && next !== "done")) {
       return;
     }
     toggle.disabled = true;
     setReportStatus(id, next)
       .then(async (): Promise<void> => {
-        renderDetail(await fetchReport(id));
+        const report: ReportDetail = await fetchReport(id);
+        if (state.selectedId === id) {
+          renderDetail(report);
+        }
         await refresh();
       })
       .catch(showFailure)

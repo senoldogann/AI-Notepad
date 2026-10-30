@@ -88,7 +88,7 @@ const securityHeaders: Readonly<Record<string, string>> = {
   "referrer-policy": "no-referrer",
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "cross-origin-resource-policy": "same-site",
-  "permissions-policy": "()",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
 };
 
 /** Yanıta güvenlik başlıklarını ve (izinli kaynaktan gelen web isteğinde) CORS başlıklarını ekler. */
@@ -497,7 +497,7 @@ const adminComplimentaryPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})\/co
 
 /**
  * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
- * `ADMIN_IDENTITIES` listesinde olmalı (değilse 403 + kendi kimliği).
+ * `ADMIN_IDENTITIES` listesinde olmalı (değilse düz 403; gövdede kimlik yok, bkz. `requireAdmin`).
  */
 async function routeAdmin(request: Request, db: D1Database, config: Config, path: string, user: AuthedUser, now: Date): Promise<Response> {
   await requireAdmin(db, config, user.userId);
@@ -526,7 +526,7 @@ async function routeAdmin(request: Request, db: D1Database, config: Config, path
     if (body.grant) {
       await grantComplimentaryAccess(db, complimentaryMatch[1], complimentaryUntilMs(body.until ?? null, now), user.userId, now);
     } else {
-      await revokeComplimentaryAccess(db, complimentaryMatch[1], user.userId);
+      await revokeComplimentaryAccess(db, complimentaryMatch[1], user.userId, now);
     }
     return jsonResponse(200, await adminUserDetail(db, config, complimentaryMatch[1], now));
   }

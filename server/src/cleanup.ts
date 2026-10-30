@@ -66,8 +66,8 @@ const aggregateCounterRetentionMs: number = 400 * dayMs;
 const cancellationRetentionMs: number = 180 * dayMs;
 
 /**
- * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 20 tablo koşulu × 3 tur
- * = 60 silme sorgusu + 3 toplu işlemin 6 ifadesi = 66 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
+ * Zamanlanmış temizliğin sınırları: tablo başına günde en çok 3 × 1000 satır. En kötü durumda 19 tablo koşulu × 3 tur
+ * = 57 silme sorgusu + 3 toplu işlemin 6 ifadesi = 63 D1 sorgusu (Cron çağrısının diğer adımları birkaç sorgu daha
  * ekler). Workers Paid planının çağrı başına 1000 sorgu sınırının çok altındadır; ücretsiz plana (50) dönülürse
  * `maxBatchesPerTable` 2'ye indirilmelidir. Kalan satırlar ertesi gün silinir. Koşul eklerken bu sayıyı güncelle.
  */
@@ -75,9 +75,10 @@ export const scheduledCleanupLimits: CleanupLimits = { batchSize: 1000, maxBatch
 
 /**
  * Sınırlı turlarla silinecek satırlar. Saf fonksiyondur. Denetimlerin baktığı satırlar korunur:
- * - kullanılmış ama süresi dolmamış yenileme jetonu (yeniden kullanım algılaması için) yalnızca ailesi düşürülmüşse ya
- *   da ailede daha sonra kullanılmış bir jeton varsa silinir; jetonu kalmayan aile silinir (erişim jetonu aile
- *   bulunamayınca zaten geçersizdir);
+ * - yenileme jetonları yalnızca süresi dolunca ya da ailesi düşürülünce silinir: kullanılmış jeton, bir önceki kuşak ve
+ *   yeniden denemede geçersiz yazılmış halef (`supersededMarker`, bkz. `auth/tokens.ts`) yeniden kullanım ve çalınma
+ *   algılaması için kalır (dönüş ailede yalnızca bunları bırakır, satır sayısı sınırlıdır); jetonu kalmayan aile silinir
+ *   (erişim jetonu aile bulunamayınca zaten geçersizdir);
  * - deneme başlangıçları yalnızca bugün sayılır (IP başına günlük sınır), daha eskileri silinir; indirme ziyaretçi
  *   özetleri de yalnızca bugünün tekilleştirmesi içindir;
  * - aylık kullanım 13 ay tutulur (sınırlar yalnızca bu aya bakar).
@@ -94,14 +95,6 @@ function cleanupTargets(now: Date): CleanupTarget[] {
       table: "refresh_tokens",
       where: "expires_at <= ? OR family_id IN (SELECT id FROM refresh_families WHERE revoked_at IS NOT NULL)",
       binds: [nowMs],
-    },
-    {
-      // Ailede daha sonra kullanılmış bir jeton varsa eski kullanılmış jeton yeniden kullanım algılamasına gerekmez.
-      name: "refresh_tokens_superseded",
-      table: "refresh_tokens",
-      where: `used_at IS NOT NULL AND EXISTS (SELECT 1 FROM refresh_tokens AS newer
-        WHERE newer.family_id = refresh_tokens.family_id AND newer.used_at > refresh_tokens.used_at)`,
-      binds: [],
     },
     {
       name: "refresh_families",

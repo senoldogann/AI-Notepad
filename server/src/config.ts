@@ -86,6 +86,11 @@ export interface Config {
   readonly priceUsdYearly: number;
   /** Davet programı açık mı (`REFERRAL_POLICY`). */
   readonly referralPolicy: ReferralPolicy;
+  /**
+   * Davet edenin aynı anda açık tutabileceği en çok davet (`REFERRAL_MAX_PENDING`; bkz. `referrals.openReferralCount`):
+   * dolunca kodu yeni arkadaş kabul etmez (`409 referral_limit_reached`).
+   */
+  readonly referralMaxPending: number;
   /** Rapor türü başına (geri bildirim, çökme, iletişim) tüm kullanıcılar için günde en çok saklanan bayt. */
   readonly reportBytesPerDay: number;
   readonly attest: {
@@ -160,7 +165,7 @@ export interface Config {
 }
 
 /**
- * Stripe webhook'unun yapılandırması: yalnızca ortam ve Stripe sırları. Webhook bununla çalışır; ilgisiz bir ayarın
+ * Stripe webhook'unun yapılandırması: yalnızca ortam, Stripe sırları ve davet kartı özetinin sırrı. Webhook bununla çalışır; ilgisiz bir ayarın
  * (ör. `DEVICECHECK_PRIVATE_KEY`, `DEEPGRAM_API_KEY`) hatası ödeme olaylarını durdurmaz. `Config` bunu kapsar.
  */
 export interface StripeWebhookConfig {
@@ -172,6 +177,8 @@ export interface StripeWebhookConfig {
   readonly secrets: {
     readonly stripe: string;
     readonly stripeWebhook: string;
+    /** Davet edilenin kart parmak izi özetinin (`referrals.referralCardHash`) HMAC sırrı. */
+    readonly trialHash: string;
   };
 }
 
@@ -273,6 +280,7 @@ const envSchema = z.object({
   PRICE_USD_MONTHLY: positiveNumber,
   PRICE_USD_YEARLY: positiveNumber,
   REFERRAL_POLICY: z.enum(["on", "off"]),
+  REFERRAL_MAX_PENDING: positiveInt,
   REPORT_BYTES_PER_DAY: positiveInt,
   APP_ATTEST_POLICY: z.enum(["required", "optional"]),
   APP_ATTEST_ENVIRONMENT: z.enum(["development", "production"]),
@@ -326,13 +334,14 @@ const envSchema = z.object({
   TURNSTILE_SECRET_KEY: secret,
 });
 
-/** Webhook'un okuduğu ayarlar (`envSchema`'nın parçası). */
+/** Webhook'un okuduğu ayarlar (`envSchema`'nın parçası; deneme sırrı davetteki kart özeti içindir). */
 const stripeWebhookSchema = envSchema.pick({
   ENVIRONMENT: true,
   STRIPE_SECRET_KEY: true,
   STRIPE_WEBHOOK_SECRET: true,
   STRIPE_PRICE_ID: true,
   STRIPE_YEARLY_PRICE_ID: true,
+  TRIAL_HASH_SECRET: true,
 });
 
 /** İki fiyat kimliği; aynıysa `ConfigError` (aylık ve yıllık ayırt edilemez, plan ve MRR yanlış olur). Saf fonksiyondur. */
@@ -358,7 +367,7 @@ export function parseStripeWebhookConfig(env: Env): StripeWebhookConfig {
     environment: parsed.data.ENVIRONMENT,
     stripeMode: stripeModeOf(parsed.data.STRIPE_SECRET_KEY),
     stripePrices: stripePricesOf(parsed.data.STRIPE_PRICE_ID, parsed.data.STRIPE_YEARLY_PRICE_ID),
-    secrets: { stripe: parsed.data.STRIPE_SECRET_KEY, stripeWebhook: parsed.data.STRIPE_WEBHOOK_SECRET },
+    secrets: { stripe: parsed.data.STRIPE_SECRET_KEY, stripeWebhook: parsed.data.STRIPE_WEBHOOK_SECRET, trialHash: parsed.data.TRIAL_HASH_SECRET },
   };
 }
 
@@ -414,6 +423,7 @@ export function parseConfig(env: Env): Config {
     priceUsdMonthly: value.PRICE_USD_MONTHLY,
     priceUsdYearly: value.PRICE_USD_YEARLY,
     referralPolicy: value.REFERRAL_POLICY,
+    referralMaxPending: value.REFERRAL_MAX_PENDING,
     reportBytesPerDay: value.REPORT_BYTES_PER_DAY,
     attest: {
       policy: value.APP_ATTEST_POLICY,

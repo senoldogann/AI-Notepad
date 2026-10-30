@@ -1,6 +1,8 @@
-// Yönetim panelinin kullanıcılar görünümü: kimlik önekiyle aranan, plana ve giriş sağlayıcısına göre süzülen, imleçli
-// tablo ve tek kullanıcının ayrıntısı (alanlar, bu ayın kullanımı ölçerlerle, toplantılar, zaman çizelgesi, raporlar).
-// Sunucu kimlik jetonu, sağlayıcı kimliği, e-posta ya da IP döndürmez; burada da gösterilmez.
+// Yönetim panelinin kullanıcılar görünümü: kimlik önekiyle aranan, plana, davete ve giriş sağlayıcısına göre süzülen,
+// imleçli tablo ve tek kullanıcının ayrıntısı (alanlar, bu ayın kullanımı ölçerlerle, kullandığı davet ve davetleri,
+// toplantılar, zaman çizelgesi, raporlar). Sunucu kimlik jetonu, sağlayıcı kimliği, e-posta ya da IP döndürmez; burada
+// da gösterilmez. Yanıtlar sırasız gelebilir: yalnızca en son istenen liste ve en son açılan hesap çizilir, ücretsiz
+// erişim düğmesi her zaman ekrandaki hesaba gider.
 import {
   type ReportKind,
   type ReportStatus,
@@ -8,6 +10,9 @@ import {
   type UserCancellation,
   type UserDetail,
   type UserFilter,
+  type UserInviteFriend,
+  type UserInvitedBy,
+  type UserInvites,
   type UserMeeting,
   type UserPage,
   type UserReport,
@@ -33,11 +38,13 @@ import {
   shortId,
   tableRow,
 } from "./admin-format";
+import { type AdminInviteCopy, type InviteStatus, adminInviteCopy, inviteVoidReasonLabel } from "./admin-invites-copy";
 import { type AdminClientCopy, clientCopy, fill } from "./copy";
 import { element } from "./dom";
 import type { BillingPlan } from "../lib/plans";
 
 const adminText: AdminClientCopy = clientCopy.admin;
+const inviteText: AdminInviteCopy = adminInviteCopy;
 
 /** Bildirimi bildirim kutusunda açan işleyici. */
 export type OpenReport = (id: string, kind: ReportKind, status: ReportStatus) => void;
@@ -52,13 +59,14 @@ export interface UsersView {
   readonly openUser: (id: string) => Promise<void>;
 }
 
-/** Görünümün durumu. */
+/** Görünümün durumu. `listRequest` her liste isteğinde artar: eski isteğin yanıtı çizilmez. */
 interface UsersState {
   filter: UserFilter;
   items: UserSummary[];
   nextCursor: string | null;
   loaded: boolean;
   openId: string | null;
+  listRequest: number;
 }
 
 /** Aboneliğin rozeti: erişim ve planlanmış iptale göre. Saf fonksiyondur (yeni öğe üretir). */
@@ -77,9 +85,12 @@ function subscriptionBadge(subscription: UserSubscription | null): HTMLElement |
   return ended;
 }
 
-/** Hesabın yöneticinin verdiği ücretsiz erişimi var mı (süresi geçmiş olsa da satırı duruyor). Saf fonksiyondur. */
-function hasComplimentaryRow(user: UserSummary): boolean {
-  return user.subscription !== null && user.subscription.complimentary;
+/**
+ * Hesabın yöneticinin verdiği süren ücretsiz erişimi var mı. Süresi dolmuş ya da kaldırılmış erişimin satırı kalır
+ * (davet kodu açılmasın diye), ama erişim vermez: "ver" düğmesi yeniden verir. Saf fonksiyondur.
+ */
+function hasActiveComplimentary(user: UserSummary): boolean {
+  return user.subscription !== null && user.subscription.complimentary && user.subscription.access !== "none";
 }
 
 /**
@@ -88,12 +99,28 @@ function hasComplimentaryRow(user: UserSummary): boolean {
  * üretir).
  */
 function planBadge(user: UserSummary): HTMLSpanElement {
-  if (user.plan === "subscription" && hasComplimentaryRow(user)) {
+  if (user.plan === "subscription" && hasActiveComplimentary(user)) {
     return pill(adminText.freeAccess.pill, "ok");
   }
   const billing: BillingPlan | null = user.plan === "subscription" && user.subscription !== null ? user.subscription.plan : null;
   const label: string = billing === null ? adminText.plans[user.plan] : `${adminText.plans[user.plan]} · ${adminText.billingPlans[billing]}`;
   return pill(label, user.plan === "subscription" ? "ok" : "");
+}
+
+/** Davet rozeti: davetin ücretsiz ilk ayında ya da davetle abone; davet yoksa null. Saf fonksiyondur (yeni öğe üretir). */
+function inviteBadge(user: UserSummary): HTMLSpanElement | null {
+  if (user.invite === null) {
+    return null;
+  }
+  return user.invite === "free_month" ? pill(inviteText.pills.freeMonth, "warn") : pill(inviteText.pills.invited, "");
+}
+
+/** Listedeki plan hücresi: plan rozeti ve varsa davet rozeti. Saf fonksiyondur (yeni öğe üretir). */
+function planCell(user: UserSummary): HTMLElement {
+  const cell: HTMLElement = node("span", "pill-row", "");
+  const invite: HTMLSpanElement | null = inviteBadge(user);
+  cell.append(planBadge(user), ...(invite === null ? [] : [invite]));
+  return cell;
 }
 
 /** Deneme hücresinin metni. Saf fonksiyondur. */
@@ -140,7 +167,7 @@ function userRow(user: UserSummary, nowMs: number, onOpen: (id: string) => void)
     idButton(user.id, onOpen),
     providerText(user),
     formatDate(user.createdAt),
-    planBadge(user),
+    planCell(user),
     trialText(user),
     subscriptionBadge(user.subscription),
     formatCount(user.meetingsTotal),
@@ -225,13 +252,33 @@ function cancellationText(cancellation: UserCancellation | null): string {
     .join(" · ");
 }
 
+/**
+ * Zaman çizelgesi olayının metni: hesap ve abonelik olayları ortak metinlerden, davet olayları davet metinlerinden;
+ * davet düşmesinde neden adıyla, arkadaş olaylarında arkadaşın kısa kimliğiyle (silinmişse "silinmiş hesap"). Saf
+ * fonksiyondur.
+ */
+function timelineLabel(entry: TimelineEntry): string {
+  switch (entry.kind) {
+    case "invite_voided":
+      return fill(inviteText.timeline.invite_voided, { detail: inviteVoidReasonLabel(entry.detail ?? "") });
+    case "invite_friend_joined":
+    case "invite_friend_rewarded":
+      return fill(inviteText.timeline[entry.kind], { detail: entry.detail === null ? inviteText.deletedAccount : shortId(entry.detail) });
+    case "invite_checkout":
+    case "invite_joined":
+    case "invite_first_payment":
+    case "invite_reward_due":
+    case "invite_rewarded":
+      return inviteText.timeline[entry.kind];
+    default:
+      return fill(adminText.timeline[entry.kind], { detail: entry.detail ?? "" });
+  }
+}
+
 /** Zaman çizelgesi satırı. */
 function timelineItem(entry: TimelineEntry, nowMs: number): HTMLLIElement {
   const item: HTMLLIElement = document.createElement("li");
-  item.append(
-    node("span", "", fill(adminText.timeline[entry.kind], { detail: entry.detail ?? "" })),
-    node("span", "timeline__time", `${formatTime(entry.at)} · ${formatRelative(entry.at, nowMs)}`),
-  );
+  item.append(node("span", "", timelineLabel(entry)), node("span", "timeline__time", `${formatTime(entry.at)} · ${formatRelative(entry.at, nowMs)}`));
   return item;
 }
 
@@ -269,24 +316,113 @@ function subscriptionText(subscription: UserSubscription | null): string {
 }
 
 /**
- * Ücretsiz erişim düğmesi: ücretsiz erişim satırı varsa "kaldır", Stripe aboneliğiyle erişimi olan hesapta gizli
- * (sunucu üzerine vermez), diğerlerinde "ver". Sonraki işlem `data-next`'tedir.
+ * Ücretsiz erişim düğmesi: süren ücretsiz erişim varsa "kaldır", Stripe aboneliğiyle erişimi olan hesapta gizli (sunucu
+ * üzerine vermez), diğerlerinde (bitmiş ücretsiz erişim dahil) "ver". Sonraki işlem `data-next`'te, hedef hesap
+ * `data-user-id`'dedir: düğme her zaman ekranda çizilen hesaba gider.
  */
 function renderComplimentaryButton(user: UserSummary): void {
   const button: HTMLButtonElement = element("user-complimentary", HTMLButtonElement);
-  const complimentary: boolean = hasComplimentaryRow(user);
+  const complimentary: boolean = hasActiveComplimentary(user);
   button.classList.toggle("hidden", !complimentary && user.plan === "subscription");
   button.dataset["next"] = complimentary ? "remove" : "grant";
+  button.dataset["userId"] = user.id;
   button.textContent = complimentary ? adminText.freeAccess.remove : adminText.freeAccess.grant;
 }
 
-/** Kullanıcı ayrıntısını çizer. */
-function renderDetail(detail: UserDetail, onOpenReport: OpenReport): void {
+/** Davet durumunun metni: düşmüşse nedeniyle. Saf fonksiyondur. */
+function inviteStatusText(status: InviteStatus, voidReason: string | null): string {
+  if (status === "void") {
+    return fill(inviteText.statusWithReason, { reason: inviteVoidReasonLabel(voidReason ?? "") });
+  }
+  return inviteText.statuses[status];
+}
+
+/** Davet durumunun rozeti: verilmiş ödül yeşil, düşmüş ya da sınırda olan uyarı, diğerleri nötr. Saf fonksiyondur (yeni öğe üretir). */
+function inviteStatusBadge(status: InviteStatus, voidReason: string | null): HTMLSpanElement {
+  const tone: "" | "ok" | "warn" = status === "granted" ? "ok" : status === "void" || status === "capped" ? "warn" : "";
+  return pill(inviteStatusText(status, voidReason), tone);
+}
+
+/** Ödül hücresi: verildiyse tarihi, bekliyorsa beklenen tarihi; yoksa "—". Saf fonksiyondur. */
+function rewardText(rewardedAt: number | null, rewardDueAt: number | null, status: InviteStatus): string {
+  if (rewardedAt !== null) {
+    return fill(inviteText.rewardGranted, { date: formatDate(rewardedAt) });
+  }
+  return status === "qualified" && rewardDueAt !== null ? fill(inviteText.rewardDue, { date: formatDate(rewardDueAt) }) : adminText.none;
+}
+
+/** Hesap kimliği bağlantısı ya da silinmiş hesap metni. */
+function accountLink(userId: string | null, onOpen: (id: string) => void): HTMLElement {
+  return userId === null ? node("span", "muted", inviteText.deletedAccount) : idButton(userId, onOpen);
+}
+
+/** "Invited by" kartını çizer; davet yoksa gizler. */
+function renderInvitedBy(invitedBy: UserInvitedBy | null, onOpen: (id: string) => void): void {
+  const card: HTMLElement = element("user-invited-by", HTMLElement);
+  card.classList.toggle("hidden", invitedBy === null);
+  if (invitedBy === null) {
+    return;
+  }
+  element("user-invite-field-referrer", HTMLElement).replaceChildren(accountLink(invitedBy.referrerUserId, onOpen));
+  element("user-invite-field-code", HTMLElement).textContent = invitedBy.code;
+  element("user-invite-field-status", HTMLElement).replaceChildren(inviteStatusBadge(invitedBy.status, invitedBy.voidReason));
+  element("user-invite-field-free-month", HTMLElement).textContent = invitedBy.inFreeMonth ? inviteText.yes : inviteText.no;
+  element("user-invite-field-card", HTMLElement).textContent =
+    invitedBy.joinedAt === null ? inviteText.notJoined : invitedBy.cardChecked ? inviteText.cardChecked : inviteText.cardNotChecked;
+  element("user-invite-field-dates", HTMLElement).textContent = fill(inviteText.datesLine, {
+    checkout: formatDate(invitedBy.createdAt),
+    joined: invitedBy.joinedAt === null ? adminText.none : formatDate(invitedBy.joinedAt),
+    paid: invitedBy.qualifiedAt === null ? adminText.none : formatDate(invitedBy.qualifiedAt),
+  });
+}
+
+/** Davet edilen arkadaşın satırı (kimlik ayrıntıyı açar). */
+function inviteFriendRow(friend: UserInviteFriend, onOpen: (id: string) => void): HTMLTableRowElement {
+  return tableRow([
+    accountLink(friend.userId, onOpen),
+    inviteStatusBadge(friend.status, friend.voidReason),
+    friend.joinedAt === null ? adminText.none : formatDate(friend.joinedAt),
+    friend.qualifiedAt === null ? adminText.none : formatDate(friend.qualifiedAt),
+    rewardText(friend.rewardedAt, friend.rewardDueAt, friend.status),
+  ]);
+}
+
+/** "Invites" kartını çizer; kod ve arkadaş yoksa gizler. */
+function renderInvites(invites: UserInvites | null, onOpen: (id: string) => void): void {
+  const card: HTMLElement = element("user-invites", HTMLElement);
+  card.classList.toggle("hidden", invites === null);
+  if (invites === null) {
+    return;
+  }
+  element("user-invites-field-code", HTMLElement).textContent = invites.code ?? inviteText.noCode;
+  element("user-invites-field-counts", HTMLElement).textContent = fillCounts(inviteText.countsLine, {
+    joined: invites.joined,
+    pending: invites.pending,
+    rewarded: invites.rewarded,
+    voided: invites.voided,
+  });
+  element("user-invites-field-next", HTMLElement).textContent = invites.nextRewardAt === null ? inviteText.noRewardPending : formatDate(invites.nextRewardAt);
+  element("user-invites-field-left", HTMLElement).textContent = fillCounts(inviteText.rewardsLeftLine, {
+    left: invites.rewardsLeftThisYear,
+    perYear: invites.rewardsPerYear,
+  });
+  fillTable(
+    element("user-invite-friends", HTMLTableSectionElement),
+    invites.friends.map((friend: UserInviteFriend): HTMLTableRowElement => inviteFriendRow(friend, onOpen)),
+  );
+  element("user-invite-friends-empty", HTMLElement).classList.toggle("hidden", invites.friends.length > 0);
+}
+
+/** Kullanıcı ayrıntısını çizer; davet edenin ve arkadaşların kimlikleri `onOpen` ile açılır. */
+function renderDetail(detail: UserDetail, onOpenReport: OpenReport, onOpen: (id: string) => void): void {
   const nowMs: number = Date.now();
   const user: UserSummary = detail.user;
   element("user-title", HTMLElement).textContent = fill(adminText.userTitle, { id: user.id });
+  const invite: HTMLSpanElement | null = inviteBadge(user);
   element("user-pills", HTMLElement).replaceChildren(
-    ...[planBadge(user), subscriptionBadge(user.subscription)].filter((badge: HTMLElement | string): badge is HTMLElement => typeof badge !== "string"),
+    ...[planBadge(user), subscriptionBadge(user.subscription), ...(invite === null ? [] : [invite])].filter(
+      (badge: HTMLElement | string): badge is HTMLElement => typeof badge !== "string",
+    ),
   );
   renderComplimentaryButton(user);
   const fields: Readonly<Record<string, string>> = {
@@ -306,6 +442,8 @@ function renderDetail(detail: UserDetail, onOpenReport: OpenReport): void {
   setMeter("tokens", detail.usage.tokens, detail.usage.tokenCap, formatCount);
   setMeter("account", detail.usage.accountTokens, detail.usage.accountTokenCap, formatCount);
   element("user-audio", HTMLElement).textContent = fill(adminText.hours, { hours: formatCount(detail.usage.audioHours) });
+  renderInvitedBy(detail.invitedBy, onOpen);
+  renderInvites(detail.invites, onOpen);
   fillTable(element("user-meetings", HTMLTableSectionElement), detail.meetings.map(meetingRow));
   element("user-meetings-empty", HTMLElement).classList.toggle("hidden", detail.meetings.length > 0);
   element("user-timeline", HTMLElement).replaceChildren(...detail.timeline.map((entry: TimelineEntry): HTMLLIElement => timelineItem(entry, nowMs)));
@@ -331,21 +469,38 @@ function readFilter(): UserFilter {
 
 /** Kullanıcılar görünümünü bağlar; hatalar `onFailure`'a, rapor açma `onOpenReport`'a gider. */
 export function createUsersView(onFailure: (error: unknown) => void, onOpenReport: OpenReport): UsersView {
-  const state: UsersState = { filter: { query: null, segment: null, provider: null }, items: [], nextCursor: null, loaded: false, openId: null };
+  const state: UsersState = { filter: { query: null, segment: null, provider: null }, items: [], nextCursor: null, loaded: false, openId: null, listRequest: 0 };
 
+  // Ayrıntı yalnızca hâlâ açık olması istenen hesap içinse çizilir: önce açılan hesabın geç gelen yanıtı sonrakini ezmez.
+  const showUser = (id: string, detail: UserDetail): void => {
+    if (state.openId !== id) {
+      return;
+    }
+    renderDetail(detail, onOpenReport, open);
+  };
   const openUser = async (id: string): Promise<void> => {
     state.openId = id;
     const detail: UserDetail = await fetchUser(id);
-    renderDetail(detail, onOpenReport);
+    if (state.openId !== id) {
+      return;
+    }
+    showUser(id, detail);
     showDetailView(true);
     element("user-detail-view", HTMLElement).scrollIntoView({ block: "start" });
   };
-  const open = (id: string): void => {
+  function open(id: string): void {
     openUser(id).catch(onFailure);
-  };
+  }
 
+  // Her liste isteği numara alır; süzgeç değiştikten sonra gelen eski sayfa (ya da eski "daha fazla") çizilmez.
   const loadList = async (append: boolean): Promise<void> => {
-    const page: UserPage = await fetchUsers(state.filter, append ? state.nextCursor : null);
+    state.listRequest += 1;
+    const request: number = state.listRequest;
+    const filter: UserFilter = state.filter;
+    const page: UserPage = await fetchUsers(filter, append ? state.nextCursor : null);
+    if (request !== state.listRequest) {
+      return;
+    }
     state.items = append ? [...state.items, ...page.items] : [...page.items];
     state.nextCursor = page.nextCursor;
     state.loaded = true;
@@ -355,6 +510,7 @@ export function createUsersView(onFailure: (error: unknown) => void, onOpenRepor
   element("users-form", HTMLFormElement).addEventListener("submit", (event: SubmitEvent): void => {
     event.preventDefault();
     state.filter = readFilter();
+    state.openId = null;
     showDetailView(false);
     loadList(false).catch(onFailure);
   });
@@ -369,15 +525,16 @@ export function createUsersView(onFailure: (error: unknown) => void, onOpenRepor
   });
   const complimentaryButton: HTMLButtonElement = element("user-complimentary", HTMLButtonElement);
   complimentaryButton.addEventListener("click", (): void => {
-    const id: string | null = state.openId;
+    // Hedef, düğmenin çizildiği hesaptır (`data-user-id`), durumdaki son istek değil.
+    const id: string | undefined = complimentaryButton.dataset["userId"];
     const next: string | undefined = complimentaryButton.dataset["next"];
-    if (id === null || (next !== "grant" && next !== "remove")) {
+    if (id === undefined || id !== state.openId || (next !== "grant" && next !== "remove")) {
       return;
     }
     complimentaryButton.disabled = true;
     (next === "grant" ? grantComplimentaryAccess(id) : revokeComplimentaryAccess(id))
       .then(async (detail: UserDetail): Promise<void> => {
-        renderDetail(detail, onOpenReport);
+        showUser(id, detail);
         await loadList(false);
       })
       .catch(onFailure)
@@ -398,8 +555,9 @@ export function createUsersView(onFailure: (error: unknown) => void, onOpenRepor
     },
     refresh: async (): Promise<void> => {
       await loadList(false);
-      if (state.openId !== null) {
-        renderDetail(await fetchUser(state.openId), onOpenReport);
+      const id: string | null = state.openId;
+      if (id !== null) {
+        showUser(id, await fetchUser(id));
       }
     },
     openUser,

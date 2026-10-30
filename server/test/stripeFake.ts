@@ -10,6 +10,19 @@ export interface FakeSubscriptionItem {
   readonly price: { readonly id: string; readonly object: "price" };
 }
 
+/** Sahte Stripe'ın ödeme yöntemi (sunucunun okuduğu alanlar): kart ya da kart olmayan (ör. Link). */
+export interface FakePaymentMethod {
+  readonly id: string;
+  readonly object: "payment_method";
+  readonly type: string;
+  readonly card: { readonly fingerprint: string } | null;
+}
+
+/** Parmak izli sahte kart. */
+export function fakeCard(fingerprint: string): FakePaymentMethod {
+  return { id: `pm_${fingerprint}`, object: "payment_method", type: "card", card: { fingerprint } };
+}
+
 /** Sahte Stripe'ın abonelik nesnesi (sunucunun okuduğu alanlar). */
 export interface FakeSubscription {
   readonly id: string;
@@ -20,6 +33,8 @@ export interface FakeSubscription {
   readonly cancel_at: number | null;
   readonly cancel_at_period_end: boolean;
   readonly latest_invoice: string | null;
+  /** Aboneliğin varsayılan ödeme yöntemi (sahte, `expand` istense de istenmese de nesne döner); yoksa null. */
+  readonly default_payment_method: FakePaymentMethod | null;
   readonly metadata: Readonly<Record<string, string>>;
   readonly items: { readonly object: "list"; readonly data: readonly FakeSubscriptionItem[] };
 }
@@ -97,6 +112,8 @@ export interface FakeStripe {
   readonly disputedIntents: Set<string>;
   /** Doluysa bakiye hareketi yazılır ama yanıtı 500 döner (yanıt yolda kayboldu). */
   loseBalanceResponses: boolean;
+  /** Müşteri → kayıtlı kartları (`GET /v1/customers/{id}/payment_methods`). */
+  readonly customerCards: Map<string, FakePaymentMethod[]>;
 }
 
 /** Form gövdesi. */
@@ -111,7 +128,7 @@ function list(url: string, data: readonly object[]): Response {
 
 /**
  * `https://api.stripe.com/v1/` sahtesi: müşteri, Checkout (oluşturma, açık oturum listesi, sona erdirme), Portal,
- * abonelik (müşteriye göre liste, okuma, iptal) ve ödeme okuma. Abonelikler `subscriptions` haritasından okunur;
+ * abonelik (müşteriye göre liste, okuma, iptal), müşterinin kayıtlı kartları ve ödeme okuma. Abonelikler `subscriptions` haritasından okunur;
  * testler Stripe'ın güncel durumunu oraya yazar.
  */
 export function stubStripeApi(harness: Harness): FakeStripe {
@@ -140,6 +157,7 @@ export function stubStripeApi(harness: Harness): FakeStripe {
     balanceKeys: new Map(),
     disputedIntents: new Set(),
     loseBalanceResponses: false,
+    customerCards: new Map(),
   };
   harness.stub("https://api.stripe.com/v1/", async (request: Request): Promise<Response> => {
     const url: URL = new URL(request.url);
@@ -341,6 +359,11 @@ export function stubStripeApi(harness: Harness): FakeStripe {
       }
       return Response.json(transaction);
     }
+    const cardsPath: RegExpExecArray | null = /^\/v1\/customers\/([^/]+)\/payment_methods$/.exec(path);
+    if (method === "GET" && cardsPath !== null) {
+      const customer: string = cardsPath[1] ?? "";
+      return list(`/v1/customers/${customer}/payment_methods`, fake.customerCards.get(customer) ?? []);
+    }
     const chargePath: RegExpExecArray | null = /^\/v1\/charges\/([^/]+)$/.exec(path);
     if (method === "GET" && chargePath !== null) {
       const id: string = chargePath[1] ?? "";
@@ -372,6 +395,7 @@ export function fakeSubscriptionWithPrice(id: string, customer: string, status: 
     cancel_at: null,
     cancel_at_period_end: false,
     latest_invoice: null,
+    default_payment_method: null,
     metadata: {},
     items: { object: "list", data: [{ id: `si_${id}`, object: "subscription_item", current_period_end: periodEnd, price: { id: priceId, object: "price" } }] },
   };

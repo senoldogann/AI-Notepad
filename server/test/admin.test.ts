@@ -44,7 +44,7 @@ interface StatsBody {
   readonly users: { total: number; newLast30Days: Array<{ day: string; count: number }>; byProvider: { apple: number; google: number } };
   readonly trials: { activeTrialUsers: number; exhaustedTrialUsers: number };
   readonly subscriptions: { active: number; grace: number; ending: number; canceledTotal: number; monthly: number; yearly: number; mrrUsd: number; complimentary: number; freeInviteMonth: number };
-  readonly referrals: { joined: number; pending: number; granted: number; voided: number };
+  readonly referrals: { joined: number; pending: number; granted: number; voided: number; voidedByReason: Array<{ reason: string; count: number }> };
   readonly meetings: { last30Days: Array<{ day: string; trial: number; subscription: number }>; hoursThisMonth: number };
   readonly spend: { todayUsd: number; ceilingUsd: number; trialTodayUsd: number; trialCeilingUsd: number; last30Days: Array<{ day: string; usd: number }> };
   readonly tokens: { thisMonth: number };
@@ -107,6 +107,7 @@ interface UserItemBody {
   readonly lastActiveAt: string | null;
   readonly failedMeetings: number;
   readonly lastFailureCode: string | null;
+  readonly invite: string | null;
 }
 
 interface UserPageBody {
@@ -155,6 +156,16 @@ interface InsightsBody {
     byReason: DetailCountBody[];
     recent: Array<{ userId: string; at: string; reason: string | null; feedback: string | null; comment: string | null }>;
   };
+  readonly invites: {
+    days: number;
+    checkouts: number;
+    joined: number;
+    firstPayments: number;
+    granted: number;
+    voided: DetailCountBody[];
+    inFreeMonth: number;
+    topReferrers: Array<{ userId: string; joined: number; pending: number; granted: number; voided: number }>;
+  };
 }
 
 interface UserDetailBody {
@@ -165,6 +176,8 @@ interface UserDetailBody {
   readonly usage: { usedHours: number; capHours: number; audioHours: number; tokens: number; tokenCap: number; accountTokens: number; accountTokenCap: number };
   readonly meetings: MeetingItemBody[];
   readonly reports: Array<{ id: string; kind: string; status: string; createdAt: string; summary: string }>;
+  readonly invitedBy: object | null;
+  readonly invites: object | null;
   readonly timeline: Array<{ kind: string; at: string; detail: string | null }>;
 }
 
@@ -282,7 +295,7 @@ describe("yönetici API'si", () => {
     expect(stats.trials).toEqual({ activeTrialUsers: 1, exhaustedTrialUsers: 1 });
     // Yenilenecek: yalnızca yöneticinin yıllık aboneliği (aylık olan iptal edilmiş) → 49 / 12 = 4,08 $.
     expect(stats.subscriptions).toEqual({ active: 2, grace: 1, ending: 1, canceledTotal: 1, monthly: 0, yearly: 1, mrrUsd: 4.08, complimentary: 0, freeInviteMonth: 0 });
-    expect(stats.referrals).toEqual({ joined: 0, pending: 0, granted: 0, voided: 0 });
+    expect(stats.referrals).toEqual({ joined: 0, pending: 0, granted: 0, voided: 0, voidedByReason: [] });
     expect(stats.meetings.last30Days.slice(28)).toEqual([
       { day: days[28], trial: 3, subscription: 0 },
       { day: days[29], trial: 1, subscription: 1 },
@@ -520,6 +533,7 @@ describe("yönetici API'si", () => {
       lastActiveAt: iso(nowMs),
       failedMeetings: 0,
       lastFailureCode: null,
+      invite: null,
     });
     expect(JSON.stringify(found)).not.toContain(subject);
 
@@ -611,6 +625,9 @@ describe("yönetici API'si", () => {
     ]);
     expect(detail.meetings.slice(1).map((meeting: MeetingItemBody): string => meeting.id)).toEqual([ended, expired]);
     expect(detail.reports).toEqual([{ id: reportId, kind: "feedback", status: "open", createdAt: iso(nowMs - 3_600_000), summary: "özet" }]);
+    // Davet kullanmamış ve kodu üretilmemiş hesap.
+    expect(detail.invitedBy).toBeNull();
+    expect(detail.invites).toBeNull();
     expect(detail.timeline).toEqual([
       { kind: "subscription_period_end", at: iso(nowMs + 20 * dayMs), detail: "active" },
       { kind: "subscription_cancel_at", at: iso(nowMs + 19 * dayMs), detail: null },
@@ -704,6 +721,7 @@ describe("yönetici API'si", () => {
         { step: "first_note", count: 1 },
         { step: "three_meetings", count: 1 },
         { step: "subscribed", count: 1 },
+        { step: "subscribed_via_invite", count: 0 },
         { step: "canceled", count: 1 },
       ],
     });
@@ -726,6 +744,8 @@ describe("yönetici API'si", () => {
       byReason: [{ detail: "cancellation_requested", count: 1 }],
       recent: [{ userId: subscriber, at: iso(nowMs - dayMs), reason: "cancellation_requested", feedback: "too_expensive", comment: "Pahalı" }],
     });
+    // Davet özeti: bu dosyada davet yok (davetli akış `referrals.test.ts`'te denetlenir).
+    expect(insights.invites).toEqual({ days: 30, checkouts: 0, joined: 0, firstPayments: 0, granted: 0, voided: [], inFreeMonth: 0, topReferrers: [] });
 
     // Bırakma kesimleri.
     const segment = async (name: string): Promise<string[]> =>

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
-import { base64UrlEncode } from "../src/crypto";
+import { base64UrlEncode, sha256Hex } from "../src/crypto";
 import { elevenLabsSpeechToTextUrl } from "../src/transcribe";
 import {
   type Harness,
@@ -138,9 +138,15 @@ describe("konuşma tanıma vekili", () => {
     expect(calls).toBe(1);
     const usage = await env.DB.prepare("SELECT audio_seconds FROM monthly_usage WHERE user_id = ?").bind(context.session.userId).first<{ audio_seconds: number }>();
     expect(usage?.audio_seconds).toBe(2);
-    // Saklı sonuç şifrelidir: düz metin yoktur.
-    const stored = await env.DB.prepare("SELECT ciphertext FROM transcription_results").first<{ ciphertext: ArrayBuffer }>();
-    expect(new TextDecoder().decode(new Uint8Array(stored?.ciphertext ?? new ArrayBuffer(0)))).not.toContain("words");
+    // Saklı sonuç şifrelidir: ne düz metin ne de yalnızca sıkıştırılmış (gzip) metin; yalın gzip açılabilirdi.
+    const stored = await env.DB.prepare("SELECT ciphertext FROM transcription_results WHERE key_hash = ?")
+      .bind(await sha256Hex(key))
+      .first<{ ciphertext: ArrayBuffer }>();
+    expect(stored).not.toBeNull();
+    const bytes: Uint8Array = new Uint8Array(stored?.ciphertext ?? new ArrayBuffer(0));
+    expect(bytes.byteLength).toBeGreaterThan(0);
+    expect([bytes[0], bytes[1]]).not.toEqual([0x1f, 0x8b]);
+    await expect(new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text()).rejects.toThrow();
     // Başka anahtar yeni yüklemedir.
     const other: Response = await uploadWith(context, "", audio, "audio/wav", { "x-upload-key": base64UrlEncode(crypto.getRandomValues(new Uint8Array(32))) });
     expect(other.status).toBe(200);

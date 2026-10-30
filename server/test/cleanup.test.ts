@@ -116,7 +116,6 @@ describe("süresi dolmuş satırların temizliği", () => {
       transcription_results: 1,
       device_challenges: 2,
       refresh_tokens: 2,
-      refresh_tokens_superseded: 1,
       refresh_families: 2,
       stripe_events: 1,
       duplicate_subscriptions: 1,
@@ -151,8 +150,8 @@ describe("süresi dolmuş satırların temizliği", () => {
     // Raporlar durumundan bağımsız 180 gün tutulur.
     expect(await ids("SELECT id FROM reports")).toEqual(["r_recent"]);
     expect(await ids("SELECT challenge_hash AS id FROM device_challenges")).toEqual(["c_live"]);
-    // Ailenin en son kullanılmış jetonu yeniden kullanım algılaması için kalır; daha eskisi silinir.
-    expect(await ids("SELECT token_hash AS id FROM refresh_tokens")).toEqual(["t_live", "t_used_live"]);
+    // Süresi dolmamış kullanılmış jetonlar (son kuşak, önceki kuşak, geçersiz yazılmış halef) çalınma algılaması için kalır.
+    expect(await ids("SELECT token_hash AS id FROM refresh_tokens")).toEqual(["t_live", "t_used_live", "t_used_older"]);
     expect(await ids("SELECT id FROM refresh_families")).toEqual(["f_live"]);
     expect(await ids("SELECT id FROM stripe_events")).toEqual(["evt_recent"]);
     expect(await ids("SELECT user_id AS id FROM trial_starts")).toEqual([second]);
