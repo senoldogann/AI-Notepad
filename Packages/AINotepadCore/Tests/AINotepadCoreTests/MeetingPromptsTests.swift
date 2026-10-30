@@ -65,17 +65,40 @@ func block(_ speaker: Speaker, _ index: Int, _ start: Double, _ text: String, pe
         #expect(request.timeoutSec == 20)
         #expect(request.userText.contains("Esitys on perjantaina."))
         #expect(request.userText.contains("Kuka tekee diat?"))
+        #expect(request.jsonSchema != nil)
+    }
+
+    // Çeviri yalnızca şemadaki alandan okunur: açıklama ya da düşünce metni çeviriye karışamaz; boş ya da bozuk yanıt
+    // yeniden istenir.
+    @Test func parsesStructuredTranslation() throws {
+        #expect(try parseTranslation(text: #"{"ceviri":"  Sunumu kim hazırlayacak?  "}"#) == "Sunumu kim hazırlayacak?")
+        #expect(throws: LLMError.self) { try parseTranslation(text: "Wait, I must correct: Sunumu kim hazırlayacak?") }
+        #expect(throws: LLMError.empty) { try parseTranslation(text: #"{"ceviri":"   "}"#) }
     }
 }
 
 extension CloudTests {
 @Suite struct MeetingPromptsCloudTests {
     @Test func translatesFinnishToTurkish() async throws {
-        let text: String = try await sendLLM(
+        let text: String = try await translateSentence(
             provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
-            request: translationRequest(sentence: "Seuraavalla viikolla meidän pitää palauttaa raportti.", context: [], language: .turkish)
+            sentence: "Seuraavalla viikolla meidän pitää palauttaa raportti.", context: [], language: .turkish
         )
         #expect(text.lowercased().contains("rapor"), "metin: \(text)")
+    }
+
+    // Yarım kalmış, birden çok cümleli canlı metin (ekranda düşünce ve not karışan durum): çeviri yalnızca çeviridir.
+    @Test func translatesCutOffRunOnWithoutCommentary() async throws {
+        let text: String = try await translateSentence(
+            provider: .anthropic(defaultAnthropicConfig(apiKey: try cloudKey(account: .anthropic))),
+            sentence: "Omikron-virusmuunnoksen aiheuttamat matkustusrajoitukset vaikeuttavat kansainvälistä lentoliikennettä. Venäjän tuntia arvioi, että oppositiojohtaja Ale",
+            context: ["Hallitus päätti hankkia 64 F-35-hävittäjää."], language: .turkish
+        )
+        let lowered: String = text.lowercased()
+        #expect(lowered.contains("omikron") || lowered.contains("omicron"), "metin: \(text)")
+        for marker in ["wait", "translation:", "not:", "note:", "cümle yarım", "i must"] {
+            #expect(!lowered.contains(marker), "çeviriye açıklama karıştı (\(marker)): \(text)")
+        }
     }
 
     @Test func missedSummaryFromDialog() async throws {

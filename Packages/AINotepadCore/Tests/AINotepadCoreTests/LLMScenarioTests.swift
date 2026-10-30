@@ -198,9 +198,9 @@ struct LLMScenarioTests {
     @Test(arguments: ClaudeModel.allCases)
     func translationLatencyAtMaxEffort(model: ClaudeModel) async throws {
         let started: ContinuousClock.Instant = .now
-        let text: String = try await sendLLM(
+        let text: String = try await translateSentence(
             provider: try anthropic(model: model, effort: .max),
-            request: translationRequest(sentence: "Voisitko lähettää yhteenvedon perjantaihin mennessä?", context: ["Seuraava aihe on aikataulu."], language: .turkish)
+            sentence: "Voisitko lähettää yhteenvedon perjantaihin mennessä?", context: ["Seuraava aihe on aikataulu."], language: .turkish
         )
         let elapsed: Duration = ContinuousClock.now - started
         print("SENARYO çeviri \(model.rawValue) max: \(elapsed)")

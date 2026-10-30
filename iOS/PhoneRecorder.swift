@@ -684,7 +684,7 @@ final class PhoneRecorder {
             translationsInFlight += 1
             Task {
                 do {
-                    let translated: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context, language: phoneNoteLanguage()))
+                    let translated: String = try await translateSentence(provider: provider, sentence: segment.text, context: context, language: phoneNoteLanguage())
                     // Cümle zaten not dilindeyse (model aynen döndürdü) çeviri saklanmaz: aynı cümle iki kez görünmesin.
                     if requestGeneration == generation, isDistinctTranslation(original: segment.text, translated: translated) {
                         translations[id] = translated

@@ -513,7 +513,7 @@ final class AppModel {
             return
         }
         do {
-            let translated: String = try await sendLLM(provider: provider, request: translationRequest(sentence: segment.text, context: context, language: selectedNoteLanguage()))
+            let translated: String = try await translateSentence(provider: provider, sentence: segment.text, context: context, language: selectedNoteLanguage())
             // Bu arada yeni kayıt başladıysa sonuç başka bir toplantının aynı numaralı bölümüne yazılmaz.
             guard generation == recordingGeneration else {
                 return
