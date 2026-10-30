@@ -10,13 +10,17 @@
 import { appleAuthScriptUrl, appleIdOrigin, type SiteConfig, turnstileOrigin } from "../config";
 import { blogPostPattern, type PageKey, privatePages, routes } from "../routes";
 
-/** Sayfaların yüklediği dış hizmetler. */
-export type ExternalService = "appleSignIn" | "turnstile";
+/**
+ * Sayfaların yüklediği dış hizmetler ve ek kaynaklar. `localImagePreview`: yönetim panelinin blog düzenleyicisi
+ * yüklenecek görseli ve bu oturumda yüklenenleri tarayıcıdaki kopyasından (`blob:`) gösterir.
+ */
+export type ExternalService = "appleSignIn" | "turnstile" | "localImagePreview";
 
 /** Bir dış hizmetin CSP yönergelerine eklediği kaynaklar. */
 interface ServiceSources {
   readonly script: readonly string[];
   readonly style: readonly string[];
+  readonly img: readonly string[];
   readonly connect: readonly string[];
   readonly frame: readonly string[];
   readonly formAction: readonly string[];
@@ -31,8 +35,9 @@ function originOf(url: string): string {
  * Hizmetlerin kaynakları. Apple ile giriş açılır pencere kullanır; betik Apple'ın CDN'inden gelir.
  */
 const serviceSources: Readonly<Record<ExternalService, ServiceSources>> = {
-  appleSignIn: { script: [originOf(appleAuthScriptUrl)], style: [], connect: [], frame: [appleIdOrigin], formAction: [appleIdOrigin] },
-  turnstile: { script: [turnstileOrigin], style: [], connect: [], frame: [turnstileOrigin], formAction: [] },
+  appleSignIn: { script: [originOf(appleAuthScriptUrl)], style: [], img: [], connect: [], frame: [appleIdOrigin], formAction: [appleIdOrigin] },
+  turnstile: { script: [turnstileOrigin], style: [], img: [], connect: [], frame: [turnstileOrigin], formAction: [] },
+  localImagePreview: { script: [], style: [], img: ["blob:"], connect: [], frame: [], formAction: [] },
 };
 
 /**
@@ -44,11 +49,12 @@ const webAnalyticsScriptOrigin: string = "https://static.cloudflareinsights.com"
 const webAnalyticsConnectOrigin: string = "https://cloudflareinsights.com";
 
 /** Tüm dış hizmetler (geniş politika). */
-const allServices: readonly ExternalService[] = ["appleSignIn", "turnstile"];
+const allServices: readonly ExternalService[] = ["appleSignIn", "turnstile", "localImagePreview"];
 
-/** Sayfaların kullandığı dış hizmetler: giriş sayfası Apple, iletişim sayfası Turnstile; diğerleri hiçbiri. */
+/** Sayfaların kullandığı dış hizmetler: giriş sayfası Apple, iletişim sayfası Turnstile, yönetim paneli yerel görsel önizlemesi; diğerleri hiçbiri. */
 export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>> = {
   home: [],
+  fi: [],
   pricing: [],
   download: [],
   compare: [],
@@ -60,7 +66,7 @@ export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>>
   account: [],
   invite: [],
   contact: ["turnstile"],
-  admin: [],
+  admin: ["localImagePreview"],
   privacy: [],
   terms: [],
   notFound: [],
@@ -81,7 +87,7 @@ export function contentSecurityPolicy(config: SiteConfig, services: readonly Ext
     "default-src 'none'",
     directive("script-src", ["'self'", webAnalyticsScriptOrigin], services, (sources: ServiceSources): readonly string[] => sources.script),
     directive("style-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.style),
-    "img-src 'self'",
+    directive("img-src", ["'self'"], services, (sources: ServiceSources): readonly string[] => sources.img),
     // Ana sayfadaki sessiz tanıtım videosu (public/video) yalnızca siteden yüklenir.
     "media-src 'self'",
     "font-src 'self'",

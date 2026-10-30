@@ -270,13 +270,43 @@ func citationNumbers(list: Substring) -> [Int] {
     }
 }
 
-/// Son turun kaynakları (tekrarsız), `maxChars`'a kadar. Saf fonksiyondur.
-func carriedPassages(history: [ArchiveTurn], maxChars: Int) -> [ArchivePassage] {
-    (history.last?.sources ?? []).reduce(into: [ArchivePassage]()) { (result: inout [ArchivePassage], passage: ArchivePassage) -> Void in
-        if !result.contains(passage), result.map(\.text.count).reduce(0, +) + passage.text.count <= maxChars {
-            result.append(passage)
+/// Son turun kaynakları (tekrarsız), `maxChars`'a kadar; yalnız `meetingIDs` toplantılarından olanlar (soru `@` ile
+/// seçilen toplantılara sorulduysa önceki turun başka toplantılardan gelen kaynakları okunmaz). Saf fonksiyondur.
+func carriedPassages(history: [ArchiveTurn], meetingIDs: Set<String>, maxChars: Int) -> [ArchivePassage] {
+    (history.last?.sources ?? []).filter { meetingIDs.contains($0.meetingID) }
+        .reduce(into: [ArchivePassage]()) { (result: inout [ArchivePassage], passage: ArchivePassage) -> Void in
+            if !result.contains(passage), result.map(\.text.count).reduce(0, +) + passage.text.count <= maxChars {
+                result.append(passage)
+            }
         }
+}
+
+/// Soruda okunacak parçalar: devam sorusunda son turun kaynakları (`maxChars`'ın üçte birine kadar), kalan yere arama
+/// terimleriyle seçilenler; hepsi yalnız `records` toplantılarından, zaman sırasıyla. Saf fonksiyondur.
+public func questionPassages(question: String, terms: [String], history: [ArchiveTurn], records: [MeetingRecord], maxChars: Int) -> [ArchivePassage] {
+    // Devam sorusunda son turun kaynakları da okunur ("bunu" o parçalardadır); aramayla gelenler kalan yere sığar.
+    let carried: [ArchivePassage] = carriedPassages(history: history, meetingIDs: Set(records.map(\.id)), maxChars: maxChars / 3)
+    let found: [ArchivePassage] = relevantPassages(
+        passages: archivePassages(records: records).filter { !carried.map(\.id).contains($0.id) }, terms: terms + [question],
+        maxChars: maxChars - carried.map(\.text.count).reduce(0, +)
+    )
+    return chronological(passages: carried + found)
+}
+
+/// `@` ile seçilen toplantılardan bazıları arşivde yok (soru sorulurken silinmiş ya da taşınmış).
+public enum ArchiveScopeError: Error, Sendable, Equatable {
+    case meetingsNotFound(ids: [String])
+}
+
+/// Sorunun kapsamı: `meetingIDs` boşsa boş (tüm arşive sorulur); doluysa o toplantılar, seçilme sırasıyla. Biri arşivde
+/// yoksa `ArchiveScopeError.meetingsNotFound`: kapsam sessizce daralmaz ya da tüm arşive genişlemez. Saf fonksiyondur.
+public func archiveScope(records: [MeetingRecord], meetingIDs: [String]) throws -> [MeetingRecord] {
+    let byID: [String: MeetingRecord] = Dictionary(records.map { ($0.id, $0) }) { (first: MeetingRecord, _: MeetingRecord) -> MeetingRecord in first }
+    let missing: [String] = meetingIDs.filter { byID[$0] == nil }
+    guard missing.isEmpty else {
+        throw ArchiveScopeError.meetingsNotFound(ids: missing)
     }
+    return meetingIDs.compactMap { byID[$0] }
 }
 
 /// Arşiv sorusunun ilerleyişi (arayüz ajanın adımlarını gösterir).
@@ -304,13 +334,7 @@ public func askArchive(
         try parseSearchTerms(text: text)
     }
     await onProgress(.searchTerms(terms))
-    // Devam sorusunda son turun kaynakları da okunur ("bunu" o parçalardadır); aramayla gelenler kalan yere sığar.
-    let carried: [ArchivePassage] = carriedPassages(history: history, maxChars: maxChars / 3)
-    let found: [ArchivePassage] = relevantPassages(
-        passages: archivePassages(records: records).filter { !carried.map(\.id).contains($0.id) }, terms: terms + [question],
-        maxChars: maxChars - carried.map(\.text.count).reduce(0, +)
-    )
-    let passages: [ArchivePassage] = chronological(passages: carried + found)
+    let passages: [ArchivePassage] = questionPassages(question: question, terms: terms, history: history, records: records, maxChars: maxChars)
     // Arayüz "N toplantı okunuyor" ve sonda okunan parça sayısını bundan gösterir (yoksa "aranıyor"da kalıyordu).
     await onProgress(.passages(passages))
     return try await answerFromPassages(
@@ -359,40 +383,121 @@ private func answerFromPassages(
     return answer
 }
 
+/// En uzun `@` araması (karakter): daha uzunsa bahis değil, soru yazılıyordur.
+let mentionQueryMaxChars: Int = 60
 
-/// Yazılan metnin sonundaki `@` bahsinin aranan kısmı ("…@perus" → "perus"); metin `@` ile bitiyorsa boş. Sondaki `@`
-/// bir kelimenin içinde (e-posta gibi) ya da arada satır sonu varsa nil. Saf fonksiyondur.
-public func mentionQuery(text: String) -> String? {
-    guard let at = text.lastIndex(of: "@") else {
-        return nil
+/// Yazılırken imlecin hemen önündeki `@` bahsi. Konumlar UTF-16 birimindedir (AppKit/UIKit seçimleriyle aynı).
+public struct MentionQuery: Sendable, Equatable {
+    /// `@` işaretinin konumu.
+    public let start: Int
+    /// Bahsin sonu: imlecin konumu.
+    public let end: Int
+    /// `@` ile imleç arasındaki arama ("@perus" → "perus").
+    public let query: String
+
+    public init(start: Int, end: Int, query: String) {
+        self.start = start
+        self.end = end
+        self.query = query
     }
-    if at > text.startIndex, let before = text[..<at].last, !before.isWhitespace {
-        return nil
-    }
-    let query: Substring = text[text.index(after: at)...]
-    guard !query.contains(where: \.isNewline), query.count <= 60 else {
-        return nil
-    }
-    return String(query)
 }
 
-/// Metinden sondaki `@` bahsini çıkarır (toplantı seçilince yazılan "@perus" silinir). Saf fonksiyondur.
-public func removingMentionQuery(text: String) -> String {
-    guard mentionQuery(text: text) != nil, let at = text.lastIndex(of: "@") else {
-        return text
+/// Düzenlenmiş soru metni ve yeni imleç konumu (UTF-16).
+public struct MentionTextEdit: Sendable, Equatable {
+    public let text: String
+    public let cursor: Int
+
+    public init(text: String, cursor: Int) {
+        self.text = text
+        self.cursor = cursor
     }
-    return String(text[..<at])
 }
 
-/// `@` önerileri: başlığında (ya da notun başlığında) aranan metin geçen toplantılar, en yeni önce; zaten seçilenler
-/// hariç. Boş aramada son toplantılar. Saf fonksiyondur.
+/// İmlecin (`cursor`, UTF-16) önündeki `@` bahsi: `@` metnin başında ya da boşluktan sonra, `@` ile imleç arasında satır
+/// sonu yok ve arama en fazla `mentionQueryMaxChars` karakter. Bir kelimenin içindeki `@` (e-posta) bahis değildir.
+/// İmleç metnin dışında ya da bir harfin ortasındaysa bahis yoktur (nil). Saf fonksiyondur.
+public func mentionQuery(text: String, cursor: Int) -> MentionQuery? {
+    let units: String.UTF16View = text.utf16
+    guard cursor >= 0,
+          let unit = units.index(units.startIndex, offsetBy: cursor, limitedBy: units.endIndex),
+          let end = unit.samePosition(in: text) else {
+        return nil
+    }
+    let before: Substring = text[..<end]
+    guard let at = before.lastIndex(of: "@") else {
+        return nil
+    }
+    if at > text.startIndex, let previous = text[..<at].last, !previous.isWhitespace {
+        return nil
+    }
+    let query: Substring = before[before.index(after: at)...]
+    guard !query.contains(where: \.isNewline), query.count <= mentionQueryMaxChars else {
+        return nil
+    }
+    return MentionQuery(start: at.utf16Offset(in: text), end: cursor, query: String(query))
+}
+
+/// İmlecin önündeki `@` bahsini metinden çıkarır (toplantı seçilince yazılan "@perus" silinir); imleç `@`'nin yerine
+/// gelir. Bahsin iki yanında boşluk kalıyorsa biri silinir ("neler @per bugün" → "neler bugün"). Bahis yoksa nil. Saf
+/// fonksiyondur.
+public func removingMention(text: String, cursor: Int) -> MentionTextEdit? {
+    guard let mention = mentionQuery(text: text, cursor: cursor) else {
+        return nil
+    }
+    let start: String.Index = String.Index(utf16Offset: mention.start, in: text)
+    let end: String.Index = String.Index(utf16Offset: mention.end, in: text)
+    let head: Substring = text[..<start]
+    let tail: Substring = text[end...]
+    let joinedTail: Substring = head.last?.isWhitespace == true && tail.first?.isWhitespace == true ? tail.dropFirst() : tail
+    return MentionTextEdit(text: String(head + joinedTail), cursor: mention.start)
+}
+
+/// `@` önerileri: başlığında (ya da notun başlığında) aranan metin geçen bitmiş toplantılar, zaten seçilenler hariç.
+/// Büyük/küçük harf, aksan ve ı/i duyarsızdır (`searchFolded`). Sıra: başlığı aramayla başlayanlar, sonra bir kelimesi
+/// aramayla başlayanlar, sonra başka yerinde geçenler; her grupta en yeni önce. Boş aramada son toplantılar. Saf
+/// fonksiyondur.
 public func mentionCandidates(records: [MeetingRecord], query: String, excluding: [String], limit: Int) -> [MeetingRecord] {
-    let needle: String = query.trimmingCharacters(in: .whitespaces)
-    return newestFirst(records: records)
+    let needle: String = searchFolded(query.trimmingCharacters(in: .whitespaces))
+    let ranked: [(record: MeetingRecord, rank: Int)] = newestFirst(records: records)
         .filter { !excluding.contains($0.id) && $0.status == .done }
-        .filter { (record: MeetingRecord) -> Bool in
-            needle.isEmpty || [record.title, record.note?.title ?? ""].contains { looselyContains(text: $0, needle: needle) }
+        .compactMap { (record: MeetingRecord) -> (record: MeetingRecord, rank: Int)? in
+            let titles: [String] = [record.note?.title, record.title].compactMap { $0 }
+            return titles.compactMap { mentionRank(title: $0, foldedNeedle: needle) }.min().map { (record: record, rank: $0) }
         }
+    // Kararlı sıralama: aynı gruptakiler en yeni önce kalır.
+    return ranked.enumerated()
+        .sorted { $0.element.rank != $1.element.rank ? $0.element.rank < $1.element.rank : $0.offset < $1.offset }
         .prefix(limit)
-        .map { $0 }
+        .map(\.element.record)
+}
+
+/// Başlığın aramaya uygunluğu: 0 başlık aramayla başlar, 1 bir kelimesi aramayla başlar, 2 başka yerinde geçer; geçmiyorsa
+/// nil. Boş arama her başlıkta 0'dır. `foldedNeedle` önceden `searchFolded` ile katlanmıştır. Saf fonksiyondur.
+func mentionRank(title: String, foldedNeedle: String) -> Int? {
+    let folded: String = searchFolded(title)
+    if folded.hasPrefix(foldedNeedle) {
+        return 0
+    }
+    if folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(foldedNeedle) }) {
+        return 1
+    }
+    return folded.range(of: foldedNeedle, options: .literal) != nil ? 2 : nil
+}
+
+/// Cevabın kopyalanacak düz metni: **kalın** işaretleri atılır, [n] işaretleri kalır; kaynak varsa altında
+/// `sourcesHeading` ve numaralı kaynak satırları ("[1] Bütçe planlaması · 26 Eki 2026 · not" ya da "… · 04:12").
+/// `noteLabel` not kaynağının adıdır, tarih `locale` ile yazılır. Saf fonksiyondur.
+public func archiveAnswerPlainText(answer: ArchiveAnswer, sourcesHeading: String, noteLabel: String, locale: Locale) -> String {
+    let body: String = answer.text.replacing(/\*\*(.+?)\*\*/) { (match: Regex<(Substring, Substring)>.Match) -> String in
+        String(match.output.1)
+    }
+    guard !answer.sources.isEmpty else {
+        return body
+    }
+    let lines: [String] = answer.sources.enumerated().map { (item: (offset: Int, element: ArchivePassage)) -> String in
+        let date: String = item.element.meetingDate.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(locale))
+        let place: String = item.element.kind == .note ? noteLabel : timestamp(seconds: item.element.startSec)
+        return "[\(item.offset + 1)] \(item.element.meetingTitle) · \(date) · \(place)"
+    }
+    return ([body, "", sourcesHeading] + lines).joined(separator: "\n")
 }

@@ -1,12 +1,50 @@
 // Uygulamanın film gradyanı ve kapak ses dalgasının site karşılığı (AINotepadUI/FilmGradient.swift,
 // CoverBackground.swift). Ailelerin renkleri yalnızca global.css `.film--<aile>` kurallarındadır ve uygulamadaki
-// `FilmPalette.colors` ile aynı kalmalıdır; dalga yükseklikleri uygulamadakiyle aynı sayıları üretir.
+// `FilmPalette.colors` ile aynı kalmalıdır; dalga yükseklikleri uygulamadakiyle aynı sayıları üretir. Blog kapaklarının
+// aile ve yerleşimi de buradan seçilir (`coverFilm`; site, yönetim paneli ve paylaşım görseli aynı sonucu kullanır).
+
+/** Film gradyanının renk aileleri (global.css `.film--<aile>`). Blog yazısının `cover` ön bilgisi bunlardan biridir. */
+export const filmPalettes = ["sunset", "coral", "ocean", "mint", "rose", "violet"] as const;
 
 /** Film gradyanının renk ailesi. */
-export type FilmPalette = "sunset" | "coral" | "ocean" | "mint" | "rose" | "violet";
+export type FilmPalette = (typeof filmPalettes)[number];
+
+/** Bulutların yerleşimleri (global.css `.film--<yerleşim>`). */
+export const filmLayouts = ["clouds-left", "clouds-right", "streaks"] as const;
 
 /** Bulutların yerleşimi: yumuşak bulutlar (gölge solda ya da sağda) veya çapraz ışık süzmeleri. */
-export type FilmLayout = "clouds-left" | "clouds-right" | "streaks";
+export type FilmLayout = (typeof filmLayouts)[number];
+
+/** Bir kapağın gradyanı: renk ailesi ve yerleşim. */
+export interface FilmCover {
+  readonly palette: FilmPalette;
+  readonly layout: FilmLayout;
+}
+
+/** Metnin 32 bitlik FNV-1a özeti (kapak seçimi için; güvenlik amaçlı değil). Saf fonksiyondur. */
+function fnv1a(text: string): number {
+  let hash: number = 0x811c9dc5;
+  for (const char of text) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
+/**
+ * Tohumdan (blog yazısının kısa adı) sabit kapak: aile ve yerleşim özetten seçilir, aynı tohum her derlemede ve panelde
+ * aynı kapağı verir. `palette` verilmişse (ön bilgideki `cover`) aile odur; yerleşim yine tohumdan gelir. Saf fonksiyondur.
+ */
+export function coverFilm(seed: string, palette: FilmPalette | null): FilmCover {
+  const hash: number = fnv1a(seed);
+  const chosen: FilmPalette | undefined = filmPalettes[hash % filmPalettes.length];
+  const layout: FilmLayout | undefined = filmLayouts[(hash >>> 8) % filmLayouts.length];
+  if (chosen === undefined || layout === undefined) {
+    // Kalan her zaman dizinin içindedir; buraya gelinmesi listelerin boşaldığı anlamına gelir.
+    throw new RangeError(`Kapak seçilemedi: aile ya da yerleşim listesi boş (tohum ${JSON.stringify(seed)}).`);
+  }
+  return { palette: palette ?? chosen, layout };
+}
 
 const mask64: bigint = (1n << 64n) - 1n;
 

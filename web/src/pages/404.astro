@@ -1,10 +1,11 @@
 ---
 // Bulunamayan sayfa (Cloudflare Pages tüm bilinmeyen adreslerde bunu 404 durumuyla döndürür).
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import NotFound from "../components/NotFound.astro";
 import { copy } from "../copy";
 ---
 
-<Base page="notFound" meta={copy.notFound.meta} indexed={false}>
+<Base page="notFound" meta={copy.notFound.meta} indexed={false} social={websiteCard}>
   <NotFound />
 </Base>

@@ -1,5 +1,5 @@
 // Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, içgörüler (davet özeti dahil), kullanıcı listesi ve ayrıntısı (davetler dahil),
-// işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği, blog yazıları (liste, okuma, kayıt, silme). Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
+// işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği, blog yazıları (liste, okuma, kayıt, silme, görsel yükleme). Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
 // Zaman alanları (`generatedAt`, `createdAt`) Unix ms sayısı ya da ISO 8601 metni olabilir; ikisi de ms'ye çevrilir.
 // Bildirim kimliği metin ya da tamsayı olabilir; metne çevrilir.
 import {
@@ -17,6 +17,7 @@ import {
 } from "./api";
 import type { InviteStatus, InviteTimelineKind } from "./admin-invites-copy";
 import { authorizedSend } from "./session";
+import { type FilmPalette, filmPalettes } from "../lib/film";
 import { type BillingPlan, billingPlans } from "../lib/plans";
 
 /** Bir günün değeri (`YYYY-MM-DD`, UTC). */
@@ -1145,6 +1146,10 @@ export interface BlogPostSummary {
   readonly author: string;
   /** `YYYY-MM-DD` (UTC). */
   readonly published: string;
+  /** Son anlamlı güncelleme (`YYYY-MM-DD`); yazılmamışsa null. */
+  readonly updated: string | null;
+  /** Elle seçilmiş kapak ailesi; null ise kısa addan seçilir (`coverFilm`). */
+  readonly cover: FilmPalette | null;
   readonly draft: boolean;
   readonly status: BlogPostStatus;
   readonly sha: string;
@@ -1161,15 +1166,26 @@ export interface BlogPostList {
   readonly posts: readonly BlogPostSummary[];
 }
 
-/** Kaydedilecek yazı: `sha` yeni yazıda null, güncellemede açılan sürüm. */
+/** Kaydedilecek yazı: `updated` ve `cover` yoksa null; `sha` yeni yazıda null, güncellemede açılan sürüm. */
 export interface BlogPostDraft {
   readonly title: string;
   readonly description: string;
   readonly author: string;
   readonly published: string;
+  readonly updated: string | null;
+  readonly cover: FilmPalette | null;
   readonly draft: boolean;
   readonly body: string;
   readonly sha: string | null;
+}
+
+/** Yüklenen blog görseli (`PUT /v1/admin/blog/posts/{kısa ad}/images/{ad}`): sitedeki yolu, sürümü ve boyutu. */
+export interface BlogImage {
+  readonly path: string;
+  readonly sha: string;
+  readonly bytes: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 /** `YYYY-MM-DD` alanı. */
@@ -1190,6 +1206,24 @@ function blogStatusField(object: JsonObject, response: RawResponse, path: string
   return status;
 }
 
+/** Boş olabilen `YYYY-MM-DD` alanı. */
+function nullableIsoDayField(object: JsonObject, key: string, response: RawResponse, path: string): string | null {
+  return object[key] === null ? null : isoDayField(object, key, response, path);
+}
+
+/** Boş olabilen kapak ailesi alanı. */
+function coverField(object: JsonObject, response: RawResponse, path: string): FilmPalette | null {
+  const cover: string | null = nullableStringField(object, "cover", response, path);
+  if (cover === null) {
+    return null;
+  }
+  const palette: FilmPalette | undefined = filmPalettes.find((candidate: FilmPalette): boolean => candidate === cover);
+  if (palette === undefined) {
+    throw new ApiResponseError(path, response.status, `bilinmeyen kapak ailesi "${cover}"`, response.text);
+  }
+  return palette;
+}
+
 /** Listedeki yazıyı okur. */
 function parseBlogPostSummary(item: JsonObject, response: RawResponse, path: string): BlogPostSummary {
   return {
@@ -1198,6 +1232,8 @@ function parseBlogPostSummary(item: JsonObject, response: RawResponse, path: str
     description: stringField(item, "description", response, path),
     author: stringField(item, "author", response, path),
     published: isoDayField(item, "published", response, path),
+    updated: nullableIsoDayField(item, "updated", response, path),
+    cover: coverField(item, response, path),
     draft: booleanField(item, "draft", response, path),
     status: blogStatusField(item, response, path),
     sha: stringField(item, "sha", response, path),
@@ -1244,6 +1280,8 @@ export async function saveBlogPost(slug: string, draft: BlogPostDraft): Promise<
     description: draft.description,
     author: draft.author,
     published: draft.published,
+    updated: draft.updated,
+    cover: draft.cover,
     draft: draft.draft,
     body: draft.body,
     sha: draft.sha,
@@ -1251,8 +1289,26 @@ export async function saveBlogPost(slug: string, draft: BlogPostDraft): Promise<
   return parseBlogPost(await authorizedSend({ method: "PUT", path, body, attempts: 1 }), path);
 }
 
-/** Yazıyı siler (204); `sha` açılan sürümdür. */
+/** Yazıyı ve görsel klasörünü siler (204); `sha` açılan sürümdür. */
 export async function deleteBlogPost(slug: string, sha: string): Promise<void> {
   const path: string = `${blogPostApiPath(slug)}?${new URLSearchParams({ sha }).toString()}`;
   await authorizedSend({ method: "DELETE", path, body: null, attempts: 1 });
+}
+
+/** Görsel yükleme yanıtını okur. */
+export function parseBlogImage(response: RawResponse, path: string): BlogImage {
+  const body: JsonObject = parseObject(response, path);
+  return {
+    path: stringField(body, "path", response, path),
+    sha: stringField(body, "sha", response, path),
+    bytes: numberField(body, "bytes", response, path),
+    width: numberField(body, "width", response, path),
+    height: numberField(body, "height", response, path),
+  };
+}
+
+/** Görseli yazının klasörüne yükler (`data`: WebP'nin base64'ü); sunucu GitHub'a yeni dosya olarak yazar. */
+export async function uploadBlogImage(slug: string, name: string, data: string): Promise<BlogImage> {
+  const path: string = `${blogPostApiPath(slug)}/images/${encodeURIComponent(name)}`;
+  return parseBlogImage(await authorizedSend({ method: "PUT", path, body: { data }, attempts: 1 }), path);
 }

@@ -1,5 +1,6 @@
 // Sitenin yapılandırılmış verisi (schema.org JSON-LD): ana sayfada uygulama (`SoftwareApplication`), onu sunan işletme
-// (`Organization`) ve sık sorulan sorular (`FAQPage`); fiyat sayfasında onun soruları; blog yazılarında `BlogPosting`
+// (`Organization`) ve sık sorulan sorular (`FAQPage`); fiyat sayfasında onun soruları; blog yazılarında `BlogPosting` ve
+// gezinti izi (`BreadcrumbList`)
 // (ön bilgisinden: src/content/blog). Değerler sitenin tek kaynaklarından
 // gelir: ürün adı (config.ts), fiyat, gereksinimler ve sorular (copy.ts),
 // işletme (legal/operator.ts). `<script type="application/ld+json">` veri bloğudur, çalıştırılmaz; CSP onu engellemez.
@@ -164,13 +165,17 @@ function requirements(text: string): Requirements {
   return { operatingSystem, processor };
 }
 
-/** Ana sayfanın JSON-LD belgesi: uygulama, işletme ve sayfadaki sık sorulan sorular (`faq`). Saf fonksiyondur. */
+/**
+ * Ana sayfanın JSON-LD belgesi: uygulama, işletme ve sayfadaki sık sorulan sorular (`faq`). `page` hangi dildeki
+ * gösterimin çizildiğidir (`/` ya da `/fi`): adresler ondan üretilir. Saf fonksiyondur.
+ */
 export function homeStructuredData(
   config: SiteConfig,
   common: CommonCopy,
   meta: PageMeta,
   operator: Operator,
   faq: readonly Faq[],
+  page: "home" | "fi" = "home",
 ): StructuredDataDocument {
   const origin: string = config.siteOrigin;
   const organizationId: string = `${origin}/#organization`;
@@ -183,7 +188,7 @@ export function homeStructuredData(
         "@type": "SoftwareApplication",
         name: productName,
         description: meta.description,
-        url: pageUrl("home", origin),
+        url: pageUrl(page, origin),
         image: `${origin}/og.png`,
         downloadUrl: pageUrl("download", origin),
         applicationCategory: "BusinessApplication",
@@ -196,7 +201,7 @@ export function homeStructuredData(
         publisher: { "@id": organizationId },
       },
       { "@type": "Organization", "@id": organizationId, name: operator.name, url: origin, email: operator.email },
-      faqPageNode(faq, pageUrl("home", origin)),
+      faqPageNode(faq, pageUrl(page, origin)),
     ],
   };
 }
@@ -207,6 +212,14 @@ interface PersonNode {
   readonly name: string;
 }
 
+/** Görsel (paylaşım görseli, boyutlarıyla). */
+interface ImageObjectNode {
+  readonly "@type": "ImageObject";
+  readonly url: string;
+  readonly width: number;
+  readonly height: number;
+}
+
 /** Blog yazısı; yayıncı işletme düğümüne (ana sayfadaki `Organization`) `@id` ile bağlanır. */
 interface BlogPostingNode {
   readonly "@type": "BlogPosting";
@@ -215,7 +228,7 @@ interface BlogPostingNode {
   readonly description: string;
   readonly url: string;
   readonly mainEntityOfPage: string;
-  readonly image: string;
+  readonly image: ImageObjectNode;
   readonly datePublished: string;
   readonly dateModified: string;
   readonly inLanguage: "en";
@@ -223,10 +236,25 @@ interface BlogPostingNode {
   readonly publisher: { readonly "@type": "Organization"; readonly "@id": string; readonly name: string; readonly url: string };
 }
 
-/** Blog yazısı sayfasının JSON-LD belgesi. */
+/** Gezinti izinin bir basamağı (1'den başlar). */
+interface ListItemNode {
+  readonly "@type": "ListItem";
+  readonly position: number;
+  readonly name: string;
+  readonly item: string;
+}
+
+/** Gezinti izi: ana sayfa › blog › yazı. */
+interface BreadcrumbListNode {
+  readonly "@type": "BreadcrumbList";
+  readonly "@id": string;
+  readonly itemListElement: readonly [ListItemNode, ListItemNode, ListItemNode];
+}
+
+/** Blog yazısı sayfasının JSON-LD belgesi: yazı ve gezinti izi. */
 export interface BlogPostingDocument {
   readonly "@context": "https://schema.org";
-  readonly "@graph": readonly [BlogPostingNode];
+  readonly "@graph": readonly [BlogPostingNode, BreadcrumbListNode];
 }
 
 /** Blog yazısının JSON-LD'ye giren bilgileri. */
@@ -237,9 +265,18 @@ export interface BlogPostingInput {
   readonly author: string;
   /** YYYY-AA-GG. */
   readonly published: string;
+  /** Son anlamlı değişiklik (YYYY-AA-GG): `updated`, yoksa `published`. */
+  readonly modified: string;
+  /** Yazının paylaşım görselinin mutlak adresi (`ogImageSize`). */
+  readonly image: string;
+  /** Gezinti izindeki blog basamağının adı. */
+  readonly blogName: string;
 }
 
-/** Blog yazısının JSON-LD belgesi (`BlogPosting`). Saf fonksiyondur. */
+/** Paylaşım görsellerinin boyutu (site kartı public/og.png ve yazıların görselleri). */
+export const ogImageSize = { width: 1200, height: 630 } as const;
+
+/** Blog yazısının JSON-LD belgesi (`BlogPosting` ve `BreadcrumbList`). Saf fonksiyondur. */
 export function blogPostingStructuredData(config: SiteConfig, operator: Operator, post: BlogPostingInput): BlogPostingDocument {
   const origin: string = config.siteOrigin;
   return {
@@ -252,12 +289,21 @@ export function blogPostingStructuredData(config: SiteConfig, operator: Operator
         description: post.description,
         url: post.url,
         mainEntityOfPage: post.url,
-        image: `${origin}/og.png`,
+        image: { "@type": "ImageObject", url: post.image, width: ogImageSize.width, height: ogImageSize.height },
         datePublished: post.published,
-        dateModified: post.published,
+        dateModified: post.modified,
         inLanguage: "en",
         author: { "@type": "Person", name: post.author },
         publisher: { "@type": "Organization", "@id": `${origin}/#organization`, name: operator.name, url: origin },
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": `${post.url}#breadcrumbs`,
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: productName, item: pageUrl("home", origin) },
+          { "@type": "ListItem", position: 2, name: post.blogName, item: pageUrl("blog", origin) },
+          { "@type": "ListItem", position: 3, name: post.title, item: post.url },
+        ],
       },
     ],
   };

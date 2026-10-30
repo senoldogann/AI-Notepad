@@ -15,6 +15,13 @@ export const cardStatementDescriptor: string = "LINK.COM* GISTSMITH.COM";
 /** Tarihlerin ve sayıların yazıldığı yerel ayar (gün ay yıl); sayfalar `<html lang="en">`. */
 export const siteLocale: string = "en-GB";
 
+/**
+ * IndexNow anahtarı (Bing, Yandex, Seznam, Naver…: yeni ve değişen blog yazılarını bildirir; scripts/indexnow.ts).
+ * Anahtarlar tasarım gereği açıktır: arama motoru sahipliği sitenin kökündeki `/<anahtar>.txt` dosyasıyla doğrular
+ * (derlemede bu değerden yazılır, src/pages/[indexNowKey].txt.ts). Değiştirmek için yeni 32 onaltılık karakter yaz.
+ */
+export const indexNowKey: string = "7eda66071a60b65f673c57a6e4e97f08";
+
 /** Derleme hedefi: yerel sunucuya karşı geliştirme ya da yayın. */
 export type WebTarget = "local" | "production";
 

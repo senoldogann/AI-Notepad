@@ -134,19 +134,35 @@ alt istek sınırına takılırdı). Her kayıt `GITHUB_BLOG_BRANCH` dalına bir
 → günlük derleme yayımlar → paylaş (panelde X, LinkedIn, Bluesky); ayrıntı `web/README.md` "Haftalık blog".
 
 - **Kurallar** içerik şemasıyla (`web/src/content.config.ts`) aynıdır: başlık 10–90, açıklama 50–170 karakter, yazar boş
-  değil, `published` gerçek bir `YYYY-MM-DD` günü, `draft` mantıksal, gövde boş değil ve en çok 60 000 karakter, kısa ad
+  değil, `published` gerçek bir `YYYY-MM-DD` günü, `updated` null ya da `published`'dan önce olmayan gerçek bir gün,
+  `cover` null ya da sitenin film ailelerinden biri (`sunset`, `coral`, `ocean`, `mint`, `rose`, `violet`; liste
+  `web/src/lib/film.ts` ile aynı, test denetler), `draft` mantıksal, gövde boş değil ve en çok 60 000 karakter, kısa ad
   `^[a-z0-9]+(-[a-z0-9]+)*$` ve en çok 80 karakter. Başlık, açıklama ve yazarda denetim karakteri (satır sonu dahil)
   olamaz; gövdede `\r` ve sekme/satır sonu dışı denetim karakteri olamaz.
 - **Dosya biçimi** sabittir: `title`, `description`, `author` JSON kaçışlı çift tırnakta (YAML 1.2'de geçerli), ardından
-  `published: YYYY-MM-DD`, `draft: true|false`, boş satır, gövde (baştaki boş satırlar ve sondaki boşluk atılır) ve tek
-  satır sonu. Okurken yalnızca bu beş alan kabul edilir (bilinmeyen alan kayıtta kaybolmasın diye reddedilir); okunamayan
-  dosya `500 blog_post_invalid` (dosya adıyla; site de derlenemez).
+  `published: YYYY-MM-DD`, doluysa `updated: YYYY-MM-DD` ve `cover: <aile>`, `draft: true|false`, boş satır, gövde
+  (baştaki boş satırlar ve sondaki boşluk atılır) ve tek satır sonu. Okurken yalnızca bu yedi alan kabul edilir
+  (`updated` ve `cover` isteğe bağlı; bilinmeyen alan kayıtta kaybolmasın diye reddedilir, yazılmış ama geçersiz isteğe
+  bağlı alan da); okunamayan dosya `500 blog_post_invalid` (dosya adıyla; site de derlenemez).
 - **Sürüm:** güncelleme ve silme panelin açtığı sürümü (`sha`) ister; arada değişmişse hiçbir şey yazılmaz
   (`409 blog_conflict`). Kısa ad yazı varken değişmez (adres sabit kalır).
+- **Görseller:** `web/public/blog/<kısa ad>/<ad>.webp` (sitede `/blog/<kısa ad>/<ad>.webp`). Panel tarayıcıda en çok
+  1600 px genişliğe küçültüp WebP'ye çevirir; sunucu yeniden denetler: ad `^[a-z0-9-]+\.webp$` ve en çok 80 karakter
+  (`400 bad_request`), gövde katı `{data}` standart base64 (`400 invalid_body`), çözülmüş en çok 600 KB
+  (`413 payload_too_large`), RIFF/WEBP imzası ve RIFF boyu dosyayla tutmalı, ilk parça `VP8 `/`VP8L`/`VP8X`
+  (`415 unsupported_media_type`), genişlik 1–1600 px (`400 invalid_body`). Yazı depoda olmalı (`404 not_found`: klasör
+  kısa adla anılır, panel önce kaydettirir); aynı adda görsel varsa `409 blog_image_exists` (görseller değiştirilmez, yeni
+  adla yüklenir). Yazım contents API'yle tek commit'tir (`blog: image <kısa ad>/<ad>`).
+- **Silme** yazıyı ve görsel klasörünü tek commit'te siler (`blog: remove <kısa ad>`): dalın başındaki commit, yazının
+  sürümü ve klasörün dosyaları tek GraphQL isteğiyle aynı commit'ten okunur, silme `createCommitOnBranch` ile beklenen dal
+  başına yapılır. Dal arada başka bir commit'le ilerlerse (yazı aynı kaldıkça) `blog_delete_stale_head` uyarısıyla
+  yeniden okunup 3 kez denenir, sonra `409 blog_conflict`. Klasörde alt klasör varsa `500 blog_post_invalid` (elle
+  temizlenir).
 - **GitHub hataları:** 408, 429, 5xx, ağ hatası ve zaman aşımı `upstream_retry` uyarısıyla 3 kez denenir (10 sn zaman
-  aşımı), sonra `502 upstream_unavailable`; ret (401, 403, 422…) `502 upstream_rejected`. GitHub'ın hata gövdesi
-  `github_request_failed` uyarısında loglanır, jeton loglanmaz. Kayıt ve silme kullanıcı başına dakikada 10'dur
-  (`START_USER_LIMITER`, doğrulamadan sonra). Başarılı yazımlar `blog_post_saved` / `blog_post_deleted` loglanır.
+  aşımı), sonra `502 upstream_unavailable`; ret (401, 403, 422…) `502 upstream_rejected` (GraphQL hataları
+  `github_graphql_failed` uyarısıyla). GitHub'ın hata gövdesi `github_request_failed` uyarısında loglanır, jeton
+  loglanmaz. Kayıt, silme ve görsel yükleme kullanıcı başına dakikada 10'dur (`START_USER_LIMITER`, doğrulamadan sonra).
+  Başarılı yazımlar `blog_post_saved` / `blog_post_deleted` (silinen görsel sayısıyla) / `blog_image_saved` loglanır.
 - **Jeton:** GitHub → Settings → Developer settings → Fine-grained personal access tokens → yalnızca
   `senoldogann/AI-Notepad` deposu, "Repository permissions › Contents: Read and write" (Metadata: Read kendiliğinden gelir);
   başka yetki gerekmez. `npx wrangler secret put GITHUB_BLOG_TOKEN --env production`. Jetonun süresi dolunca blog uçları
@@ -311,10 +327,11 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 | `GET /v1/admin/reports` | Bearer + yönetici | `?kind=&status=&before=<ms>` → `{items: [{id, kind, status, createdAt, userId, email, appVersion, os, summary}], nextBefore}`; sayfa 50, yeniden eskiye, `createdAt` ISO 8601, `nextBefore` ms ya da son sayfada `null` |
 | `GET /v1/admin/reports/{id}` | Bearer + yönetici | `{id, kind, status, createdAt, userId, email, appVersion, os, message, payload}` |
 | `POST /v1/admin/reports/{id}` | Bearer + yönetici | `{status: "open" \| "done"}` → `204` |
-| `GET /v1/admin/blog/posts` | Bearer + yönetici | `{today, posts: [{slug, title, description, author, published, draft, status, sha}]}`: depodaki tüm yazılar, yeniden eskiye (aynı gün başlığa göre); `status` `draft` / `scheduled` (`published` > `today`, UTC) / `live`; `sha` dosyanın GitHub sürümü. Bkz. "Blog yayını" |
+| `GET /v1/admin/blog/posts` | Bearer + yönetici | `{today, posts: [{slug, title, description, author, published, updated, cover, draft, status, sha}]}`: depodaki tüm yazılar, yeniden eskiye (aynı gün başlığa göre); `status` `draft` / `scheduled` (`published` > `today`, UTC) / `live`; `updated` ve `cover` yazılmamışsa `null`; `sha` dosyanın GitHub sürümü. Bkz. "Blog yayını" |
 | `GET /v1/admin/blog/posts/{slug}` | Bearer + yönetici | listedeki alanlar + `body` (Markdown); yoksa `404` |
-| `PUT /v1/admin/blog/posts/{slug}` | Bearer + yönetici | `{title, description, author, published, draft, body, sha}` (katı) → yeni yazıda `201`, güncellemede `200` ve yazının kayıttan sonraki hâli. Yeni yazıda `sha: null` (dosya varsa `409 blog_post_exists`); güncellemede açılan sürüm (dosya değişmiş ya da silinmişse `409 blog_conflict`). Kurallar ve dosya biçimi: "Blog yayını"; ihlal `400 invalid_body`, geçersiz kısa ad `400 bad_request` |
-| `DELETE /v1/admin/blog/posts/{slug}?sha=` | Bearer + yönetici | `204`; yoksa `404`, sürüm uyuşmazsa `409 blog_conflict`, `sha` yoksa `400` |
+| `PUT /v1/admin/blog/posts/{slug}` | Bearer + yönetici | `{title, description, author, published, updated, cover, draft, body, sha}` (katı; `updated` ve `cover` her istekte, yoksa `null`) → yeni yazıda `201`, güncellemede `200` ve yazının kayıttan sonraki hâli. Yeni yazıda `sha: null` (dosya varsa `409 blog_post_exists`); güncellemede açılan sürüm (dosya değişmiş ya da silinmişse `409 blog_conflict`). Kurallar ve dosya biçimi: "Blog yayını"; ihlal `400 invalid_body`, geçersiz kısa ad `400 bad_request` |
+| `DELETE /v1/admin/blog/posts/{slug}?sha=` | Bearer + yönetici | `204`: yazı ve görsel klasörü tek commit'te silinir; yoksa `404`, sürüm uyuşmazsa ya da dal sürekli ilerlerse `409 blog_conflict`, `sha` yoksa `400` |
+| `PUT /v1/admin/blog/posts/{slug}/images/{name}` | Bearer + yönetici | `{data}` (katı; WebP'nin standart base64'ü, en çok 600 KB, genişlik en çok 1600 px) → `201 {path, sha, bytes, width, height}` (`path`: `/blog/<slug>/<name>`). Ad `^[a-z0-9-]+\.webp$` (değilse `400 bad_request`); WebP değilse `415 unsupported_media_type`, büyükse `413 payload_too_large`, genişse `400 invalid_body`; yazı yoksa `404`, ad kullanılmışsa `409 blog_image_exists`. Bkz. "Blog yayını" |
 
 Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir; yönetici olmayan kullanıcının yönetici isteği düz
 `403 forbidden` döner (gövdede kimlik yok).

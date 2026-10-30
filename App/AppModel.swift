@@ -2332,7 +2332,19 @@ final class AppModel {
         #endif
         let history: [ArchiveTurn] = archiveHistory(exchanges: archiveExchanges)
         let id: UUID = UUID()
-        let scoped: [MeetingRecord] = meetings.filter { meetingIDs.contains($0.id) }
+        let scoped: [MeetingRecord]
+        do {
+            scoped = try archiveScope(records: meetings, meetingIDs: meetingIDs)
+        } catch {
+            // Etiketli toplantı silinmişse soru tüm arşive genişletilmez; soru ve neden sohbette görünür.
+            Self.logger.error("Etiketli toplantı bulunamadı, hata: \(String(describing: error), privacy: .private)")
+            archiveExchanges.append(ArchiveExchange(
+                id: id, question: trimmed, scopeMeetingIDs: meetingIDs, scopeTitles: [], recipeTitle: recipeTitle, startedAt: Date(),
+                phase: .failed(userFacingMessage(error: error)), terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: Date(),
+                modelName: nil
+            ))
+            return
+        }
         archiveExchanges.append(ArchiveExchange(
             id: id, question: trimmed, scopeMeetingIDs: scoped.map(\.id), scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
             terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil

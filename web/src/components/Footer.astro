@@ -7,12 +7,18 @@ import { productName } from "../config";
 import { copy, type CommonCopy } from "../copy";
 import { routes } from "../routes";
 
-const text: CommonCopy = copy.common;
+interface Props {
+  /** Alt bilginin metinleri; varsayılan İngilizce (`/fi` Fince geçer). */
+  readonly text?: CommonCopy;
+  /** "Ominaisuudet" bağlantısının hedefi; varsayılan ana sayfanın özellikler bölümü. */
+  readonly featuresHref?: string | undefined;
+}
+const { text = copy.common, featuresHref = `${routes.home}#features` } = Astro.props;
 const columns: readonly { readonly title: string; readonly links: readonly { readonly href: string; readonly label: string }[] }[] = [
   {
     title: text.footer.product,
     links: [
-      { href: `${routes.home}#features`, label: text.nav.features },
+      { href: featuresHref, label: text.nav.features },
       { href: routes.pricing, label: text.nav.pricing },
       { href: routes.download, label: text.nav.download },
     ],

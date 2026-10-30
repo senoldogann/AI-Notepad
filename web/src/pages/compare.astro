@@ -1,6 +1,7 @@
 ---
 // Karşılaştırma dizini: üç ürünün kısa özet tablosu ve her karşılaştırma sayfasına bir kart. Değerler copy.ts `compare`'den.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import ComparisonTable, { type ComparisonColumn } from "../components/ComparisonTable.astro";
 import CtaBand from "../components/CtaBand.astro";
 import Icon from "../components/Icon.astro";
@@ -20,7 +21,7 @@ const columns: readonly ComparisonColumn[] = [
 ];
 ---
 
-<Base page="compare" meta={text.meta} indexed={true}>
+<Base page="compare" meta={text.meta} indexed={true} social={websiteCard}>
   <section class="page compare-intro">
     <p class="eyebrow">{text.eyebrow}</p>
     <h1 class="title-xl">{text.title}</h1>

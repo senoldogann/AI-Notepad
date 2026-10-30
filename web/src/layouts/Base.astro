@@ -1,12 +1,15 @@
 ---
 // Tüm sayfaların iskeleti: başlık ve açıklama, kanonik adres, Open Graph, simgeler, tema betiği, üst çubuk ve alt bilgi.
+// Sayfanın dili (`lang`) ve arayüz metinleri (`common`) sayfadan gelir: `/fi` Fince metinlerle, aynı iskeletle çizilir.
 import "../styles/global.css";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import PullReveal from "../components/PullReveal.astro";
 import { productName } from "../config";
-import { copy, type PageMeta } from "../copy";
-import { blogFeedPath, type SitePage, sitePageKey, sitePagePath } from "../routes";
+import { copy, type CommonCopy, type PageMeta } from "../copy";
+import type { SocialCard } from "../lib/social";
+import { ogImageSize } from "../lib/structured-data";
+import { type PageAlternate, blogFeedPath, type SitePage, pageAlternates, sitePageKey, sitePagePath } from "../routes";
 import { siteConfig } from "../site";
 
 interface Props {
@@ -15,14 +18,27 @@ interface Props {
   readonly meta: PageMeta;
   /** Kişiye özel sayfalar (hesap, yönetim) ve 404 arama motorlarına kapalıdır; kanonik adresleri de verilmez. */
   readonly indexed: boolean;
+  /** Paylaşım kartı: sabit sayfalarda `websiteCard` (public/og.png), blog yazısında kendi görseli ve tarihleri. */
+  readonly social: SocialCard;
+  /** Sayfanın dili (`<html lang>`, `og:locale`); varsayılan İngilizce. */
+  readonly lang?: "en" | "fi";
+  /** Üst çubuk, alt bilgi ve atlama bağlantısının metinleri; varsayılan İngilizce (copy.common). */
+  readonly common?: CommonCopy;
+  /** Üst çubuktaki "Ominaisuudet" bağlantısının hedefi; varsayılan ana sayfanın özellikler bölümü. */
+  readonly featuresHref?: string | undefined;
 }
-const { page, meta, indexed } = Astro.props;
+const { page, meta, indexed, social, lang = "en", common = copy.common, featuresHref } = Astro.props;
 const origin: string = siteConfig.siteOrigin;
 const canonical: string = `${origin}${sitePagePath(page)}`;
+const ogImage: string = social.kind === "article" ? social.image : `${origin}/og.png`;
+const ogImageAlt: string = social.kind === "article" ? social.imageAlt : common.ogImageAlt;
+/** Öbür dildeki sürüm (varsa): `hreflang` bağlantısı. */
+const alternate: PageAlternate | undefined = typeof page === "string" ? pageAlternates[page] : undefined;
+const alternateHref: string | null = alternate === undefined ? null : `${origin}${sitePagePath(alternate.page)}`;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -34,31 +50,45 @@ const canonical: string = `${origin}${sitePagePath(page)}`;
     <title>{meta.title}</title>
     <meta name="description" content={meta.description} />
     {indexed ? <link rel="canonical" href={canonical} /> : <meta name="robots" content="noindex" />}
+    {alternate === undefined || alternateHref === null ? null : <link rel="alternate" hreflang={alternate.lang} href={alternateHref} />}
     <link rel="preload" href="/fonts/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="alternate" type="application/rss+xml" title={copy.blog.feedTitle} href={blogFeedPath} />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={social.kind} />
     <meta property="og:site_name" content={productName} />
     <meta property="og:title" content={meta.title} />
     <meta property="og:description" content={meta.description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={`${origin}/og.png`} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content={copy.common.ogImageAlt} />
-    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content={String(ogImageSize.width)} />
+    <meta property="og:image:height" content={String(ogImageSize.height)} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta property="og:locale" content={lang === "fi" ? "fi_FI" : "en_US"} />
+    {
+      social.kind === "article" && (
+        <>
+          <meta property="article:published_time" content={social.published} />
+          <meta property="article:modified_time" content={social.modified} />
+        </>
+      )
+    }
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={meta.title} />
+    <meta name="twitter:description" content={meta.description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
   </head>
   <body>
-    <a class="skip-link" href="#main">{copy.common.skipLink}</a>
+    <a class="skip-link" href="#main">{common.skipLink}</a>
     {/* Sayfanın kendisi; sonundaki çekmede yukarı kayar ve arkasındaki PullReveal görünür. */}
     <div id="page-shell" class="page-shell">
-      <Header page={sitePageKey(page)} />
+      <Header page={sitePageKey(page)} text={common} featuresHref={featuresHref} />
       <main id="main" tabindex="-1">
         <slot />
       </main>
-      <Footer />
+      <Footer text={common} featuresHref={featuresHref} />
     </div>
     <PullReveal />
   </body>

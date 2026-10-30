@@ -3,9 +3,11 @@
 // simgesi uygulamanın dosyalarından kopyalanır (tek kaynak).
 import { copyFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { satteri } from "@astrojs/markdown-satteri";
 import { defineConfig } from "astro/config";
 import type { AstroIntegration } from "astro";
 import { type SiteConfig, parseWebTarget, siteConfigs } from "./src/config";
+import { blogImagesPlugin } from "./src/lib/blog-images";
 import { pagesHeaders } from "./src/lib/headers";
 
 const config: SiteConfig = siteConfigs[parseWebTarget(process.env["PUBLIC_WEB_TARGET"])];
@@ -46,8 +48,9 @@ export default defineConfig({
       assetsInlineLimit: 0,
     },
   },
-  // Blog yazılarındaki kod blokları renklendirilmez: Shiki satır içi `style` yazar, CSP buna izin vermez.
-  markdown: { syntaxHighlight: false },
+  // Blog yazılarındaki kod blokları renklendirilmez: Shiki satır içi `style` yazar, CSP buna izin vermez. Görsellere
+  // boyut ve tembel yükleme derlemede yazılır (src/lib/blog-images.ts).
+  markdown: { syntaxHighlight: false, processor: satteri({ hastPlugins: [blogImagesPlugin(new URL("./public/", import.meta.url))] }) },
   devToolbar: { enabled: false },
   integrations: [cloudflarePagesFiles(config)],
 });

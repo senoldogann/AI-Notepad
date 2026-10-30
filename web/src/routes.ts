@@ -7,6 +7,7 @@
 /** Sayfa kimlikleri. */
 export type PageKey =
   | "home"
+  | "fi"
   | "pricing"
   | "download"
   | "compare"
@@ -26,6 +27,7 @@ export type PageKey =
 /** Sayfaların yolları. */
 export const routes: Readonly<Record<PageKey, string>> = {
   home: "/",
+  fi: "/fi",
   pricing: "/pricing",
   download: "/download",
   compare: "/compare",
@@ -44,7 +46,25 @@ export const routes: Readonly<Record<PageKey, string>> = {
 };
 
 /** Arama motorlarına açık sayfalar (hesap, yönetim ve 404 kişiye özel ya da içeriksizdir). */
-export const indexedPages: readonly PageKey[] = ["home", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "invite", "contact", "privacy", "terms"];
+export const indexedPages: readonly PageKey[] = ["home", "fi", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "invite", "contact", "privacy", "terms"];
+
+/**
+ * Aynı sayfanın öbür dildeki hâli: `hreflang` bağlantıları, üst çubuktaki dil bağlantısı ve paylaşım kartının dili
+ * bundan üretilir. Yalnızca çevrilmiş sayfaların eşi vardır.
+ */
+export interface PageAlternate {
+  readonly page: PageKey;
+  /** Öbür sürümün dili (`<html lang>` ve `hreflang`). */
+  readonly lang: "en" | "fi";
+  /** Dil bağlantısının metni, öbür sürümün dilinde. */
+  readonly label: string;
+}
+
+/** Sayfaların dil eşleri. */
+export const pageAlternates: Readonly<Partial<Record<PageKey, PageAlternate>>> = {
+  home: { page: "fi", lang: "fi", label: "Suomeksi" },
+  fi: { page: "home", lang: "en", label: "In English" },
+};
 
 /** Önbelleğe alınmayan kişiye özel sayfalar. */
 export const privatePages: readonly PageKey[] = ["account", "admin"];
@@ -63,6 +83,22 @@ export const blogFeedPath: string = `${routes.blog}/rss.xml`;
 /** Blog yazısının yolu: `/blog/<kısa ad>`. Saf fonksiyondur. */
 export function blogPostPath(slug: string): string {
   return `${routes.blog}/${slug}`;
+}
+
+/**
+ * Blog yazısının paylaşım görseli (1200×630 PNG): `/blog/<kısa ad>/og.png`. Derlemeden sonra scripts/make-blog-og.ts
+ * üretir; Open Graph, Twitter, JSON-LD ve RSS bu adresi kullanır. Saf fonksiyondur.
+ */
+export function blogOgImagePath(slug: string): string {
+  return `${blogPostPath(slug)}/og.png`;
+}
+
+/**
+ * Blog yazısının görsellerinin klasörü: `/blog/<kısa ad>/` (depoda `web/public/blog/<kısa ad>/`, panel yükler; yazı
+ * silinince klasör de silinir, server/src/blog.ts). Saf fonksiyondur.
+ */
+export function blogImageFolder(slug: string): string {
+  return `${blogPostPath(slug)}/`;
 }
 
 /** Blog yazısı: sayfa kimliği yerine kısa adıyla anılır (yazılar içerik koleksiyonundan gelir). */

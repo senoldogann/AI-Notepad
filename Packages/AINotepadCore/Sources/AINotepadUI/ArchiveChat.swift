@@ -90,6 +90,12 @@ public func archiveHistory(exchanges: [ArchiveExchange]) -> [ArchiveTurn] {
     }
 }
 
+/// Boş soru alanında ↑ ile düzenlemeye geri getirilen soru: sohbette kullanıcının yazdığı son soru (tariften gelenler
+/// uzun istem olduğu için atlanır); yoksa nil. Saf fonksiyondur.
+public func lastAskedQuestion(exchanges: [ArchiveExchange]) -> String? {
+    exchanges.last { $0.recipeTitle == nil }?.question
+}
+
 /// Ajan çalışırken giriş alanının çerçevesinde dönen ince, tek renk ışık.
 public struct ThinkingRing: View {
     let shape: RoundedRectangle
@@ -267,7 +273,7 @@ private struct AnswerFooter: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 if exchange.phase == .done {
-                    CopyAnswerButton(text: exchange.answer.text)
+                    CopyAnswerButton(answer: exchange.answer)
                     if exchange.recipeTitle == nil {
                         Button {
                             onSaveRecipe(exchange.question)
@@ -599,14 +605,17 @@ private struct SourcesList: View {
     }
 }
 
-/// Cevabı kopyalar; yalnız simge (sohbet uygulamalarındaki gibi), kısa süre onay işareti gösterir.
+/// Cevabı düz metin olarak, altında kaynak başlıklarıyla kopyalar; yalnız simge (sohbet uygulamalarındaki gibi), kısa
+/// süre onay işareti gösterir.
 private struct CopyAnswerButton: View {
-    let text: String
+    let answer: ArchiveAnswer
     @State private var copied: Bool = false
 
     var body: some View {
         Button {
-            copyToPasteboard(text: text)
+            copyToPasteboard(text: archiveAnswerPlainText(
+                answer: answer, sourcesHeading: String(localized: "Kaynaklar"), noteLabel: String(localized: "not"), locale: interfaceLocale()
+            ))
             copied = true
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
@@ -617,8 +626,8 @@ private struct CopyAnswerButton: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.hoverPlain)
-        .hoverHint(copied ? "Kopyalandı" : "Kopyala", alignment: .leading, edge: .bottom)
-        .accessibilityLabel(copied ? "Kopyalandı" : "Kopyala")
+        .hoverHint(copied ? "Kopyalandı" : "Cevabı kopyala", alignment: .leading, edge: .bottom)
+        .accessibilityLabel(copied ? "Kopyalandı" : "Cevabı kopyala")
         .task(id: copied) {
             guard copied else {
                 return
@@ -706,6 +715,7 @@ public struct MentionSuggestions: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
                 .padding(.bottom, 4)
+                .accessibilityAddTraits(.isHeader)
             if candidates.isEmpty {
                 Text("Eşleşen toplantı yok")
                     .appFont(size: 13, weight: .regular)
@@ -713,6 +723,8 @@ public struct MentionSuggestions: View {
                     .padding(10)
             }
             ForEach(Array(candidates.enumerated()), id: \.element.id) { (item: (offset: Int, element: MeetingRecord)) in
+                let title: String = item.element.note?.title ?? item.element.title
+                let date: String = item.element.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(interfaceLocale()))
                 Button {
                     onPick(item.element)
                 } label: {
@@ -720,12 +732,12 @@ public struct MentionSuggestions: View {
                         CoverBackground(seed: item.element.id)
                             .frame(width: 22, height: 22)
                             .clipShape(Circle())
-                        Text(item.element.note?.title ?? item.element.title)
+                        Text(title)
                             .appFont(size: 14, weight: .regular)
                             .foregroundStyle(Theme.ink)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(item.element.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(interfaceLocale())))
+                        Text(date)
                             .appFont(size: 12, weight: .regular)
                             .monospacedDigit()
                             .foregroundStyle(Theme.muted)
@@ -736,8 +748,14 @@ public struct MentionSuggestions: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // VoiceOver satırı tek öğe okur: başlık ve tarih; klavyeyle seçili satır "seçili" duyurulur.
+                .accessibilityLabel(Text(verbatim: "\(title), \(date)"))
+                .accessibilityHint("Soru yalnız bu toplantıya sorulur")
+                .accessibilityAddTraits(item.offset == highlighted ? .isSelected : [])
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Toplantı önerileri")
         .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

@@ -2,6 +2,7 @@
 // İndirme sayfası: indirme düğmesi (sunucu indirmeyi sayıp en son GitHub sürümündeki DMG'ye yönlendirir), sunucudan
 // okunan sürüm numarası ve gereksinimler tek satırda, üç kurulum adımı, güncellemeler ve yardım tek satırda.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Logo from "../components/Logo.astro";
@@ -14,7 +15,7 @@ import { siteConfig } from "../site";
 const text: DownloadCopy = copy.download;
 ---
 
-<Base page="download" meta={text.meta} indexed={true}>
+<Base page="download" meta={text.meta} indexed={true} social={websiteCard}>
   <section class="page download-hero">
     <div class="download-hero__text">
       <h1 class="title-xl">{text.title}</h1>

@@ -2,19 +2,21 @@
 // Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): altı görünüm — genel
 // bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
 // davet özeti), kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
-// işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, önizleme,
-// paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
+// işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, kapak
+// seçici, görsel ekleme, önizleme, sitede açma, paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
 // yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
 // nötr bir yükleme satırı görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
 // "sayfa bulunamadı" görünümü. Panel eklenince sitenin üst çubuğu ve alt bilgisi gizlenir; panel solda menü, üstte
 // görünüm başlığı olan tam ekran bir yönetim kabuğudur.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import Icon from "../components/Icon.astro";
 import Logo from "../components/Logo.astro";
 import NotFound from "../components/NotFound.astro";
 import { productName } from "../config";
 import { type AdminCopy, copy } from "../copy";
+import { type FilmPalette, filmPalettes } from "../lib/film";
 import type { IconName } from "../lib/icons";
 import { routes } from "../routes";
 import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-copy";
@@ -296,7 +298,7 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
 ];
 ---
 
-<Base page="admin" meta={text.meta} indexed={false}>
+<Base page="admin" meta={text.meta} indexed={false} social={websiteCard}>
   <div id="admin-not-found" hidden data-title={copy.notFound.meta.title}>
     <NotFound />
   </div>
@@ -792,12 +794,24 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                   <p id="blog-cadence-latest" class="blog-cadence__latest"></p>
                   <p id="blog-cadence-next" class="kpi__sub small"></p>
                 </div>
-                {/* Liste yüklenince açılır: yeni yazının önerilen tarihi ve yazarı listeden gelir (admin-blog.ts). */}
-                <button id="blog-new" class="button button--primary button--small blog__new" type="button" disabled>
-                  <Icon name="note" size={16} class="" />
-                  {blogText.newPost}
-                </button>
+                <div class="blog__actions">
+                  <a id="blog-open-blog" class="button button--secondary button--small blog__new" href={routes.blog} target="_blank" rel="noopener">
+                    <Icon name="external" size={16} class="" />
+                    {blogText.openBlog}
+                  </a>
+                  {/* Liste yüklenince açılır: yeni yazının önerilen tarihi ve yazarı listeden gelir (admin-blog.ts). */}
+                  <button id="blog-new" class="button button--primary button--small blog__new" type="button" disabled>
+                    <Icon name="note" size={16} class="" />
+                    {blogText.newPost}
+                  </button>
+                </div>
               </div>
+              {/* Yayındaki yazının satırındaki "sitede aç" simge bağlantısı; betik kopyalayıp adresini yazar. */}
+              <template id="blog-open-template">
+                <a class="blog-open" target="_blank" rel="noopener" title={blogText.openOnSite}>
+                  <Icon name="external" size={16} class="" />
+                </a>
+              </template>
               <div class="card table-card">
                 <h2 class="detail__label table-card__title" id="blog-list-title">{blogText.listTitle}</h2>
                 <div class="table-scroll" tabindex="0" role="region" aria-labelledby="blog-list-title">
@@ -817,6 +831,10 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <button id="blog-back" class="button button--secondary button--small" type="button">{blogText.back}</button>
                 <h2 id="blog-editor-title" class="title-m blog-editor__title">{blogText.newTitle}</h2>
                 <div id="blog-editor-status" class="pill-row"></div>
+                <a id="blog-open-post" class="blog-open blog-open--labelled hidden" href={routes.blog} target="_blank" rel="noopener">
+                  <Icon name="external" size={16} class="" />
+                  {blogText.openOnSite}
+                </a>
               </div>
               <p id="blog-editor-notice" class="notice hidden" role="status"></p>
               <div id="blog-share" class="blog-share hidden">
@@ -864,6 +882,23 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                     <p id="blog-published-hint" class="blog-hint">{blogText.publishedHint}</p>
                   </div>
                   <div class="field">
+                    <label for="blog-updated">{blogText.fields.updated}</label>
+                    <input id="blog-updated" class="input input--small" type="date" aria-describedby="blog-updated-hint" />
+                    <p id="blog-updated-hint" class="blog-hint">{blogText.updatedHint}</p>
+                  </div>
+                  <div class="field">
+                    <label for="blog-cover">{blogText.fields.cover}</label>
+                    <div class="blog-cover-picker">
+                      {/* Kapağın küçük önizlemesi: betik aile ve yerleşim sınıflarını yazar (src/lib/film.ts `coverFilm`). */}
+                      <div id="blog-cover-swatch" class="film film--sunset film--clouds-left blog-cover-swatch" aria-hidden="true"></div>
+                      <select id="blog-cover" class="input input--small select" aria-describedby="blog-cover-hint">
+                        <option value="">{blogText.coverAuto}</option>
+                        {filmPalettes.map((palette: FilmPalette) => <option value={palette}>{blogText.paletteNames[palette]}</option>)}
+                      </select>
+                    </div>
+                    <p id="blog-cover-hint" class="blog-hint"></p>
+                  </div>
+                  <div class="field">
                     <label class="blog-toggle" for="blog-draft">
                       <input id="blog-draft" type="checkbox" aria-describedby="blog-draft-hint" />
                       {blogText.fields.draft}
@@ -873,10 +908,60 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 </div>
 
                 <div class="card blog-editor__body">
-                  <div class="segmented" role="group" aria-label={blogText.fields.body}>
-                    <button id="blog-tab-write" class="segmented__button" type="button" aria-pressed="true">{blogText.write}</button>
-                    <button id="blog-tab-preview" class="segmented__button" type="button" aria-pressed="false">{blogText.preview}</button>
+                  <div class="blog-editor__toolbar">
+                    <div class="segmented" role="group" aria-label={blogText.fields.body}>
+                      <button id="blog-tab-write" class="segmented__button" type="button" aria-pressed="true">{blogText.write}</button>
+                      <button id="blog-tab-preview" class="segmented__button" type="button" aria-pressed="false">{blogText.preview}</button>
+                    </div>
+                    <button id="blog-image-open" class="button button--secondary button--small" type="button" aria-expanded="false" aria-controls="blog-image">
+                      <Icon name="image" size={16} class="" />
+                      {blogText.image.add}
+                    </button>
                   </div>
+                  {/* Görsel ekleme: tarayıcıda WebP'ye çevrilir, sunucu yazının klasörüne yükler (admin-blog.ts, admin-blog-image.ts). */}
+                  <section id="blog-image" class="blog-image hidden" aria-labelledby="blog-image-title">
+                    <h3 id="blog-image-title" class="detail__label">{blogText.image.title}</h3>
+                    <p id="blog-image-save-first" class="blog-hint hidden"></p>
+                    <div id="blog-image-form" class="blog-image__grid">
+                      {/* Betik hazırlanan görselin `<img>`'ini buraya ekler; görsel yokken yalnızca simge görünür. */}
+                      <div id="blog-image-preview" class="blog-image__preview">
+                        <Icon name="image" size={28} class="blog-image__placeholder" />
+                      </div>
+                      <div class="blog-image__fields">
+                        <div class="field">
+                          <span class="blog-image__label" aria-hidden="true">{blogText.image.file}</span>
+                          {/* Tarayıcının kendi dosya düğmesi sistem dilinde yazar: gizlenir, etiketi düğme gibi görünür. */}
+                          <div class="blog-image__picker">
+                            <input
+                              id="blog-image-file"
+                              class="visually-hidden"
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              aria-describedby="blog-image-info"
+                            />
+                            <label for="blog-image-file" class="button button--secondary button--small blog-image__choose">{blogText.image.choose}</label>
+                            <span id="blog-image-file-name" class="small muted blog-image__file-name"></span>
+                          </div>
+                          <p id="blog-image-info" class="blog-hint">{blogText.image.fileHint}</p>
+                        </div>
+                        <div class="field">
+                          <label for="blog-image-alt">{blogText.image.alt}</label>
+                          <input id="blog-image-alt" class="input input--small" type="text" autocomplete="off" aria-describedby="blog-image-alt-hint" />
+                          <p id="blog-image-alt-hint" class="blog-hint">{blogText.image.altHint}</p>
+                        </div>
+                        <div class="field">
+                          <label for="blog-image-name">{blogText.image.name}</label>
+                          <input id="blog-image-name" class="input input--small mono" type="text" autocomplete="off" spellcheck="false" aria-describedby="blog-image-path" />
+                          <p id="blog-image-path" class="blog-hint mono"></p>
+                        </div>
+                        <p id="blog-image-notice" class="notice hidden" role="status"></p>
+                        <div class="blog-image__actions">
+                          <button id="blog-image-upload" class="button button--primary button--small" type="button" disabled>{blogText.image.upload}</button>
+                          <button id="blog-image-cancel" class="button button--secondary button--small" type="button">{blogText.image.cancel}</button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
                   <label class="visually-hidden" for="blog-body">{blogText.fields.body}</label>
                   <textarea id="blog-body" class="input blog-body" spellcheck="true"></textarea>
                   <div id="blog-preview" class="prose blog-preview hidden" aria-live="polite"></div>
@@ -1924,6 +2009,175 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     min-height: 40px;
   }
 
+  .blog__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Sitede aç: satırda yalnızca simge, düzenleyicide simge ve metin. */
+  :global(.blog-open) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  :global(.blog-open:hover) {
+    background: var(--soft);
+    color: var(--ink);
+  }
+
+  .blog-open--labelled {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+
+  .blog-table :global(.blog-row__meta) {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .blog-cover-picker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  /* Kapağın küçük önizlemesi: paylaşım görseliyle aynı oran. */
+  .blog-cover-swatch {
+    flex: 0 0 auto;
+    width: 76px;
+    aspect-ratio: 1200 / 630;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  }
+
+  .blog-cover-picker .select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .blog-editor__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .blog-image {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    background: var(--soft);
+  }
+
+  .blog-image__grid {
+    display: grid;
+    grid-template-columns: 168px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .blog-image__preview {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-s);
+    background: var(--card);
+    color: var(--muted);
+  }
+
+  .blog-image__preview :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .blog-image__preview:has(img) :global(.blog-image__placeholder) {
+    display: none;
+  }
+
+  .blog-image__fields {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .blog-image__fields .field {
+    gap: 6px;
+  }
+
+  .blog-image__fields label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .blog-image__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .blog-image__picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    min-width: 0;
+  }
+
+  .blog-image__fields label.blog-image__choose {
+    color: var(--ink);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  /* Klavyeyle gizli dosya alanına gelince görünen düğme odak halkası alır. */
+  .blog-image__picker input:focus-visible + .blog-image__choose {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .blog-image__file-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Bölüm görünür alana kaydırılınca yapışkan üst çubuğun altında kalmaz. */
+  #blog-image {
+    scroll-margin-top: 112px;
+  }
+
+  .blog-image__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  @media (max-width: 560px) {
+    .blog-image__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   /* Başlık sütunu satıra sarar (uzun başlık tabloyu genişletmesin). */
   .blog-table :global(td:first-child) {
     min-width: 16rem;
@@ -2052,15 +2306,46 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   }
 
   /* Izgara öğesi içeriğine göre genişlemez: tablo ve kod bloğu kendi kutularında yatay kayar. */
+  /* Önizleme kendi içinde kayar: uzun yazı sayfayı aşağı uzatmaz (yükseklik yazma alanıyla aynı ölçekte). */
   .blog-preview {
     min-width: 0;
     min-height: 520px;
-    padding: 4px 2px;
+    max-height: min(720px, 72vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 10px 4px 2px;
     overflow-wrap: anywhere;
   }
 
+  /* Sitedeki yazı kapağının küçük hali (components/BlogCover.astro): gradyan ve başlık, ölçüler kapak genişliğine göre. */
+  .blog-preview :global(.blog-preview__cover) {
+    container-type: inline-size;
+    display: flex;
+    align-items: flex-start;
+    aspect-ratio: 1200 / 630;
+    margin-bottom: 18px;
+    padding: 6.4cqi 7cqi;
+    border-radius: 18px;
+  }
+
+  .blog-preview :global(.blog-preview__cover-title) {
+    max-width: 88%;
+    margin: 0;
+    color: #0a0a0a;
+    font-size: 6.6cqi;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+
   .blog-preview :global(img) {
+    display: block;
     max-width: 100%;
+    height: auto;
+    margin: 8px auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
   }
 
   .blog-preview :global(pre) {

@@ -1,0 +1,99 @@
+---
+// Blog yazısının kapağı: durgun pastel film gradyanı (aile ve yerleşim `post.cover`), başlık ve yazının kısa adından
+// sabit kapak ses dalgası. Ölçüler kapağın genişliğine göredir (`cqi`): yazı sayfasının başı, dizin kartı ve paylaşım
+// görseli (scripts/make-blog-og.ts bu öğeyi 1200 px genişlikte çizer) aynı görünür. Başlık öğesini sayfa verir (slot):
+// yazı sayfasında `h1`, kartta süs (`aria-hidden`) olarak tekrarlanan metin. `data-og-cover` paylaşım görselinin
+// kaynağını işaretler.
+import Film from "./Film.astro";
+import Waveform from "./Waveform.astro";
+import { type BlogPost, coverTitleSize } from "../lib/blog";
+
+interface Props {
+  readonly post: BlogPost;
+  readonly class: string;
+}
+const { post, class: extraClass } = Astro.props;
+---
+
+<div class:list={["blog-cover", `blog-cover--${coverTitleSize(post.title)}`, extraClass]} data-og-cover={post.slug}>
+  <Film palette={post.cover.palette} layout={post.cover.layout} class="blog-cover__film">
+    <div class="blog-cover__body">
+      <slot />
+    </div>
+    <Waveform seed={post.slug} width={240} height={56} class="blog-cover__wave" />
+  </Film>
+</div>
+
+<style>
+  /* Kapak kendi genişliğinin kabıdır: içindeki ölçüler `cqi` ile ölçeklenir. */
+  .blog-cover {
+    container-type: inline-size;
+    min-width: 0;
+  }
+
+  .blog-cover :global(.blog-cover__film) {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 4cqi;
+    aspect-ratio: 1200 / 630;
+    padding: 6.4cqi 7cqi 5.6cqi;
+    border-radius: clamp(14px, 2.6cqi, 28px);
+  }
+
+  .blog-cover__body {
+    display: grid;
+    align-content: start;
+    gap: 3.2cqi;
+    min-height: 0;
+  }
+
+  .blog-cover :global(.blog-cover__title) {
+    max-width: 88%;
+    margin: 0;
+    color: #0a0a0a;
+    font-size: 6.6cqi;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+
+  .blog-cover--medium :global(.blog-cover__title) {
+    font-size: 5.7cqi;
+  }
+
+  .blog-cover--small :global(.blog-cover__title) {
+    font-size: 4.9cqi;
+    line-height: 1.07;
+  }
+
+  .blog-cover :global(.blog-cover__wave) {
+    width: 20cqi;
+    height: auto;
+  }
+
+  /* Dar kapakta (telefon) daha yüksek oran ve daha büyük yazı: başlık okunur kalır. */
+  @container (max-width: 360px) {
+    .blog-cover :global(.blog-cover__film) {
+      aspect-ratio: 5 / 4;
+      padding: 8cqi 8cqi 7cqi;
+    }
+
+    .blog-cover :global(.blog-cover__title) {
+      max-width: 100%;
+      font-size: 9.4cqi;
+    }
+
+    .blog-cover--medium :global(.blog-cover__title) {
+      font-size: 8.2cqi;
+    }
+
+    .blog-cover--small :global(.blog-cover__title) {
+      font-size: 7.2cqi;
+    }
+
+    .blog-cover :global(.blog-cover__wave) {
+      width: 30cqi;
+    }
+  }
+</style>
