@@ -4,6 +4,7 @@ import { type ElevenLabsUsage, elevenLabsUsage } from "./elevenLabsCapacity";
 import { subscriptionRenewalGraceMs } from "./entitlements";
 import { ApiError } from "./errors";
 import { log } from "./log";
+import { freeInviteMonthSql } from "./referrals";
 import { utcDayStartMs } from "./reports";
 import type { TrialRefusalReason } from "./trialRefusals";
 import { dayKey, monthKey, monthStartMs } from "./usage";
@@ -47,7 +48,10 @@ export interface AdminStats {
     readonly grace: number;
     readonly ending: number;
     readonly canceledTotal: number;
-    /** Yenilenecek ödenmiş abonelikler plan başına (`active` − `ending`; planı tanınmayanlar ikisine de girmez). */
+    /**
+     * Yenilenecek ödenmiş abonelikler plan başına: `active` − `ending` − ücretsiz ilk aydaki davetli aylıklar
+     * (`freeInviteMonth`); planı tanınmayanlar hiçbirine girmez.
+     */
     readonly monthly: number;
     readonly yearly: number;
     readonly mrrUsd: number;
@@ -110,12 +114,29 @@ export interface ChurnStats {
   readonly duplicateSubscriptions: number;
 }
 
+/** Neden başına düşen davet sayısı (`capped`: yıllık ödül sınırı). */
+export interface ReferralVoidCount {
+  readonly reason: string;
+  readonly count: number;
+}
+
 /**
  * Davet programı (`referral_redemptions`; silinen hesapların anonim satırları dahil): `joined` kodla abone olan (ilk
  * faturası ödenmiş), `pending` ödülü bekleyen (`joined`, `qualified`), `granted` verilen ödül, `voided` verilmeyen
- * (iade, itiraz, kendi kendini davet, davet eden silindi ya da yıllık sınır).
+ * (`void` ve yıllık sınıra takılan `capped`) ve bunların nedene göre dökümü (`voidedByReason`, çoktan aza: iade,
+ * itiraz, kendi kendini davet, kart yeniden kullanımı, davet edenin kartı, ödemeden iptal, davet eden silindi, ücretsiz
+ * erişimli davet eden, yıllık sınır).
  */
 export interface ReferralStats {
+  readonly joined: number;
+  readonly pending: number;
+  readonly granted: number;
+  readonly voided: number;
+  readonly voidedByReason: readonly ReferralVoidCount[];
+}
+
+/** Davet sayaç satırı. */
+interface ReferralCountsRow {
   readonly joined: number;
   readonly pending: number;
   readonly granted: number;
@@ -204,19 +225,12 @@ function roundCents(value: number): number {
  * `active`/`trialing` dönem sonuna dek (yenilenecekse + `subscriptionRenewalGraceMs`, bkz. `paidAccessEndsAtMs`),
  * `past_due` `past_due_since` + ek süreye dek. Bağlar: ?1 = şimdi, ?2 = ek süre (ms).
  */
-const activeAccessSql: string = `s.status IN ('active', 'trialing') AND (CASE WHEN s.cancel_at IS NULL OR s.cancel_at > s.current_period_end
+export const activeAccessSql: string = `s.status IN ('active', 'trialing') AND (CASE WHEN s.cancel_at IS NULL OR s.cancel_at > s.current_period_end
   THEN s.current_period_end + ${subscriptionRenewalGraceMs} ELSE s.current_period_end END) > ?1`;
 const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 > ?1";
 
 /** Stripe'tan faturalanan (ücretsiz erişim olmayan) abonelik satırı için SQL koşulu (`subscriptions s`). */
 const billedSubscriptionSql: string = "s.complimentary = 0";
-
-/**
- * Abonelik (`s`) davetle açılmış ve ilk ücretli faturası henüz ödenmemiş mi (davet indirimiyle ücretsiz ilk ay): davet
- * satırı `joined` ve uygun fatura yok. Ödül, iade ya da itirazla satır başka duruma geçince bu koşul düşer.
- */
-const freeInviteMonthSql: string =
-  "EXISTS (SELECT 1 FROM referral_redemptions r WHERE r.stripe_subscription_id = s.stripe_subscription_id AND r.status = 'joined' AND r.qualifying_invoice_id IS NULL)";
 
 interface SubscriptionCounts {
   readonly active: number;
@@ -367,6 +381,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
     refusalRows,
     refusalTodayRows,
     referralRow,
+    referralVoidRows,
   ] = await Promise.all([
     db.prepare("SELECT COALESCE(SUM(count), 0) AS value FROM downloads").first<{ value: number }>(),
     db.prepare("SELECT day, count AS value FROM downloads WHERE day >= ?").bind(firstDay).all<DayValueRow>(),
@@ -486,7 +501,13 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
            COALESCE(SUM(CASE WHEN status IN ('void', 'capped') THEN 1 ELSE 0 END), 0) AS voided
          FROM referral_redemptions`,
       )
-      .first<ReferralStats>(),
+      .first<ReferralCountsRow>(),
+    db
+      .prepare(
+        `SELECT CASE WHEN status = 'capped' THEN 'capped' ELSE COALESCE(void_reason, '') END AS key, COUNT(*) AS count
+         FROM referral_redemptions WHERE status IN ('void', 'capped') GROUP BY key ORDER BY count DESC, key`,
+      )
+      .all<KeyCountRow>(),
   ]);
 
   const downloadsByDay: number[] = valuesByDay(days, dayMap(downloadRows.results));
@@ -523,7 +544,13 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       complimentary: subscriptions.complimentary,
       freeInviteMonth: subscriptions.freeInviteMonth,
     },
-    referrals: referralRow ?? { joined: 0, pending: 0, granted: 0, voided: 0 },
+    referrals: {
+      joined: referralRow?.joined ?? 0,
+      pending: referralRow?.pending ?? 0,
+      granted: referralRow?.granted ?? 0,
+      voided: referralRow?.voided ?? 0,
+      voidedByReason: referralVoidRows.results.map((row: KeyCountRow): ReferralVoidCount => ({ reason: row.key, count: row.count })),
+    },
     meetings: {
       last30Days: days.map(
         (day: string, index: number): DayMeetings => ({ day, trial: trialByDay[index] ?? 0, subscription: subscriptionByDay[index] ?? 0 }),

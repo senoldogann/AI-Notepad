@@ -5,6 +5,7 @@ import { appleIssuer, appleJwksUrl } from "../src/auth/apple";
 import { googleJwksUrl } from "../src/auth/google";
 import { jwksCacheTtlMs, jwksStaleMaxMs } from "../src/auth/identityToken";
 import { refreshRetryWindowMs } from "../src/auth/tokens";
+import { cleanupExpiredRows, scheduledCleanupLimits } from "../src/cleanup";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import {
   type AppleTokenFields,
@@ -356,6 +357,27 @@ describe("yenileme jetonu ve çıkış", () => {
     // Gerçek istemci halefini sunar: sessizce reddedilmez, tüm aile düşer (saldırganın oturumu dahil).
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: legit.refreshToken } })), 401, "invalid_token");
     await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: attacker.refreshToken } })), 401, "invalid_token");
+  });
+
+  it("günlük temizlik geçersiz yazılmış halefi silmez: saldırgan yeni jetonu kullandıktan sonra gelen gerçek halef aileyi düşürür", async () => {
+    const harness: Harness = await defaultHarness();
+    const first: Session = await signIn(harness);
+    const legit: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 5 * 60_000;
+    // Çalınan eski jeton süre içinde sunulur: gerçek halef geçersiz yazılır, saldırgan yeni çift alır ve onu kullanır.
+    const attacker: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: first.refreshToken } }))).json<Session>();
+    harness.clock.nowMs += 60_000;
+    const attackerNext: Session = await (await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: attacker.refreshToken } }))).json<Session>();
+    // Gece temizliği (Mac uykudayken).
+    harness.clock.nowMs += 6 * 3_600_000;
+    await cleanupExpiredRows(env.DB, new Date(harness.clock.nowMs), scheduledCleanupLimits);
+    // Gerçek istemci halefini sunar: sessiz geçersiz jeton değil, tüm aile düşer ve neden yazılır.
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: legit.refreshToken } })), 401, "invalid_token");
+    const family = await env.DB.prepare("SELECT revoked_at, revoke_reason FROM refresh_families WHERE user_id = ?")
+      .bind(first.userId)
+      .first<{ revoked_at: number | null; revoke_reason: string | null }>();
+    expect(family).toEqual({ revoked_at: harness.clock.nowMs, revoke_reason: "refresh_superseded_reuse" });
+    await expectError(await harness.call(req("POST", "/v1/auth/refresh", { json: { refreshToken: attackerNext.refreshToken } })), 401, "invalid_token");
   });
 
   it("yeniden denemede verilen halef kullanıldıktan sonra ilk jeton süre içinde yeniden gelirse aile düşer", async () => {

@@ -596,8 +596,10 @@ export interface ReprocessedMeeting {
  * yapay zekâ bütçesi böylece en çok ilk bütçe + `maxMeetingReprocesses` × pay olur. Yeni deneme, başlatma ya da
  * toplantı süresi düşmez. Ek süre içinde ses henüz yazılmamışsa toplantı zaten açıktır (hak harcanmaz); ses yazılmışsa
  * kayıt yeniden yükleneceği için hak harcanır ve ses sınırı açılır. Abonelik erişimi ya da kalan denemesi olmayan hesap yalnızca toplantının bitişinden sonraki
- * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı (deneme
- * toplantısında deneme tavanı da) doluysa (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan 503.
+ * 7 gün içinde yeniden işleyebilir (`mayReprocess`; sonra `subscription_required`). Günlük harcama tavanı doluysa
+ * (yapay zekâ çağrıları zaten reddedilir) hak harcanmadan `503 spend_ceiling_reached`; deneme toplantısında deneme
+ * tavanı doluysa ya da ElevenLabs kullanımı deneme durağını (`elevenLabsTrialStopRatio`) geçtiyse hak harcanmadan
+ * `503 trial_capacity_reached`.
  * En çok `maxMeetingReprocesses` kez; aşılırsa `reprocess_limit_reached`. Başkasının ya da olmayan toplantı
  * `not_found`. Sayaç tek koşullu ifadeyle artar (eşzamanlı istekler sınırı aşamaz).
  */
@@ -620,9 +622,11 @@ export async function reprocessMeeting(db: D1Database, config: Config, userId: s
   if (!mayReprocess(hasAccess, endMs, nowMs, reprocessWithoutAccessMs)) {
     throw new ApiError("subscription_required", "Aboneliğin ya da denemen olmadığı için bir haftadan eski toplantı yeniden işlenemez; abone olunca işlenebilir.");
   }
-  // Deneme toplantısının yeniden işlenmesi deneme harcaması açar: deneme tavanı doluysa hak harcanmadan 503.
+  // Deneme toplantısının yeniden işlenmesi deneme harcaması açar: deneme tavanı doluysa ya da ElevenLabs kullanımı
+  // deneme durağını geçtiyse (yeni deneme toplantısıyla aynı kural) hak harcanmadan 503.
   if (row.kind === "trial") {
     await requireTrialSpendHeadroom(db, config, now);
+    await requireElevenLabsTrialHeadroom(db, config, now);
   }
   await requireSpendHeadroom(db, config, now);
   const until: number = nowMs + config.meetingGraceMs;

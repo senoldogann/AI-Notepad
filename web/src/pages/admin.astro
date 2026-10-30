@@ -1,7 +1,7 @@
 ---
 // Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): beş görünüm — genel
-// bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri),
-// kullanıcılar (liste, bırakma kesimleri ve ayrıntı), işletim (açık toplantılar, takılı
+// bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
+// davet özeti), kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
 // işler, Stripe olayları, son çökmeler) ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
 // yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
@@ -16,8 +16,10 @@ import { productName } from "../config";
 import { type AdminCopy, copy } from "../copy";
 import type { IconName } from "../lib/icons";
 import { routes } from "../routes";
+import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-copy";
 
 const text: AdminCopy = copy.admin;
+const inviteText: AdminInviteCopy = adminInviteCopy;
 
 /** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
 interface KpiSpec {
@@ -125,6 +127,7 @@ const planSegments: readonly SegmentOption[] = [
   { value: "canceled", label: text.users.segments.canceled },
   { value: "trial", label: text.users.segments.trial },
   { value: "free", label: text.users.segments.free },
+  { value: "invited", label: inviteText.segment },
 ];
 
 /** Bırakma kesimleri: kullanıcının nerede durduğu ya da neyin ters gittiği. */
@@ -208,7 +211,7 @@ const funnelColumns: readonly Column[] = [
   numberColumn(text.insights.funnelColumns.lost),
 ];
 
-/** Sayı tablosu kartları: indirme düğmeleri, yönlendiren siteler, iptal nedenleri. */
+/** Sayı tablosu kartları: indirme düğmeleri ve yönlendiren siteler (iptal nedenleri tablosu neden satırıyla birlikte aşağıda ayrıca çizilir). */
 const countTables: readonly { readonly id: string; readonly title: string; readonly columns: readonly Column[]; readonly empty: string; readonly note: string | null }[] = [
   {
     id: "insights-sources",
@@ -239,6 +242,36 @@ const userMeters: readonly { readonly id: string; readonly label: string }[] = [
 ];
 
 /** Kullanıcı ayrıntısının alanları (betik `user-field-<id>` doldurur). */
+/** İçgörülerdeki davet özeti tablosu (betik `insights-invites-rows` doldurur). */
+const inviteSummaryColumns: readonly Column[] = [textColumn(inviteText.insightsColumns.measure), numberColumn(inviteText.insightsColumns.count)];
+
+/** Kullanıcı ayrıntısındaki "Invited by" alanları (betik `user-invite-field-<id>` doldurur). */
+const invitedByFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
+  { id: "referrer", label: inviteText.invitedByFields.referrer, mono: false },
+  { id: "code", label: inviteText.invitedByFields.code, mono: true },
+  { id: "status", label: inviteText.invitedByFields.status, mono: false },
+  { id: "free-month", label: inviteText.invitedByFields.freeMonth, mono: false },
+  { id: "card", label: inviteText.invitedByFields.card, mono: false },
+  { id: "dates", label: inviteText.invitedByFields.dates, mono: false },
+];
+
+/** Kullanıcı ayrıntısındaki "Invites" alanları (betik `user-invites-field-<id>` doldurur). */
+const invitesFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
+  { id: "code", label: inviteText.invitesFields.code, mono: true },
+  { id: "counts", label: inviteText.invitesFields.counts, mono: false },
+  { id: "next", label: inviteText.invitesFields.nextReward, mono: false },
+  { id: "left", label: inviteText.invitesFields.rewardsLeft, mono: false },
+];
+
+/** Davet edilen arkadaşlar tablosu (betik `user-invite-friends` doldurur). */
+const inviteFriendColumns: readonly Column[] = [
+  textColumn(inviteText.friendColumns.friend),
+  textColumn(inviteText.friendColumns.status),
+  textColumn(inviteText.friendColumns.joined),
+  textColumn(inviteText.friendColumns.firstPayment),
+  textColumn(inviteText.friendColumns.reward),
+];
+
 const userFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
   { id: "provider", label: text.users.fields.provider, mono: false },
   { id: "created", label: text.users.fields.created, mono: false },
@@ -431,6 +464,25 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                 <ul id="insights-cancellations" class="link-list"></ul>
                 <p id="insights-cancellations-empty" class="muted hidden">{text.insights.noCancellations}</p>
               </section>
+
+              <section class="card table-card" aria-labelledby="insights-invites-title">
+                <h2 class="detail__label table-card__title" id="insights-invites-title">{inviteText.insightsTitle}</h2>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-invites-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{inviteSummaryColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
+                    </thead>
+                    <tbody id="insights-invites-rows"></tbody>
+                  </table>
+                </div>
+                <p id="insights-invites-voided" class="small muted table-note"></p>
+              </section>
+
+              <section class="card user-card" aria-labelledby="insights-referrers-top-title">
+                <h2 class="detail__label" id="insights-referrers-top-title">{inviteText.topReferrersTitle}</h2>
+                <ul id="insights-referrers-top" class="link-list"></ul>
+                <p id="insights-referrers-top-empty" class="muted hidden">{inviteText.noReferrers}</p>
+              </section>
             </div>
           </div>
 
@@ -535,6 +587,44 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                   </div>
                 </div>
               </div>
+
+              {/* Davet: kullandığı davet ve davetleri (tam genişlik kartlar); yoksa betik gizler (admin-users.ts). */}
+              <section id="user-invited-by" class="card user-card hidden" aria-labelledby="user-invited-by-title">
+                <h3 class="detail__label" id="user-invited-by-title">{inviteText.invitedByTitle}</h3>
+                <dl class="detail__fields">
+                  {
+                    invitedByFields.map((field) => (
+                      <div>
+                        <dt>{field.label}</dt>
+                        <dd id={`user-invite-field-${field.id}`} class:list={{ mono: field.mono }} />
+                      </div>
+                    ))
+                  }
+                </dl>
+              </section>
+              <section id="user-invites" class="card user-card hidden" aria-labelledby="user-invites-title">
+                <h3 class="detail__label" id="user-invites-title">{inviteText.invitesTitle}</h3>
+                <dl class="detail__fields">
+                  {
+                    invitesFields.map((field) => (
+                      <div>
+                        <dt>{field.label}</dt>
+                        <dd id={`user-invites-field-${field.id}`} class:list={{ mono: field.mono }} />
+                      </div>
+                    ))
+                  }
+                </dl>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="user-invites-title">
+                  <table class="data-table">
+                    <thead>
+                      <tr>{inviteFriendColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
+                    </thead>
+                    <tbody id="user-invite-friends"></tbody>
+                  </table>
+                </div>
+                <p id="user-invite-friends-empty" class="muted table-empty hidden">{inviteText.noFriends}</p>
+                <p class="small muted">{inviteText.friendsNote}</p>
+              </section>
 
               <div class="card table-card">
                 <h3 class="detail__label table-card__title">{text.users.meetingsTitle}</h3>

@@ -13,6 +13,7 @@ import {
 } from "./entitlements";
 import { ApiError } from "./errors";
 import { parseWithSchema } from "./http";
+import { type ReferralStatus, type ReferrerCounts, freeInviteMonthSql, referralRewardsPerYear, referrerCounts } from "./referrals";
 import { type MonthlyUsage, monthKey, monthStartMs, monthlyUsage } from "./usage";
 
 /**
@@ -30,6 +31,9 @@ export const adminUserMeetingLimit: number = 100;
 /** Ayrıntıdaki en çok rapor (yeniden eskiye). */
 export const adminUserReportLimit: number = 20;
 
+/** Ayrıntıdaki en çok davet edilen arkadaş (yeniden eskiye). */
+export const adminUserInviteLimit: number = 50;
+
 /** Etkin sayılmak için son toplantının geriye bakış süresi (`inactive` kesimi). */
 export const inactiveAfterMs: number = 7 * 86_400_000;
 
@@ -40,8 +44,20 @@ export const inactiveAfterMs: number = 7 * 86_400_000;
  * - `trial_ended`: denemesi bitmiş (toplantıları harcanmış ya da süresi dolmuş), ödemesi tamamlanmış aboneliği yok;
  * - `inactive`: en az bir toplantısı var ama son `inactiveAfterMs` içinde toplantı başlatmamış;
  * - `failed`: en az bir toplantısında istek başarısız olmuş (`meeting_sessions.failure_count`).
+ * Davet kesimi: `invited` davet koduyla abone olmuş (davet satırına katılmış, `joined_at` dolu).
+ * Biten ücretsiz erişimin (`complimentary.ts`) satırı plan kesimlerinde abonelik sayılmaz (`free`, `trial_ended`).
  */
-export type AdminUserSegment = "subscribed" | "past_due" | "canceled" | "trial" | "free" | "no_meeting" | "trial_ended" | "inactive" | "failed";
+export type AdminUserSegment =
+  | "subscribed"
+  | "past_due"
+  | "canceled"
+  | "trial"
+  | "free"
+  | "invited"
+  | "no_meeting"
+  | "trial_ended"
+  | "inactive"
+  | "failed";
 
 /** Giriş sağlayıcısı. */
 export type AdminUserProvider = "apple" | "google";
@@ -79,6 +95,12 @@ export interface AdminSubscription {
   readonly updatedAt: string;
 }
 
+/**
+ * Listedeki davet rozeti: davet koduyla abone oldu (`invited`) ya da şu an davetin ücretsiz ilk ayında
+ * (`free_month`: istatistikteki `freeInviteMonth` ile aynı tanım, erişimi süren faturalı aylık abonelik).
+ */
+export type AdminInviteBadge = "invited" | "free_month";
+
 /** Hesabın deneme durumu. */
 export interface AdminTrial {
   readonly used: number;
@@ -102,6 +124,8 @@ export interface AdminUserSummary {
   /** İsteği başarısız olmuş toplantı sayısı ve en son hatanın kodu (yoksa 0 ve null). */
   readonly failedMeetings: number;
   readonly lastFailureCode: string | null;
+  /** Davetle abone olduysa rozeti; olmadıysa null. */
+  readonly invite: AdminInviteBadge | null;
 }
 
 /** Liste sayfası; `nextCursor` sonraki sayfanın `cursor` değeri, son sayfada null. */
@@ -169,7 +193,11 @@ export interface AdminUserUsage {
   readonly accountTokenCap: number;
 }
 
-/** Zaman çizelgesi olayı: hesap, deneme ve abonelik satırındaki zaman damgalarından türetilir (geçmiş tutulmaz). */
+/**
+ * Zaman çizelgesi olayı: hesap, deneme, abonelik ve davet satırlarındaki zaman damgalarından türetilir (geçmiş tutulmaz).
+ * Davet edilen tarafı: kod Checkout'a götürüldü, katıldı (ilk fatura), ilk ücretli ödeme, davet edenin ödül tarihi,
+ * davet edene ödül verildi, davet düştü. Davet eden tarafı: arkadaş katıldı, arkadaş için ödül alındı.
+ */
 export type AdminTimelineKind =
   | "account_created"
   | "trial_started"
@@ -178,13 +206,75 @@ export type AdminTimelineKind =
   | "subscription_updated"
   | "subscription_past_due"
   | "subscription_cancel_at"
-  | "subscription_period_end";
+  | "subscription_period_end"
+  | "invite_checkout"
+  | "invite_joined"
+  | "invite_first_payment"
+  | "invite_reward_due"
+  | "invite_rewarded"
+  | "invite_voided"
+  | "invite_friend_joined"
+  | "invite_friend_rewarded";
 
-/** Zaman çizelgesi satırı; `detail` abonelik olaylarında durumdur (yoksa null). */
+/**
+ * Zaman çizelgesi satırı; `detail` abonelik olaylarında durum, `invite_voided`'da düşme nedeni (yıllık sınırda
+ * `capped`), arkadaş olaylarında arkadaşın hesap kimliği (hesabını silmişse null); diğerlerinde null.
+ */
 export interface AdminTimelineEntry {
   readonly kind: AdminTimelineKind;
   readonly at: string;
   readonly detail: string | null;
+}
+
+/** Hesabın kullandığı davet (davet edilen tarafı). Zamanlar ISO 8601. */
+export interface AdminInvitedBy {
+  /** Davet edenin hesabı; hesabını silmişse null. */
+  readonly referrerUserId: string | null;
+  readonly code: string;
+  readonly status: ReferralStatus;
+  /** Düşme nedeni (`void`); yoksa null. */
+  readonly voidReason: string | null;
+  /** Şu an davetin ücretsiz ilk ayında mı (listedeki `free_month` rozetiyle aynı). */
+  readonly inFreeMonth: boolean;
+  /** Katılımda kartın parmak izi özeti yazıldı mı (kart denetimi yapıldı); katılmamış ya da kartsız ödemede false. */
+  readonly cardChecked: boolean;
+  readonly createdAt: string;
+  readonly joinedAt: string | null;
+  /** İlk ücretli faturanın ödendiği an. */
+  readonly qualifiedAt: string | null;
+  readonly rewardDueAt: string | null;
+  readonly rewardedAt: string | null;
+  readonly updatedAt: string;
+}
+
+/** Hesabın davet ettiği arkadaş (davet eden tarafı). Zamanlar ISO 8601. */
+export interface AdminInviteFriend {
+  /** Arkadaşın hesabı; hesabını silmişse null. */
+  readonly userId: string | null;
+  readonly status: ReferralStatus;
+  readonly voidReason: string | null;
+  readonly createdAt: string;
+  readonly joinedAt: string | null;
+  readonly qualifiedAt: string | null;
+  readonly rewardDueAt: string | null;
+  readonly rewardedAt: string | null;
+  readonly updatedAt: string;
+}
+
+/** Hesabın davetleri (davet eden tarafı; sayaçlar `GET /v1/referral` ile aynı tanımdır, `referrerCounts`). */
+export interface AdminInvites {
+  /** Davet kodu; hiç üretilmemişse (ya da hesap kod paylaşamıyorsa ve önceden üretilmemişse) null. */
+  readonly code: string | null;
+  readonly joined: number;
+  readonly pending: number;
+  readonly rewarded: number;
+  readonly voided: number;
+  readonly rewardsLeftThisYear: number;
+  readonly rewardsPerYear: number;
+  /** En yakın tahmini ödül anı; bekleyen ödül yoksa null. */
+  readonly nextRewardAt: string | null;
+  /** Arkadaşlar (yeniden eskiye, en çok `adminUserInviteLimit`; Checkout'ta kalanlar dahil). */
+  readonly friends: readonly AdminInviteFriend[];
 }
 
 /** `GET /v1/admin/users/{id}` yanıtı. */
@@ -199,10 +289,14 @@ export interface AdminUserDetail {
   readonly usage: AdminUserUsage;
   readonly meetings: readonly AdminMeeting[];
   readonly reports: readonly AdminUserReport[];
+  /** Hesabın kullandığı davet; davet koduyla Checkout'a hiç gitmemişse null. */
+  readonly invitedBy: AdminInvitedBy | null;
+  /** Hesabın davetleri; kodu ve davet ettiği arkadaşı yoksa null. */
+  readonly invites: AdminInvites | null;
   readonly timeline: readonly AdminTimelineEntry[];
 }
 
-const segmentSchema = z.enum(["subscribed", "past_due", "canceled", "trial", "free", "no_meeting", "trial_ended", "inactive", "failed"]);
+const segmentSchema = z.enum(["subscribed", "past_due", "canceled", "trial", "free", "invited", "no_meeting", "trial_ended", "inactive", "failed"]);
 const providerSchema = z.enum(["apple", "google"]);
 
 /** `?q=&segment=&provider=&cursor=`; boş ya da eksik değer süzgeç yok demektir, başka parametre reddedilir. */
@@ -237,6 +331,15 @@ const accessSql: string = `COALESCE((s.status IN ('active', 'trialing') AND (CAS
 /** Denemeye başlamış (ya da silinmiş hesabından deneme devralmış) hesap için SQL koşulu (`users u`). */
 const trialStartedSql: string = "(u.trial_started_at IS NOT NULL OR u.carried_trial_meetings > 0)";
 
+/**
+ * Hesabın abonelik satırı yok ya da yalnızca bitmiş ücretsiz erişim satırı var mı (`subscriptions s`, LEFT JOIN):
+ * süresi dolmuş ya da kaldırılmış ücretsiz erişim (`complimentary.ts`) plan kesimlerinde abonelik sayılmaz.
+ */
+const noSubscriptionSql: string = `(s.user_id IS NULL OR (s.complimentary = 1 AND ${accessSql} = 0))`;
+
+/** Hesap davet koduyla abone olmuş mu (`users u`; davet satırı katılmış). */
+const invitedSql: string = "EXISTS (SELECT 1 FROM referral_redemptions r WHERE r.referred_user_id = u.id AND r.joined_at IS NOT NULL)";
+
 /** Hesabın en az bir toplantısı var mı (`users u`; `meeting_sessions_user` dizini). */
 const hasMeetingSql: string = "EXISTS (SELECT 1 FROM meeting_sessions m WHERE m.user_id = u.id)";
 
@@ -258,11 +361,13 @@ function segmentSql(segment: AdminUserSegment | null): string {
     case "trial":
       return `${trialStartedSql} AND ${accessSql} = 0`;
     case "free":
-      return `s.user_id IS NULL AND NOT ${trialStartedSql}`;
+      return `${noSubscriptionSql} AND NOT ${trialStartedSql}`;
+    case "invited":
+      return invitedSql;
     case "no_meeting":
       return `u.carried_trial_meetings = 0 AND NOT ${hasMeetingSql}`;
     case "trial_ended":
-      return `${trialStartedSql} AND (s.user_id IS NULL OR s.status IN ('incomplete', 'incomplete_expired'))
+      return `${trialStartedSql} AND (${noSubscriptionSql} OR s.status IN ('incomplete', 'incomplete_expired'))
         AND (u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') >= ?8
           OR u.trial_started_at + ?9 <= ?1)`;
     case "inactive":
@@ -294,6 +399,8 @@ interface UserRow {
   readonly last_token_at: number | null;
   readonly failed_meetings: number;
   readonly last_failure_code: string | null;
+  readonly invited: number;
+  readonly invite_free_month: number;
 }
 
 /**
@@ -311,7 +418,9 @@ const userColumnsSql: string = `u.id, u.created_at, u.trial_started_at, u.trial_
   (SELECT MAX(t.created_at) FROM refresh_families f JOIN refresh_tokens t ON t.family_id = f.id WHERE f.user_id = u.id) AS last_token_at,
   (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.failure_count > 0) AS failed_meetings,
   (SELECT m.last_failure_code FROM meeting_sessions m WHERE m.user_id = u.id AND m.failure_count > 0
-     ORDER BY m.last_failure_at DESC LIMIT 1) AS last_failure_code`;
+     ORDER BY m.last_failure_at DESC LIMIT 1) AS last_failure_code,
+  ${invitedSql} AS invited,
+  COALESCE(s.complimentary = 0 AND s.plan = 'monthly' AND ${freeInviteMonthSql}, 0) AS invite_free_month`;
 
 /** Satırın abonelik durumu (satır yoksa null). Saf fonksiyondur. */
 function subscriptionOf(row: UserRow): SubscriptionState | null {
@@ -363,7 +472,16 @@ function userSummary(row: UserRow, config: Config, now: Date): AdminUserSummary 
     lastActiveAt: isoOrNull(lastActive),
     failedMeetings: row.failed_meetings,
     lastFailureCode: row.last_failure_code,
+    invite: inviteBadge(row.invited === 1, row.invite_free_month === 1, access),
   };
+}
+
+/** Davet rozeti: ücretsiz ay yalnızca erişim sürerken (`active`) gösterilir. Saf fonksiyondur. */
+function inviteBadge(invited: boolean, freeMonthRow: boolean, access: SubscriptionAccess): AdminInviteBadge | null {
+  if (freeMonthRow && access === "active") {
+    return "free_month";
+  }
+  return invited ? "invited" : null;
 }
 
 /**
@@ -461,9 +579,14 @@ function adminMeeting(row: MeetingRow, nowMs: number): AdminMeeting {
 /**
  * Hesabın zaman çizelgesi (yeniden eskiye): sunucu abonelik geçmişi tutmaz, yalnızca satırlardaki zaman damgaları
  * (oluşturma, deneme başlangıcı ve bitişi, Mac doğrulaması, aboneliğin son güncellemesi, ödeme gecikmesi, planlanmış
- * iptal ve dönem sonu) gösterilir. Saf fonksiyondur.
+ * iptal ve dönem sonu; kullanılan davetin ve davet edilen arkadaşların zamanları) gösterilir. Saf fonksiyondur.
  */
-export function userTimeline(user: AdminUserSummary, trialDeviceVerifiedAt: string | null): AdminTimelineEntry[] {
+export function userTimeline(
+  user: AdminUserSummary,
+  trialDeviceVerifiedAt: string | null,
+  invitedBy: AdminInvitedBy | null,
+  invites: AdminInvites | null,
+): AdminTimelineEntry[] {
   const subscription: AdminSubscription | null = user.subscription;
   const entries: ReadonlyArray<AdminTimelineEntry | null> = [
     { kind: "account_created", at: user.createdAt, detail: null },
@@ -474,10 +597,106 @@ export function userTimeline(user: AdminUserSummary, trialDeviceVerifiedAt: stri
     subscription === null || subscription.pastDueSince === null ? null : { kind: "subscription_past_due", at: subscription.pastDueSince, detail: null },
     subscription === null || subscription.cancelAt === null ? null : { kind: "subscription_cancel_at", at: subscription.cancelAt, detail: null },
     subscription === null ? null : { kind: "subscription_period_end", at: subscription.currentPeriodEnd, detail: subscription.status },
+    ...(invitedBy === null ? [] : invitedByTimeline(invitedBy)),
+    ...(invites === null ? [] : invites.friends.flatMap(friendTimeline)),
   ];
   return entries
     .filter((entry: AdminTimelineEntry | null): entry is AdminTimelineEntry => entry !== null)
     .sort((left: AdminTimelineEntry, right: AdminTimelineEntry): number => Date.parse(right.at) - Date.parse(left.at));
+}
+
+/** Kullanılan davetin zaman çizelgesi olayları. Saf fonksiyondur. */
+function invitedByTimeline(invite: AdminInvitedBy): AdminTimelineEntry[] {
+  const voided: boolean = invite.status === "void" || invite.status === "capped";
+  const entries: ReadonlyArray<AdminTimelineEntry | null> = [
+    { kind: "invite_checkout", at: invite.createdAt, detail: null },
+    invite.joinedAt === null ? null : { kind: "invite_joined", at: invite.joinedAt, detail: null },
+    invite.qualifiedAt === null ? null : { kind: "invite_first_payment", at: invite.qualifiedAt, detail: null },
+    invite.status !== "qualified" || invite.rewardDueAt === null ? null : { kind: "invite_reward_due", at: invite.rewardDueAt, detail: null },
+    invite.rewardedAt === null ? null : { kind: "invite_rewarded", at: invite.rewardedAt, detail: null },
+    voided ? { kind: "invite_voided", at: invite.updatedAt, detail: invite.status === "capped" ? "capped" : invite.voidReason } : null,
+  ];
+  return entries.filter((entry: AdminTimelineEntry | null): entry is AdminTimelineEntry => entry !== null);
+}
+
+/** Davet edilen arkadaşın, davet edenin zaman çizelgesindeki olayları (katıldı, ödül alındı). Saf fonksiyondur. */
+function friendTimeline(friend: AdminInviteFriend): AdminTimelineEntry[] {
+  const entries: ReadonlyArray<AdminTimelineEntry | null> = [
+    friend.joinedAt === null ? null : { kind: "invite_friend_joined", at: friend.joinedAt, detail: friend.userId },
+    friend.rewardedAt === null ? null : { kind: "invite_friend_rewarded", at: friend.rewardedAt, detail: friend.userId },
+  ];
+  return entries.filter((entry: AdminTimelineEntry | null): entry is AdminTimelineEntry => entry !== null);
+}
+
+/** Davet satırı (ayrıntı; davet edilen ve davet eden tarafları). */
+interface RedemptionRow {
+  readonly referred_user_id: string | null;
+  readonly referrer_user_id: string | null;
+  readonly code: string;
+  readonly status: ReferralStatus;
+  readonly void_reason: string | null;
+  readonly card_checked: number;
+  readonly created_at: number;
+  readonly joined_at: number | null;
+  readonly qualified_at: number | null;
+  readonly reward_due_at: number | null;
+  readonly rewarded_at: number | null;
+  readonly updated_at: number;
+}
+
+/** Davet satırının sütunları. */
+const redemptionColumnsSql: string = `referred_user_id, referrer_user_id, code, status, void_reason, card_fingerprint_hash IS NOT NULL AS card_checked,
+  created_at, joined_at, qualified_at, reward_due_at, rewarded_at, updated_at`;
+
+/** Kullanılan davet. Saf fonksiyondur. */
+function invitedByOf(row: RedemptionRow, inFreeMonth: boolean): AdminInvitedBy {
+  return {
+    referrerUserId: row.referrer_user_id,
+    code: row.code,
+    status: row.status,
+    voidReason: row.void_reason,
+    inFreeMonth,
+    cardChecked: row.card_checked === 1,
+    createdAt: new Date(row.created_at).toISOString(),
+    joinedAt: isoOrNull(row.joined_at),
+    qualifiedAt: isoOrNull(row.qualified_at),
+    rewardDueAt: isoOrNull(row.reward_due_at),
+    rewardedAt: isoOrNull(row.rewarded_at),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+/** Davet edilen arkadaş. Saf fonksiyondur. */
+function inviteFriendOf(row: RedemptionRow): AdminInviteFriend {
+  return {
+    userId: row.referred_user_id,
+    status: row.status,
+    voidReason: row.void_reason,
+    createdAt: new Date(row.created_at).toISOString(),
+    joinedAt: isoOrNull(row.joined_at),
+    qualifiedAt: isoOrNull(row.qualified_at),
+    rewardDueAt: isoOrNull(row.reward_due_at),
+    rewardedAt: isoOrNull(row.rewarded_at),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+/** Hesabın davetleri; kodu ve arkadaşı yoksa null. Saf fonksiyondur. */
+function invitesOf(code: string | null, counts: ReferrerCounts, friends: readonly RedemptionRow[]): AdminInvites | null {
+  if (code === null && friends.length === 0) {
+    return null;
+  }
+  return {
+    code,
+    joined: counts.joined,
+    pending: counts.pending,
+    rewarded: counts.rewarded,
+    voided: counts.voided,
+    rewardsLeftThisYear: Math.max(0, referralRewardsPerYear - counts.recent),
+    rewardsPerYear: referralRewardsPerYear,
+    nextRewardAt: isoOrNull(counts.nextRewardAt),
+    friends: friends.map(inviteFriendOf),
+  };
 }
 
 /** İptal nedeni satırı (ayrıntı). */
@@ -500,7 +719,7 @@ function hoursOf(seconds: number): number {
   return Math.round((seconds / 3600) * 100) / 100;
 }
 
-/** Kullanıcının ayrıntısı; yoksa `not_found`. */
+/** Kullanıcının ayrıntısı (davet edilen ve davet eden tarafları dahil); yoksa `not_found`. */
 export async function adminUserDetail(db: D1Database, config: Config, userId: string, now: Date): Promise<AdminUserDetail> {
   const nowMs: number = now.getTime();
   const userRow: UserRow | null = await db
@@ -510,13 +729,17 @@ export async function adminUserDetail(db: D1Database, config: Config, userId: st
   if (userRow === null) {
     throw new ApiError("not_found", "Kullanıcı bulunamadı.");
   }
-  const [meetingRows, reportRows, customerRow, monthlyRow, usage, cancellationRow]: [
+  const [meetingRows, reportRows, customerRow, monthlyRow, usage, cancellationRow, invitedRow, codeRow, friendRows, counts]: [
     D1Result<MeetingRow>,
     D1Result<AdminUserReportRow>,
     { stripe_customer_id: string } | null,
     MonthlyRow | null,
     MonthlyUsage,
     CancellationRow | null,
+    RedemptionRow | null,
+    { code: string } | null,
+    D1Result<RedemptionRow>,
+    ReferrerCounts,
   ] = await Promise.all([
     db
       .prepare(
@@ -542,9 +765,18 @@ export async function adminUserDetail(db: D1Database, config: Config, userId: st
       .prepare("SELECT created_at, reason, feedback, comment FROM subscription_cancellations WHERE user_id = ? ORDER BY created_at DESC LIMIT 1")
       .bind(userId)
       .first<CancellationRow>(),
+    db.prepare(`SELECT ${redemptionColumnsSql} FROM referral_redemptions WHERE referred_user_id = ?`).bind(userId).first<RedemptionRow>(),
+    db.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(userId).first<{ code: string }>(),
+    db
+      .prepare(`SELECT ${redemptionColumnsSql} FROM referral_redemptions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT ?`)
+      .bind(userId, adminUserInviteLimit)
+      .all<RedemptionRow>(),
+    referrerCounts(db, userId, nowMs),
   ]);
   const user: AdminUserSummary = userSummary(userRow, config, now);
   const trialDeviceVerifiedAt: string | null = isoOrNull(userRow.trial_device_verified_at);
+  const invitedBy: AdminInvitedBy | null = invitedRow === null ? null : invitedByOf(invitedRow, user.invite === "free_month");
+  const invites: AdminInvites | null = invitesOf(codeRow?.code ?? null, counts, friendRows.results);
   return {
     user,
     trialDeviceVerifiedAt,
@@ -577,7 +809,9 @@ export async function adminUserDetail(db: D1Database, config: Config, userId: st
         summary: row.summary,
       }),
     ),
-    timeline: userTimeline(user, trialDeviceVerifiedAt),
+    invitedBy,
+    invites,
+    timeline: userTimeline(user, trialDeviceVerifiedAt, invitedBy, invites),
   };
 }
 

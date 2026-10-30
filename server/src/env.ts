@@ -20,6 +20,7 @@ export interface Env {
   readonly PRICE_USD_MONTHLY: string;
   readonly PRICE_USD_YEARLY: string;
   readonly REFERRAL_POLICY: string;
+  readonly REFERRAL_MAX_PENDING: string;
   readonly REPORT_BYTES_PER_DAY: string;
   readonly APP_ATTEST_POLICY: string;
   readonly APP_ATTEST_ENVIRONMENT: string;

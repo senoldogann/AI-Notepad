@@ -1,12 +1,27 @@
 // Yönetim panelinin içgörüler görünümü (`/v1/admin/insights`): sorunlar (son 7 ve 30 gün: tavan retleri, koda göre
-// retler, servis hataları, 5xx), son 30 günün hunisi (her adımın sayısı, önceki adıma oranı ve kayıp), indirmelerin
-// düğmeye ve yönlendiren siteye göre dağılımı ve Stripe iptal nedenleri. Kimlik olarak yalnızca hesap UUID'si gelir.
-import { type DetailCount, type FunnelStep, type Insights, type ProblemWindow, type RecentCancellation, fetchInsights } from "./admin-api";
-import { fillTable, formatCount, formatDate, formatRate, node, shortId, tableRow } from "./admin-format";
+// retler, servis hataları, 5xx), son 30 günün hunisi (her adımın sayısı, temel adıma oranı ve kayıp), indirmelerin
+// düğmeye ve yönlendiren siteye göre dağılımı, Stripe iptal nedenleri ve davet programının özeti (son 30 gün, nedene
+// göre düşen davetler, en çok davet edenler). Kimlik olarak yalnızca hesap UUID'si gelir.
+import {
+  type DetailCount,
+  type FunnelStep,
+  type InviteReferrer,
+  type InviteSummary,
+  type Insights,
+  type ProblemWindow,
+  type RecentCancellation,
+  fetchInsights,
+} from "./admin-api";
+import { fillCounts, fillTable, formatCount, formatDate, formatRate, node, shortId, tableRow } from "./admin-format";
+import { type AdminInviteCopy, adminInviteCopy, inviteVoidReasonLabel } from "./admin-invites-copy";
 import { type AdminClientCopy, clientCopy, fill } from "./copy";
 import { element } from "./dom";
 
 const adminText: AdminClientCopy = clientCopy.admin;
+const inviteText: AdminInviteCopy = adminInviteCopy;
+
+/** `subscribed` adımının alt kümesi olan adımlar: oranları ve kayıpları önceki satıra değil abonelere göredir. */
+const subscribedSubsets: ReadonlySet<FunnelStep> = new Set<FunnelStep>(["subscribed_via_invite", "canceled"]);
 
 /** Ayrıca satırı olan tavan retleri (ret listesinde yinelenmez). */
 const ceilingCodes: ReadonlySet<string> = new Set(["trial_capacity_reached", "spend_ceiling_reached"]);
@@ -78,15 +93,24 @@ function funnelStepCell(step: FunnelStep, count: number, max: number): HTMLEleme
   bar.max = Math.max(max, 1);
   bar.value = count;
   bar.setAttribute("aria-hidden", "true");
-  cell.append(node("span", "", adminText.funnelSteps[step]), bar);
+  cell.append(node("span", "", funnelStepLabel(step)), bar);
   return cell;
 }
 
-/** Huni satırları: sayı, önceki adıma oranı ve kayıp (ilk adımda ve artışta "—"). */
+/** Huni adımının adı. Saf fonksiyondur. */
+function funnelStepLabel(step: FunnelStep): string {
+  return step === "subscribed_via_invite" ? inviteText.funnelStep : adminText.funnelSteps[step];
+}
+
+/**
+ * Huni satırları: sayı, temel adıma oranı ve kayıp (ilk adımda ve artışta "—"). Temel adım önceki satırdır; abonelerin
+ * alt kümesi olan adımlarda (`subscribedSubsets`) abonelerdir.
+ */
 function funnelRows(steps: Insights["funnel"]["steps"]): HTMLTableRowElement[] {
   const max: number = Math.max(0, ...steps.map((step: { readonly count: number }): number => step.count));
+  const subscribed: number | null = steps.find((step: { readonly step: FunnelStep }): boolean => step.step === "subscribed")?.count ?? null;
   return steps.map((step: { readonly step: FunnelStep; readonly count: number }, index: number): HTMLTableRowElement => {
-    const previous: number | null = index === 0 ? null : (steps[index - 1]?.count ?? null);
+    const previous: number | null = index === 0 ? null : subscribedSubsets.has(step.step) ? subscribed : (steps[index - 1]?.count ?? null);
     const lost: number | null = previous === null ? null : previous - step.count;
     return tableRow([
       funnelStepCell(step.step, step.count, max),
@@ -143,6 +167,40 @@ function cancellationItem(cancellation: RecentCancellation, onOpenUser: (id: str
   return item;
 }
 
+/** Davet özetinin satırları: son 30 günün sayıları ve şu an ücretsiz aydakiler. Saf fonksiyondur (yeni öğe üretir). */
+function inviteRows(invites: InviteSummary): HTMLTableRowElement[] {
+  const rows: ReadonlyArray<readonly [string, number]> = [
+    [inviteText.insightsRows.checkouts, invites.checkouts],
+    [inviteText.insightsRows.joined, invites.joined],
+    [inviteText.insightsRows.firstPayments, invites.firstPayments],
+    [inviteText.insightsRows.granted, invites.granted],
+    [inviteText.insightsRows.inFreeMonth, invites.inFreeMonth],
+  ];
+  return rows.map(([label, count]: readonly [string, number]): HTMLTableRowElement => tableRow([label, formatCount(count)]));
+}
+
+/** Düşen davetlerin nedene göre özet satırı. Saf fonksiyondur. */
+function inviteVoidedLine(voided: readonly DetailCount[]): string {
+  if (voided.length === 0) {
+    return inviteText.insightsNoVoided;
+  }
+  const list: string = voided.map((item: DetailCount): string => `${inviteVoidReasonLabel(item.detail)} ${formatCount(item.count)}`).join(" · ");
+  return fill(inviteText.insightsVoided, { list });
+}
+
+/** En çok davet edenin satırı: hesap (ayrıntıda açılır) ve sayaçları. */
+function referrerItem(referrer: InviteReferrer, onOpenUser: (id: string) => void): HTMLLIElement {
+  const item: HTMLLIElement = document.createElement("li");
+  const button: HTMLButtonElement = node("button", "link-list__item", "");
+  button.type = "button";
+  button.title = referrer.userId;
+  const meta: string = fillCounts(inviteText.topReferrerMeta, { joined: referrer.joined, pending: referrer.pending, granted: referrer.granted, voided: referrer.voided });
+  button.append(node("span", "link-list__title mono", shortId(referrer.userId)), node("span", "link-list__meta", meta));
+  button.addEventListener("click", (): void => onOpenUser(referrer.userId));
+  item.append(button);
+  return item;
+}
+
 /** Tablonun gövdesini doldurur ve boş bildirimini açar ya da kapatır. */
 function fillCountTable(id: string, rows: readonly HTMLTableRowElement[]): void {
   fillTable(element(`${id}-rows`, HTMLTableSectionElement), rows);
@@ -164,6 +222,12 @@ function renderInsights(insights: Insights, onOpenUser: (id: string) => void): v
     ...insights.cancellations.recent.map((cancellation: RecentCancellation): HTMLLIElement => cancellationItem(cancellation, onOpenUser)),
   );
   element("insights-cancellations-empty", HTMLElement).classList.toggle("hidden", insights.cancellations.recent.length > 0);
+  fillTable(element("insights-invites-rows", HTMLTableSectionElement), inviteRows(insights.invites));
+  element("insights-invites-voided", HTMLElement).textContent = inviteVoidedLine(insights.invites.voided);
+  element("insights-referrers-top", HTMLElement).replaceChildren(
+    ...insights.invites.topReferrers.map((referrer: InviteReferrer): HTMLLIElement => referrerItem(referrer, onOpenUser)),
+  );
+  element("insights-referrers-top-empty", HTMLElement).classList.toggle("hidden", insights.invites.topReferrers.length > 0);
 }
 
 /** İçgörüler görünümünü bağlar; hesaba tıklanınca kullanıcı ayrıntısı açılır. */

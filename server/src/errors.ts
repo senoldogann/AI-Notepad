@@ -43,6 +43,7 @@ export type ErrorCode =
   | "referral_self"
   | "referral_not_eligible"
   | "referral_unavailable"
+  | "referral_limit_reached"
   | "webhook_invalid"
   | "internal_error";
 
@@ -90,6 +91,7 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   referral_self: 403,
   referral_not_eligible: 409,
   referral_unavailable: 503,
+  referral_limit_reached: 409,
   webhook_invalid: 400,
   internal_error: 500,
 };
