@@ -2306,11 +2306,37 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   }
 
   /* Izgara öğesi içeriğine göre genişlemez: tablo ve kod bloğu kendi kutularında yatay kayar. */
+  /* Önizleme kendi içinde kayar: uzun yazı sayfayı aşağı uzatmaz (yükseklik yazma alanıyla aynı ölçekte). */
   .blog-preview {
     min-width: 0;
     min-height: 520px;
-    padding: 4px 2px;
+    max-height: min(720px, 72vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 10px 4px 2px;
     overflow-wrap: anywhere;
+  }
+
+  /* Sitedeki yazı kapağının küçük hali (components/BlogCover.astro): gradyan ve başlık, ölçüler kapak genişliğine göre. */
+  .blog-preview :global(.blog-preview__cover) {
+    container-type: inline-size;
+    display: flex;
+    align-items: flex-start;
+    aspect-ratio: 1200 / 630;
+    margin-bottom: 18px;
+    padding: 6.4cqi 7cqi;
+    border-radius: 18px;
+  }
+
+  .blog-preview :global(.blog-preview__cover-title) {
+    max-width: 88%;
+    margin: 0;
+    color: #0a0a0a;
+    font-size: 6.6cqi;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.04;
+    text-wrap: balance;
   }
 
   .blog-preview :global(img) {

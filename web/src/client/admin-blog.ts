@@ -472,7 +472,18 @@ function renderEditorHints(fields: EditorFields): void {
   renderCover(fields);
 }
 
-/** Önizlemeyi çizer: başlık, açıklama ve gövde. */
+/**
+ * Önizleme kapağı: sitedeki yazı sayfasının başı gibi durgun film gradyanı ve başlık (aile ve yerleşim `coverFilm` ile
+ * sitedekiyle aynı seçilir; bkz. components/BlogCover.astro).
+ */
+function previewCover(form: BlogForm): HTMLElement {
+  const cover: FilmCover = coverFilm(form.slug, form.cover);
+  const film: HTMLElement = node("div", `film film--${cover.palette} film--${cover.layout} blog-preview__cover`, "");
+  film.append(node("h1", "blog-preview__cover-title", form.title));
+  return film;
+}
+
+/** Önizlemeyi çizer: kapak (başlıkla), açıklama ve gövde. */
 function renderPreview(fields: EditorFields, localImages: ReadonlyMap<string, string>): void {
   const form: BlogForm = readForm(fields);
   const preview: HTMLElement = element("blog-preview", HTMLElement);
@@ -480,7 +491,7 @@ function renderPreview(fields: EditorFields, localImages: ReadonlyMap<string, st
     preview.replaceChildren(node("p", "muted", blogText.previewEmpty));
     return;
   }
-  preview.replaceChildren(node("h1", "", form.title), node("p", "lead", form.description), ...markdownPreview(form.body, { image: blogText.previewImage, localImages }));
+  preview.replaceChildren(previewCover(form), node("p", "lead", form.description), ...markdownPreview(form.body, { image: blogText.previewImage, localImages }));
 }
 
 /** Yazma ya da önizleme sekmesini gösterir. */
