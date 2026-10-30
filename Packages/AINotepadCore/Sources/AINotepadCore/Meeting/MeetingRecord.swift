@@ -235,7 +235,6 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         self.meNeedsFinalPass = meNeedsFinalPass
     }
 
-    /// Apple Notlar'a gönderildi işaretli kopya.
     /// Hedefe gönderildi işaretli kopya (yinelenmez).
     public func markingSent(destinationID: String) -> MeetingRecord {
         var copy: MeetingRecord = self
@@ -255,6 +254,7 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
+    /// Apple Notlar'a gönderildi işaretli kopya.
     public func with(notesSentAt newDate: Date) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.notesSentAt = newDate
@@ -320,7 +320,6 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
-    /// Yalnızca durumu (ve hata mesajını) değişmiş kopya.
     /// Bitiş zamanı değişmiş kopya.
     public func with(endedAt newEndedAt: Date) -> MeetingRecord {
         var copy: MeetingRecord = self
@@ -328,6 +327,7 @@ public struct MeetingRecord: Sendable, Equatable, Codable, Identifiable {
         return copy
     }
 
+    /// Yalnızca durumu (ve hata mesajını) değişmiş kopya.
     public func with(status newStatus: MeetingStatus, failureMessage newFailure: String?) -> MeetingRecord {
         var copy: MeetingRecord = self
         copy.status = newStatus

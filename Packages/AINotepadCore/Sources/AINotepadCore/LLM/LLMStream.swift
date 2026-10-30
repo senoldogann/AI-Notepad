@@ -45,16 +45,8 @@ public func streamLLM(provider: LLMProvider, request: LLMRequest, onText: LLMTex
     case .hosted(let config):
         // Sunucu Anthropic'in akış olaylarını aynen iletir. Jeton 401 ile reddedilirse (metin görünmeden) bir kez
         // yenilenip yeniden denenir.
-        do {
-            return try await streamPreparedLLM(call: try await prepareHostedCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
-        } catch LLMError.hosted(let error) where error.status == 401 {
-            streamLogger.warning("Abonelik sunucusu jetonu reddetti, yenilenip yeniden deneniyor, kod: \(error.rawCode, privacy: .public)")
-            try await config.credentials.refreshAccessToken()
-            return try await streamPreparedLLM(call: try await prepareHostedCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
-        } catch LLMError.hosted(let error) {
-            // Abonelik gerektiren ret (deneme bitti vb.): uygulama teklifi gösterir.
-            announceIfSubscriptionRequired(error: error)
-            throw LLMError.hosted(error)
+        return try await withHostedTokenRefresh(config: config) { () async throws -> String in
+            try await streamPreparedLLM(call: try await prepareHostedCall(config: config, request: request), textDelta: claudeDelta, onText: onText)
         }
     }
 }

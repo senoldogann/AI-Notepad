@@ -114,7 +114,9 @@ public func noteChunkRequest(
         - kararlar: bu parçada alınan kararlar (görevler buraya değil, görevlere).
         - yeniGorevler: bu parçada verilen yeni işler. Listede aynı iş (aynı kişi, aynı konu) zaten varsa yeniden yazma;
           başka bir konunun benzer işi yenidir.
-        - degisenGorevler: listedeki bir görev bu parçada değiştiyse (tarih, kapsam) ya da iptal edildiyse numarasıyla yaz.
+        - degisenGorevler: listedeki bir görev bu parçada değiştiyse (tarih, kapsam) ya da iptal edildiyse numarasıyla yaz;
+          aciklama ve tarih görevin güncel tam hali olur: değişmeyen açıklamayı ve tarihi aynen tekrarla (boş tarih eski
+          tarihi korur).
         - sozluk: bu parçada geçen önemli yabancı dildeki terimler ve \(language.promptName) dilinde anlamları.
         \(noteRules(user: user, template: template, language: language))
         \(mine.rule)
@@ -169,9 +171,10 @@ public func parseNoteChunk(text: String) throws -> NoteChunk {
     )
 }
 
-/// Parçayı birikmiş nota ekler: önce değişiklikler (numaralar bağlamdaki listeye göre), sonra iptaller düşer, yeni
-/// görevler ve kararlar sona eklenir, sözlükte aynı terim (büyük/küçük harf duyarsız) bir kez kalır. Listede olmayan
-/// numaraya değişiklik uygulanamaz, yok sayılır. Saf fonksiyondur.
+/// Parçayı birikmiş nota ekler: önce değişiklikler (numaralar bağlamdaki listeye göre; boş açıklama ya da tarih
+/// görevin eskisini korur, model yalnızca kapsamı ya da yalnızca tarihi değiştirdiğinde öbürü silinmesin), sonra
+/// iptaller düşer, yeni görevler ve kararlar sona eklenir, sözlükte aynı terim (büyük/küçük harf duyarsız) bir kez
+/// kalır. Listede olmayan numaraya değişiklik uygulanamaz, yok sayılır. Saf fonksiyondur.
 public func applyNoteChunk(state: ChunkedNoteState, chunk: NoteChunk, startSec: Double, endSec: Double) -> ChunkedNoteState {
     let changes: [Int: TaskChange] = Dictionary(chunk.changedTasks.map { ($0.number, $0) }) { (_: TaskChange, last: TaskChange) -> TaskChange in last }
     let updated: [NoteTask] = state.tasks.enumerated().compactMap { (item: (offset: Int, element: NoteTask)) -> NoteTask? in
@@ -180,7 +183,12 @@ public func applyNoteChunk(state: ChunkedNoteState, chunk: NoteChunk, startSec: 
         }
         return change.isCancelled
             ? nil
-            : NoteTask(owner: item.element.owner, description: change.description, dueDate: change.dueDate, isMine: item.element.isMine)
+            : NoteTask(
+                owner: item.element.owner,
+                description: change.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.element.description : change.description,
+                dueDate: change.dueDate ?? item.element.dueDate,
+                isMine: item.element.isMine
+            )
     }
     let knownTerms: Set<String> = Set(state.glossary.map { $0.term.lowercased() })
     let newTerms: [GlossaryEntry] = chunk.glossary.reduce(into: [GlossaryEntry]()) { (result: inout [GlossaryEntry], entry: GlossaryEntry) -> Void in

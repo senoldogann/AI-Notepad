@@ -42,26 +42,74 @@ public func appleNotesScript(html: String, folder: String) -> String {
 
 /// Klasöre yazılacak Markdown dosyasının adı: "2026-10-27 0930 Bütçe toplantısı.md"; dosya sisteminde sorunlu
 /// karakterler temizlenir, ad 80 karakterle sınırlı. Saat aynı gün aynı adlı iki toplantının (iki "Daily") birbirinin
-/// üstüne yazılmasını önler; aynı toplantı her zaman aynı ada yazılır (yeniden işlenince güncellenir).
-/// Saf fonksiyondur.
+/// üstüne yazılmasını önler. Ad notun başlığını izler; başlık değişince (yeniden adlandırma, yeniden yazılan not) eski
+/// adlı kopyayı `exportMarkdown` siler. Saf fonksiyondur.
 public func markdownFileName(record: MeetingRecord) -> String {
-    let formatter: DateFormatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.dateFormat = "yyyy-MM-dd HHmm"
     let title: String = (record.note?.title ?? record.title)
         .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t"))
         .joined(separator: " ")
         .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".")))
-    return "\(formatter.string(from: record.startedAt)) \(String(title.prefix(80)))".trimmingCharacters(in: .whitespaces) + ".md"
+    return "\(markdownFileNamePrefix(record: record)) \(String(title.prefix(80)))".trimmingCharacters(in: .whitespaces) + ".md"
 }
 
-/// Toplantının Markdown'ını klasöre yazar (aynı ad varsa üzerine: yeniden işlenen not güncellenir); yazılan dosya.
+/// Dosya adının başlıktan bağımsız başı: toplantının başladığı gün ve dakika ("2026-10-27 0930"). Saf fonksiyondur.
+private func markdownFileNamePrefix(record: MeetingRecord) -> String {
+    let formatter: DateFormatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HHmm"
+    return formatter.string(from: record.startedAt)
+}
+
+/// Klasör kopyasının son satırı: dosyanın hangi toplantıya ait olduğunu söyleyen HTML yorumu (Markdown okuyucularında
+/// görünmez). Başlık değişince aynı toplantının eski adlı kopyası bununla bulunur. Saf fonksiyondur.
+func markdownExportMarker(meetingID: String) -> String {
+    "<!-- meeting-id: \(meetingID) -->"
+}
+
+/// Klasördeki dosya adlarından aynı toplantının eski adlı kopyası olabilecekler: aynı gün ve dakikayla başlayan, yeni
+/// addan farklı `.md` dosyaları. Kesin karar dosyadaki işarettir (`markdownExportMarker`). Saf fonksiyondur.
+func staleMarkdownExportCandidates(record: MeetingRecord, fileNames: [String]) -> [String] {
+    let current: String = markdownFileName(record: record)
+    let prefix: String = markdownFileNamePrefix(record: record)
+    return fileNames.filter { (name: String) -> Bool in
+        name != current && name.hasSuffix(".md") && (name.hasPrefix(prefix + " ") || name == prefix + ".md")
+    }
+}
+
+/// Toplantının Markdown'ını klasöre yazar (aynı ad varsa üzerine: yeniden işlenen not güncellenir) ve başlık değiştiği
+/// için eski adla kalmış kopyasını siler: klasörde her toplantının tek dosyası olur. Yalnızca bu toplantının işaretini
+/// (`markdownExportMarker`) taşıyan dosyalar silinir; kullanıcının dosyalarına ve işaretsiz eski kopyalara dokunulmaz.
+/// Yazılan dosya döner; yazma, okuma ya da silme hatası `StorageError` olarak fırlatılır.
 public func exportMarkdown(record: MeetingRecord, folder: URL) throws -> URL {
     let file: URL = folder.appending(path: markdownFileName(record: record))
+    let marker: String = markdownExportMarker(meetingID: record.id)
     do {
-        try Data(meetingMarkdown(record: record).utf8).write(to: file, options: .atomic)
+        try Data((meetingMarkdown(record: record) + "\n\n" + marker + "\n").utf8).write(to: file, options: .atomic)
     } catch {
         throw StorageError.writeFailed(path: file.path, reason: error.localizedDescription)
+    }
+    let fileNames: [String]
+    do {
+        fileNames = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    } catch {
+        throw StorageError.readFailed(path: folder.path, reason: error.localizedDescription)
+    }
+    for name in staleMarkdownExportCandidates(record: record, fileNames: fileNames) {
+        let stale: URL = folder.appending(path: name)
+        let text: String
+        do {
+            text = try String(contentsOf: stale, encoding: .utf8)
+        } catch {
+            throw StorageError.readFailed(path: stale.path, reason: error.localizedDescription)
+        }
+        guard text.contains(marker) else {
+            continue
+        }
+        do {
+            try FileManager.default.removeItem(at: stale)
+        } catch {
+            throw StorageError.deleteFailed(path: stale.path, reason: error.localizedDescription)
+        }
     }
     return file
 }

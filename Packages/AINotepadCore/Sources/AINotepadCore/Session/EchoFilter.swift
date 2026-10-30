@@ -62,6 +62,11 @@ private func echoIndices(candidates: [EchoCandidate]) -> Set<Int> {
         }
     return Set(mine.indices.compactMap { (position: Int) -> Int? in
         let segment: EchoCandidate = mine[position].element
+        // Harfi ya da rakamı olmayan bölüm (hata satırı) yankı sayılmaz: komşusuyla birleşik metin yalnızca komşunun
+        // metni olur ve komşu yankıysa hata satırı da gizlenirdi.
+        guard !trigramSequence(text: segment.text).isEmpty else {
+            return nil
+        }
         guard timeCoverage(mine: segment, simultaneous: overlapping(sortedOthers: others, longest: longest, mine: segment)) >= echoTimeCoverage else {
             return nil
         }

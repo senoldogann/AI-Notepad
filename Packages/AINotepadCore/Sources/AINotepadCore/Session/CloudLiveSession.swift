@@ -303,6 +303,7 @@ private func consumeTranscripts(
             }
             index += 1
         case .failed(let message):
+            events.yield(.segment(clearingPartial(id: SegmentID(speaker: speaker, index: index))))
             events.yield(.streamFailed(speaker: speaker, message: message))
         case .incomplete(let untranscribedSec):
             events.yield(.streamIncomplete(speaker: speaker, untranscribedSec: untranscribedSec))

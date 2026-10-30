@@ -79,6 +79,8 @@ private func sampleRecord(paragraphCount: Int) -> MeetingRecord {
         #expect(first.lastPathComponent == "Rapor  sunum plan 2027-01-15.pdf")
         try Data().write(to: first)
         #expect(try exportFileURL(directory: directory, title: "Rapor / sunum: plan", startedAt: Date(timeIntervalSince1970: 1_800_000_000), fileExtension: "pdf").lastPathComponent == "Rapor  sunum plan 2027-01-15 2.pdf")
+        // Baştaki nokta atılır: gizli dosya olmaz.
+        #expect(try exportFileURL(directory: directory, title: ".NET plan", startedAt: Date(timeIntervalSince1970: 1_800_000_000), fileExtension: "pdf").lastPathComponent == "NET plan 2027-01-15.pdf")
         try FileManager.default.removeItem(at: directory)
     }
 }

@@ -1,16 +1,17 @@
 import AINotepadCore
 import SwiftUI
 
-/// Adanın açılma payı: konuşmacı satırı, iki satır Türkçe ve bir satır orijinal (tasarım belgesi §4.3).
+/// Adanın açılma payı: konuşmacı satırı, iki satır not dilinde çeviri ve bir satır orijinal (tasarım belgesi §4.3).
 public let islandExpansion: CGFloat = 88
 /// Ada kanadının genişliği (açıkken metin satırı bu genişlikte).
 public let islandWing: CGFloat = 150
 
-/// Çentiğe yapışık siyah ada (çentiksiz ekranda hap), sakin ve canlı: kapalıyken solda hafifçe atan kayıt noktası ve
-/// süre, sağda konuşmaya göre oynayan ses çubukları; açılınca konuşanın renginde, sesle hafifçe büyüyen halkalı rozet
-/// ve son cümle yumuşak geçişle. Pencere açılma payını içerir; saydam kısım tıklamaları geçirir. "Hareketi azalt"
-/// açıksa hareketler durur.
+/// Çentiğe yapışık siyah ada (çentiksiz ekranda hap), sakin ve canlı: kapalıyken solda durağan kayıt noktası ve süre,
+/// sağda konuşmaya göre oynayan ses çubukları; açılınca konuşanın renginde, sesle hafifçe büyüyen halkalı rozet ve son
+/// cümle yumuşak geçişle. Pencere açılma payını içerir; saydam kısım tıklamaları geçirir. "Hareketi azalt" açıksa süs
+/// hareketleri (dönen yay, dinleme dalgası) durur; ses çubukları ve rozet halkası ses seviyesini göstermeyi sürdürür.
 public struct IslandView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
     /// VoiceOver'ın okuduğu ad (uygulamanın görünen adı).
     let appName: String
     let state: LiveViewState
@@ -156,7 +157,7 @@ public struct IslandView: View {
                     Image(systemName: "waveform")
                         .appFont(size: 13, weight: .medium)
                         .foregroundStyle(.white.opacity(0.6))
-                        .symbolEffect(.variableColor.iterative, options: .repeating)
+                        .symbolEffect(.variableColor.iterative, options: .repeating, isActive: !reduceMotion)
                     Text("Dinliyor… konuşma başlayınca burada akar")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(.white.opacity(0.55))
@@ -213,6 +214,8 @@ private struct IslandStatus: View {
                         Circle().fill(Color.red).frame(width: 7, height: 7)
                     }
                     .frame(width: 17, height: 17)
+                    // Etiket noktada: birleşik öğe "Kayıtta, 01:23" okunur (dıştaki etiket süreyi örtüyordu).
+                    .accessibilityLabel("Kayıtta")
                     TimelineView(.periodic(from: startedAt, by: 1)) { (context: TimelineViewDefaultContext) in
                         Text(timestamp(seconds: context.date.timeIntervalSince(startedAt)))
                             .appFont(size: 12, weight: .semibold)
@@ -222,7 +225,6 @@ private struct IslandStatus: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Kayıtta")
             } else {
                 Text(state.statusText).appFont(size: 12, weight: .medium).foregroundStyle(.white.opacity(0.7))
             }
@@ -231,17 +233,18 @@ private struct IslandStatus: View {
     }
 }
 
-/// Bitirilirken dönen ince yay.
+/// Bitirilirken dönen ince yay ("Hareketi azalt" açıksa durağan).
 private struct IslandSpinner: View {
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { (context: TimelineViewDefaultContext) in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { (context: TimelineViewDefaultContext) in
             Circle()
                 .trim(from: 0, to: 0.7)
                 .stroke(appearance.accent.color, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
                 .frame(width: 11, height: 11)
-                .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
+                .rotationEffect(.degrees(reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1) * 360))
         }
         .accessibilityHidden(true)
     }

@@ -321,9 +321,10 @@ private struct AnswerFooter: View {
     }
 }
 
-/// "8 toplantıdan 42 parça okundu · 6,0 sn".
+/// "8 toplantıdan 42 parça okundu · 6,0 sn". Toplantılar kimliğe göre sayılır (aynı adlı yinelenen toplantılar ayrı;
+/// yazılırken gösterilen sayıyla aynı).
 private func reasoningSummary(exchange: ArchiveExchange) -> String {
-    let meetings: Int = Set(exchange.passages.map(\.meetingTitle)).count
+    let meetings: Int = Set(exchange.passages.map(\.meetingID)).count
     let seconds: Double = (exchange.finishedAt ?? Date()).timeIntervalSince(exchange.startedAt)
     let duration: String = seconds.formatted(.number.precision(.fractionLength(1)).locale(interfaceLocale()))
     return String(localized: "\(meetings) toplantıdan \(exchange.passages.count) parça okundu · \(duration) sn")
@@ -357,15 +358,19 @@ private struct FooterPill<Label: View>: View {
     }
 }
 
-/// Nasıl cevaplandı: arama terimleri, okunan toplantılar ve model, ince kartta küçük yazıyla.
+/// Nasıl cevaplandı: arama terimleri, okunan toplantılar (adı ve günü; aynı adlı toplantılar ayrılsın) ve model, ince
+/// kartta küçük yazıyla.
 private struct ReasoningDetails: View {
     let exchange: ArchiveExchange
 
     var body: some View {
-        let titles: [String] = exchange.passages.reduce(into: [String]()) { (result: inout [String], passage: ArchivePassage) -> Void in
-            if !result.contains(passage.meetingTitle) {
-                result.append(passage.meetingTitle)
+        let meetings: [ArchivePassage] = exchange.passages.reduce(into: [ArchivePassage]()) { (result: inout [ArchivePassage], passage: ArchivePassage) -> Void in
+            if !result.contains(where: { $0.meetingID == passage.meetingID }) {
+                result.append(passage)
             }
+        }
+        let titles: [String] = meetings.map { (passage: ArchivePassage) -> String in
+            "\(passage.meetingTitle) (\(passage.meetingDate.formatted(Date.FormatStyle().day().month(.abbreviated).locale(interfaceLocale()))))"
         }
         VStack(alignment: .leading, spacing: 6) {
             if !exchange.terms.isEmpty {
@@ -399,7 +404,7 @@ private struct ReasoningDetails: View {
 }
 
 /// Akan cevap: gelen metin harf harf yumuşakça açılır (parça büyükse daha hızlı yetişir; son harfler mürekkep gibi
-/// soluktan koyulaşır), yazarken sonda imleç. Markdown (kalın, italik, maddeler) ve tıklanabilir kaynak işaretleri ([1]).
+/// soluktan koyulaşır), yazarken sonda imleç. Markdown (kalın, maddeler) ve tıklanabilir kaynak işaretleri ([1]).
 private struct StreamingAnswer: View {
     let exchange: ArchiveExchange
     let onCitation: @MainActor (Int) -> Void

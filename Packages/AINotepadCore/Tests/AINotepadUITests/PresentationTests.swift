@@ -127,6 +127,18 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         ])
     }
 
+    // Kopyalanan metin paneldeki görünüme uyar: yalnızca orijinal, yalnızca çeviri ya da orijinalin altında çeviri.
+    @Test func copiedTextFollowsDisplayMode() {
+        let first: LiveSegment = seg(.others, 0, 1, "Hyvää huomenta.", person: 1)
+        let second: LiveSegment = seg(.others, 1, 3, "Aloitetaan.", person: 1)
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first, second])
+        let translations: [SegmentID: String] = [first.id: "Günaydın."]
+        let original: String = plainText(blocks: blocks)
+        #expect(displayedPlainText(blocks: blocks, translations: translations, displayMode: .originalOnly) == original)
+        #expect(displayedPlainText(blocks: blocks, translations: translations, displayMode: .turkishOnly).hasSuffix(": Günaydın. Aloitetaan."))
+        #expect(displayedPlainText(blocks: blocks, translations: translations, displayMode: .bilingual) == original + "\nGünaydın.")
+    }
+
     @Test func originalOnlySkipsLiveTranslation() {
         #expect(!DisplayMode.originalOnly.needsLiveTranslation)
     }

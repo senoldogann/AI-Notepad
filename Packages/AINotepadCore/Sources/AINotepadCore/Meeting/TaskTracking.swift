@@ -158,11 +158,20 @@ public func reminderDraft(record: MeetingRecord, task: NoteTask, language: Share
 
 /// Not yeniden yazılınca (ad verildi, şablon değişti) görevler başka sözcüklerle yazılır ve kimlikleri değişir.
 /// İşaretli eski görev yeni notta aynı kimlikle varsa o alınır; yoksa açıklamalarının sözcük benzerliğiyle (Jaccard
-/// ≥ 0,5, en benzeri) eşlenir; eşleşenlerin yeni kimlikleri döner. Saf fonksiyondur.
+/// ≥ 0,5, en benzeri; eşit benzerlikte sahibi aynı olan) eşlenir; eşleşenlerin yeni kimlikleri döner. Eski notta aynen
+/// bulunan yeni görev benzerlikle eşlenmez: kendi işaret durumunu korur, başka görevin işaretini (tamamlandı, araca
+/// gönderildi) devralmaz. Saf fonksiyondur.
 public func carriedTaskKeys(oldTasks: [NoteTask], newTasks: [NoteTask], keys: [String]) -> [String] {
     let words: (NoteTask) -> Set<String> = { (task: NoteTask) -> Set<String> in Set(searchTokens(text: task.description).map { String($0.prefix(5)) }) }
     let marked: [NoteTask] = oldTasks.filter { keys.contains(taskKey(task: $0)) }
     let newKeys: [String] = newTasks.map { taskKey(task: $0) }
+    let oldKeys: Set<String> = Set(oldTasks.map { taskKey(task: $0) })
+    // Benzerlik adayları yalnızca yeniden yazılmış (eski notta aynen olmayan) görevler.
+    let fuzzyPool: [NoteTask] = newTasks.filter { !oldKeys.contains(taskKey(task: $0)) }
+    let sameOwner: (NoteTask, NoteTask) -> Bool = { (left: NoteTask, right: NoteTask) -> Bool in
+        taskKey(task: NoteTask(owner: left.owner, description: "", dueDate: nil, isMine: false))
+            == taskKey(task: NoteTask(owner: right.owner, description: "", dueDate: nil, isMine: false))
+    }
     return marked.reduce(into: [String]()) { (result: inout [String], old: NoteTask) -> Void in
         // Değişmeyen görev kendisiyle eşlenir (benzerlik, aynı açıklamalı iki görevi ya da sözcüksüz görevi şaşırabilir).
         let oldKey: String = taskKey(task: old)
@@ -173,13 +182,15 @@ public func carriedTaskKeys(oldTasks: [NoteTask], newTasks: [NoteTask], keys: [S
             return
         }
         let oldWords: Set<String> = words(old)
-        let best: (task: NoteTask, score: Double)? = newTasks
+        let best: (task: NoteTask, score: Double)? = fuzzyPool
             .map { (new: NoteTask) -> (task: NoteTask, score: Double) in
                 let newWords: Set<String> = words(new)
                 let union: Int = oldWords.union(newWords).count
                 return (task: new, score: union == 0 ? 0 : Double(oldWords.intersection(newWords).count) / Double(union))
             }
-            .max { $0.score < $1.score }
+            .max { (left: (task: NoteTask, score: Double), right: (task: NoteTask, score: Double)) -> Bool in
+                left.score == right.score ? !sameOwner(old, left.task) && sameOwner(old, right.task) : left.score < right.score
+            }
         if let best, best.score >= 0.5, !result.contains(taskKey(task: best.task)) {
             result.append(taskKey(task: best.task))
         }

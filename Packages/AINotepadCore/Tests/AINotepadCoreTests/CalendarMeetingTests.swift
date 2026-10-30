@@ -36,6 +36,9 @@ import Testing
         #expect(meetingJoinURL(texts: ["Neuvotteluhuone 2", "Liity: https://teams.microsoft.com/l/meetup-join/19%3a123 kiitos"])?.host == "teams.microsoft.com")
         #expect(meetingJoinURL(texts: ["https://us02web.zoom.us/j/8812345?pwd=abc"])?.absoluteString == "https://us02web.zoom.us/j/8812345?pwd=abc")
         #expect(meetingJoinURL(texts: ["https://example.com/agenda"]) == nil)
+        // Metne yapışık noktalama ve parantez bağlantıya katılmaz.
+        #expect(meetingJoinURL(texts: ["Linkki (https://meet.google.com/abc-defg-hij)."])?.path() == "/abc-defg-hij")
+        #expect(meetingJoinURL(texts: ["Liity: https://zoom.us/j/123."])?.path() == "/j/123")
         // Alan adı yalnız sorguda ya da sahte üst alanda geçen adres görüşme bağlantısı sayılmaz; sonraki gerçek bağlantı bulunur.
         #expect(meetingJoinURL(texts: ["https://evil.example/?x=zoom.us", "https://teams.microsoft.com.evil.example/join"]) == nil)
         #expect(meetingJoinURL(texts: ["Katso https://evil.example/zoom.us ja https://meet.google.com/abc-defg-hij"])?.host == "meet.google.com")

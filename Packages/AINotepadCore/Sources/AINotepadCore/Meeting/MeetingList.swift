@@ -13,8 +13,8 @@ public struct MeetingSection: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Toplantıları tarihe göre gruplar (en yeni önce): Bugün, Dün, Bu hafta, sonra ay ve yıl. Mac listesi ve iPhone
-/// kartları aynı grupları gösterir. Saf fonksiyondur.
+/// Toplantıları tarihe göre gruplar (en yeni önce): Bugün, Dün, Önceki 7 gün (2–6 gün önce; takvim haftasına bağlı
+/// değil), sonra ay ve yıl. Mac listesi ve iPhone kartları aynı grupları gösterir. Saf fonksiyondur.
 public func meetingSections(records: [MeetingRecord], now: Date, calendar: Calendar, locale: Locale) -> [MeetingSection] {
     let today: Date = calendar.startOfDay(for: now)
     let title: (MeetingRecord) -> String = { (record: MeetingRecord) -> String in
@@ -23,7 +23,7 @@ public func meetingSections(records: [MeetingRecord], now: Date, calendar: Calen
         switch days {
         case ..<1: return String(localized: "Bugün")
         case 1: return String(localized: "Dün")
-        case 2..<7: return String(localized: "Bu hafta")
+        case 2..<7: return String(localized: "Önceki 7 gün")
         default: return record.startedAt.formatted(Date.FormatStyle().month(.wide).year().locale(locale)).capitalized(with: locale)
         }
     }

@@ -30,12 +30,13 @@ let meetingHosts: [String] = [
 
 /// Konum, not ve adres alanlarındaki ilk görüşme bağlantısı (Teams, Zoom, Google Meet, Webex). Yalnız ana bilgisayarı
 /// servisin alan adı ya da alt alan adı olan `https` bağlantısı kabul edilir: `https://evil.example/?x=zoom.us` ya da
-/// `https://zoom.us.evil.example/` gibi takvim davetine yazılmış sahte adresler açılmaz. Saf fonksiyondur.
+/// `https://zoom.us.evil.example/` gibi takvim davetine yazılmış sahte adresler açılmaz. Metne yapışık sondaki
+/// noktalama ("(https://meet.google.com/abc)", "…/j/123.") bağlantıya katılmaz. Saf fonksiyondur.
 public func meetingJoinURL(texts: [String]) -> URL? {
     let candidate: Regex = /https:\/\/[^\s<>"]+/
     for text in texts {
         for match in text.matches(of: candidate) {
-            guard let url = URL(string: String(match.output)), url.scheme == "https", let host = url.host()?.lowercased(),
+            guard let url = URL(string: trimmingTrailingPunctuation(link: String(match.output))), url.scheme == "https", let host = url.host()?.lowercased(),
                   meetingHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else {
                 continue
             }
@@ -43,6 +44,23 @@ public func meetingJoinURL(texts: [String]) -> URL? {
         }
     }
     return nil
+}
+
+/// Metindeki bağlantının sonuna yapışmış noktalama atılır: `.,;:!?'` her zaman, kapanan parantez (`)`, `]`, `}`)
+/// yalnızca bağlantıda açılışından fazlaysa (bağlantının kendi parantezi kalır). Saf fonksiyondur.
+func trimmingTrailingPunctuation(link: String) -> String {
+    let pairs: [Character: Character] = [")": "(", "]": "[", "}": "{"]
+    var result: Substring = Substring(link)
+    while let last = result.last {
+        if ".,;:!?'".contains(last) {
+            result = result.dropLast()
+        } else if let opening = pairs[last], result.filter({ $0 == last }).count > result.filter({ $0 == opening }).count {
+            result = result.dropLast()
+        } else {
+            break
+        }
+    }
+    return String(result)
 }
 
 /// Katılımcı adı: EventKit adı e-posta ya da "Ad Soyad <e-posta>" olabilir; e-posta yerine adın kendisi, yalnız

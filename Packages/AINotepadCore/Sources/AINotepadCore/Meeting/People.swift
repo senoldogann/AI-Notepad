@@ -119,7 +119,15 @@ public struct PersonSummary: Sendable, Equatable, Identifiable {
 /// Saf fonksiyondur.
 public func peopleDirectory(records: [MeetingRecord], voices: [RegisteredVoice], book: PeopleBook, userName: String) -> [PersonSummary] {
     let entries: [(name: String, meeting: PersonMeeting)] = records.flatMap { (record: MeetingRecord) -> [(name: String, meeting: PersonMeeting)] in
-        let shares: [SpeakerShare] = speakerShares(paragraphs: transcriptParagraphs(record: record))
+        // Kullanıcıdan başka adı olmayan toplantının transkripti hiç işlenmez (arşivin çoğu).
+        let hasPeople: Bool = record.speakerNames.values.contains { (value: String) -> Bool in
+            let name: String = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !name.isEmpty && name.caseInsensitiveCompare(userName) != .orderedSame
+        }
+        guard hasPeople else {
+            return []
+        }
+        let shares: [SpeakerShare] = speakerShares(record: record)
         return record.speakerNames.compactMap { (entry: (key: Int, value: String)) -> (name: String, meeting: PersonMeeting)? in
             let name: String = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty, name.caseInsensitiveCompare(userName) != .orderedSame else {

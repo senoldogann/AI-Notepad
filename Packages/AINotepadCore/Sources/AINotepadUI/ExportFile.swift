@@ -6,7 +6,7 @@ public enum ExportFileError: Error, Equatable {
 }
 
 /// Dışa aktarılacak dosyanın yolu: `<klasör>/<başlık> <yyyy-MM-dd>.<uzantı>`; dosya adında kullanılamayan
-/// karakterler atılır, aynı ad varsa " 2", " 3"… eklenir. Diskte adların varlığına bakar (saf değildir); hepsi
+/// karakterler ve baştaki/sondaki noktalar (gizli dosya olmasın) atılır, aynı ad varsa " 2", " 3"… eklenir. Diskte adların varlığına bakar (saf değildir); hepsi
 /// doluysa var olan dosyanın üzerine yazmak yerine hata verir.
 public func exportFileURL(directory: URL, title: String, startedAt: Date, fileExtension: String) throws(ExportFileError) -> URL {
     let formatter: DateFormatter = DateFormatter()
@@ -15,7 +15,8 @@ public func exportFileURL(directory: URL, title: String, startedAt: Date, fileEx
     let cleaned: String = title
         .components(separatedBy: CharacterSet(charactersIn: "/:\\?%*|\"<>"))
         .joined()
-        .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Baştaki nokta dosyayı gizler (".NET planı" Finder'da görünmezdi).
+        .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
     let base: String = "\(cleaned.isEmpty ? String(localized: "Toplantı") : cleaned) \(formatter.string(from: startedAt))"
     let candidates: [URL] = [directory.appending(path: "\(base).\(fileExtension)")]
         + (2...999).map { directory.appending(path: "\(base) \($0).\(fileExtension)") }

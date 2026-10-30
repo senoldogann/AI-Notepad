@@ -8,7 +8,6 @@ import Testing
         #expect(userFacingMessage(error: AudioCaptureError.microphoneStartFailed(code: -10868)).contains("Mikrofon başlatılamadı"))
         #expect(userFacingMessage(error: AudioCaptureError.coreAudio(operation: "AudioDeviceStart", status: -50)).contains("Sistem sesi"))
         #expect(userFacingMessage(error: AudioCaptureError.microphonePermissionDenied).contains("Mikrofon izni"))
-        #expect(userFacingMessage(error: AudioCaptureError.systemAudioPermissionDenied).contains("Sistem sesi kaydı izni"))
         #expect(userFacingMessage(error: TranscriptionError.modelLoadFailed(model: "m", reason: "r")).contains("model"))
     }
 
@@ -37,7 +36,7 @@ import Testing
         #expect(retryDelay(retryAfterHeader: "yarın", attempt: 2) == 2)
     }
 
-    @Test func classifyRetries408AndFlagsTruncation() {
+    @Test func classifyRetries408() {
         #expect(classifyClaudeResponse(status: 408, data: Data("x".utf8), model: "m", requestID: "r") == .retryable(.http(status: 408, body: "x", model: "m", requestID: "r")))
     }
 

@@ -538,9 +538,9 @@ func onDeviceMessage(error: OnDeviceLLMError) -> String {
     case .unavailable(let reason):
         onDeviceUnavailableMessage(reason: reason)
     case .unsupportedLanguage:
-        String(localized: "Cihaz içi model bu toplantının dilini desteklemiyor (ör. Fince). Bu toplantı için Ayarlar'da kendi anahtarınla bir sağlayıcı seçip \"Notu yenile\"ye bas.")
+        String(localized: "Cihaz içi model bu toplantının dilini desteklemiyor (ör. Fince); Ayarlar'da kendi anahtarınla bir sağlayıcı seçip yeniden dene.")
     case .meetingLanguageUnsupported(let name):
-        String(localized: "Cihaz içi model \(name) desteklemiyor; bu toplantı için Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur), sonra \"Notu yenile\"ye bas.")
+        String(localized: "Cihaz içi model \(name) desteklemiyor; Ayarlar'da kendi anahtarınla bir model seç (Mac'te anahtarsız Ollama da olur) ve yeniden dene.")
     case .outputLanguageUnsupported(let name):
         String(localized: "Cihaz içi model \(name) yazamıyor; not dilini değiştir ya da Ayarlar'da kendi anahtarınla bir model seç.")
     case .contextTooLong:

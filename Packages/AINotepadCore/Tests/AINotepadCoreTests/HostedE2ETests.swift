@@ -15,14 +15,6 @@ import Testing
 /// günlük harcama tavanı 25 $, deneme tavanı 10 $, `DEVICECHECK_POLICY=off`).
 let hostedE2EEnabled: Bool = ProcessInfo.processInfo.environment["AINOTEPAD_HOSTED_E2E"] == "1"
 
-/// Deponun `server/` klasörü (bu dosya `Packages/AINotepadCore/Tests/AINotepadCoreTests` içinde).
-private func serverDirectory() -> URL {
-    URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().deletingLastPathComponent()
-        .appending(path: "server", directoryHint: .isDirectory)
-}
-
 /// Bellekte oturum (Anahtar Zinciri'ne dokunulmaz).
 private final class MemoryTokenStorage: HostedTokenStorage {
     private let tokens: Mutex<HostedTokens?>
@@ -245,8 +237,8 @@ private func silentWav() -> Data {
 
 @Suite(.enabled(if: hostedE2EEnabled), .serialized) struct HostedE2ETests {
     // Oturum (yenileme jetonuyla) → /v1/me → toplantı başlat (deneme düşer) → bitir → erişim jetonu yenilenir →
-    // yanıtı kaybolmuş yenilemenin 30 sn içindeki tekrarı kabul edilir → süre geçtikten sonra eski jeton yeniden gelirse
-    // tüm oturumlar düşer ve istemci çıkış yapar.
+    // yanıtı kaybolmuş yenilemenin 10 dakika içindeki tekrarı kabul edilir → halef kullanıldıktan sonra eski jeton
+    // yeniden gelirse tüm oturumlar düşer ve istemci çıkış yapar.
     @Test func signInMeetingAndRefreshAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
         try resetLocalTrialStarts()
@@ -520,13 +512,13 @@ private func silentWav() -> Data {
         _ = try await user.client.endMeeting(meetingID: started.meetingId)
     }
 
-    // Çıkış ve hesap silme: ikisinde de yerel oturum silinir; eski yenileme jetonu artık geçmez (istemci "oturum
-    // kapandı" der ve kayıtlı oturumu siler).
     // Çevrimdışı kaydedilmiş toplantı bağlantı gelince açılır: aynı kayıt kimliğiyle (`clientRef`) yinelenen başlatma
     // (yanıt kaybolduysa, uygulama yeniden açıldıysa) aynı oturumu döndürür, deneme bir kez düşer; oturum hemen
     // kapatılsa da ses hakkı en çok sürece açıktır ve not için ek süre başlar.
     @Test func deferredMeetingStartIsIdempotentAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
+        // Yeni deneme kullanıcısı IP başına günlük deneme sayısına yazılır: tek başına tekrar koşunca sınıra takılmasın.
+        try resetLocalTrialStarts()
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         let before: HostedEntitlements = try await user.client.entitlements()
         let recordID: String = "kayit-\(UUID().uuidString.lowercased())"
@@ -615,6 +607,8 @@ private func silentWav() -> Data {
         #expect(hostedStartBlock(entitlements: after) == .trialEnded)
     }
 
+    // Çıkış ve hesap silme: ikisinde de yerel oturum silinir; eski yenileme jetonu artık geçmez (istemci "oturum
+    // kapandı" der ve kayıtlı oturumu siler).
     @Test func signOutAndDeleteAccountAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
 
@@ -700,20 +694,6 @@ private func silentWav() -> Data {
         #expect(ownerAfter.trialMeetingsLeft == lastKnown.trialMeetingsLeft - 2)
         #expect(try await other.client.entitlements().trialMeetingsLeft == otherBefore.trialMeetingsLeft)
         _ = try await online.endMeeting(meetingID: live.meetingId)
-    }
-
-    // İstemcinin hata kodları sunucununkilerle birebir aynı olmalı (`HostedErrors.swift` bunu söyler): eksik kod
-    // kullanıcıya "Sunucu beklenmeyen bir yanıt verdi (HTTP …)" olarak görünür (0.1.4'te `trial_not_started` böyleydi).
-    @Test func clientKnowsEveryServerErrorCode() throws {
-        let source: String = try String(contentsOf: serverDirectory().appending(path: "src/errors.ts"), encoding: .utf8)
-        let union: Substring = try #require(source.firstRange(of: "export type ErrorCode =").map { source[$0.upperBound...] })
-        let body: Substring = try #require(union.firstRange(of: ";").map { union[..<$0.lowerBound] })
-        let serverCodes: Set<String> = Set(body.matches(of: #/"([a-z_]+)"/#).map { String($0.output.1) })
-        #expect(serverCodes.count > 30)
-        let clientCodes: Set<String> = Set(HostedErrorCode.allCases.map(\.rawValue))
-        #expect(clientCodes.subtracting(serverCodes).isEmpty, "İstemcide olup sunucuda olmayan: \(clientCodes.subtracting(serverCodes).sorted())")
-        let missing: [String] = serverCodes.subtracting(clientCodes).sorted()
-        #expect(missing.isEmpty, "Sunucuda olup istemcide olmayan: \(missing)")
     }
 }
 

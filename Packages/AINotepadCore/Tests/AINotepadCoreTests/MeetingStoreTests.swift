@@ -116,6 +116,10 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(filterMeetings(records: [plain, noted], query: "bütçe").map(\.id) == ["b"])
         #expect(filterMeetings(records: [plain, noted], query: "RAPORTTI").map(\.id) == ["b"])
         #expect(filterMeetings(records: [plain, noted], query: "hei").map(\.id) == ["a"])
+        // Türkçe noktasız ı: "ışık" ve "isik" "Işık" başlığını bulur (@ seçicideki aramayla aynı).
+        let light: MeetingRecord = noted.with(title: "Işık planı")
+        #expect(filterMeetings(records: [plain, light], query: "ışık").map(\.id) == ["b"])
+        #expect(filterMeetings(records: [plain, light], query: "isik").map(\.id) == ["b"])
     }
 }
 
