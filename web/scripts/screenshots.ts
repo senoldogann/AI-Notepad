@@ -87,6 +87,7 @@ const targets: readonly Target[] = [
   { name: "invite-code", path: "/invite?code=K7M2QX9D", ready: "#invite-code-box:not(.hidden)", signedIn: false, account: null },
   { name: "admin", path: "/admin", ready: "#kpi-mrr:not(:empty)", signedIn: true, account: null },
   { name: "admin-insights", path: "/admin#insights", ready: "#insights-funnel-rows tr", signedIn: true, account: null },
+  { name: "admin-product", path: "/admin#product", ready: "#product-cohorts-rows tr", signedIn: true, account: null },
   { name: "admin-users", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-user", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-user-free", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
@@ -546,6 +547,100 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         ],
       },
     },
+    // Ürün görünümü: az veriyle (birkaç hesap) dolu ve boş hücreler; bu ayın satırı kısmi, başlamamış kohort haftaları null.
+    "/v1/admin/product": {
+      generatedAt: now.toISOString(),
+      engagement: {
+        activeLast7Days: 2,
+        activeLast30Days: 3,
+        weeks: Array.from({ length: 8 }, (_: unknown, index: number) => ({
+          weekStart: at((index - 7) * 7).slice(0, 10),
+          activeUsers: index % 3 === 0 ? 0 : 2,
+          meetings: index % 3 === 0 ? 0 : 3 + (index % 2),
+          meetingsPerActiveUser: index % 3 === 0 ? null : (3 + (index % 2)) / 2,
+        })),
+      },
+      cohorts: Array.from({ length: 8 }, (_: unknown, index: number) => ({
+        weekStart: at((index - 7) * 7).slice(0, 10),
+        signups: index % 2 === 0 ? 0 : 3,
+        activeByWeek: Array.from({ length: 5 }, (__: unknown, week: number): number | null => (index + week > 7 ? null : index % 2 === 0 ? 0 : Math.max(0, 2 - week))),
+      })),
+      retention: { d7: { day: 7, eligible: 4, retained: 1 }, d30: { day: 30, eligible: 2, retained: 1 } },
+      timeToStep: {
+        days: 90,
+        signupToFirstMeeting: { users: 3, medianSeconds: 5_400 },
+        firstMeetingToFirstNote: { users: 2, medianSeconds: 1_890 },
+        signupToFirstNote: { users: 2, medianSeconds: 93_600 },
+      },
+      trialOutcomes: { started: 4, converted: 1, exhausted: 1, expired: 1, active: 1 },
+      checkout: { started: 2, paid: 1, abandoned: 1, startedLast30Days: 1, abandonedLast30Days: 1 },
+      reliability: {
+        days: 30,
+        meetings: 6,
+        failedMeetings: 2,
+        failuresByCode: [
+          { detail: "meeting_budget_exhausted", count: 1 },
+          { detail: "upstream_rejected:elevenlabs", count: 1 },
+        ],
+        endedMeetings: 5,
+        notedMeetings: 4,
+        medianNoteSeconds: 95,
+        superseded: 1,
+        unended: 0,
+        open: 1,
+        budgetExhausted: 1,
+        deepgram: { meetings: 4, baselineGrants: 3, grants: 14, withReconnects: 1, reconnects: 2 },
+        onDevice: 2,
+        opsDays: days.map((day: string, index: number) => ({ day, refusal: index % 9 === 0 ? 2 : 0, providerError: index === 27 ? 3 : 0, serverError: index === 29 ? 1 : 0 })),
+      },
+      economics: {
+        rates: { llmInputUsdPerMTok: 0.1, llmOutputUsdPerMTok: 0.5, elevenLabsUsdPerHour: 0.22, deepgramUsdPerMinute: 0.0092, priceUsdMonthly: 5.99, priceUsdYearly: 49 },
+        months: [
+          {
+            month: at(-62).slice(0, 7),
+            partial: false,
+            meetings: 0,
+            meetingHours: 0,
+            meetingCostUsd: { llm: 0, elevenLabs: 0, deepgram: 0, total: 0 },
+            accountLlmUsd: 0,
+            perMeeting: null,
+            perMeetingHour: null,
+            payers: { users: 1, costUsd: 0, costPerUserUsd: 0, listRevenueUsd: 5.99, grossMarginPercent: 100 },
+          },
+          {
+            month: at(-31).slice(0, 7),
+            partial: false,
+            meetings: 2,
+            meetingHours: 1,
+            meetingCostUsd: { llm: 0.03, elevenLabs: 0.11, deepgram: 0, total: 0.14 },
+            accountLlmUsd: 0,
+            perMeeting: { llm: 0.015, elevenLabs: 0.055, deepgram: 0, total: 0.07 },
+            perMeetingHour: { llm: 0.03, elevenLabs: 0.11, deepgram: 0, total: 0.14 },
+            payers: { users: 1, costUsd: 0, costPerUserUsd: 0, listRevenueUsd: 5.99, grossMarginPercent: 100 },
+          },
+          {
+            month: now.toISOString().slice(0, 7),
+            partial: true,
+            meetings: 4,
+            meetingHours: 3.67,
+            meetingCostUsd: { llm: 0.2833, elevenLabs: 0.33, deepgram: 1.196, total: 1.8093 },
+            accountLlmUsd: 0.0167,
+            perMeeting: { llm: 0.0708, elevenLabs: 0.0825, deepgram: 0.299, total: 0.4523 },
+            perMeetingHour: { llm: 0.0773, elevenLabs: 0.09, deepgram: 0.3262, total: 0.4935 },
+            payers: { users: 1, costUsd: 1.524, costPerUserUsd: 1.524, listRevenueUsd: 5.99, grossMarginPercent: 74.56 },
+          },
+        ],
+        dailySpend: days.map((day: string, index: number) => ({ day, usd: index > 25 ? wave(index, 0.4) / 2 : 0, trialUsd: index > 27 ? 0.2 : 0 })),
+      },
+      crashes: {
+        total: 3,
+        recentDays: 30,
+        versions: [
+          { version: "0.1.8", total: 2, recent: 1, lastAt: at(-1) },
+          { version: "", total: 1, recent: 0, lastAt: at(-100) },
+        ],
+      },
+    },
     "/v1/admin/operations": {
       generatedAt: now.toISOString(),
       meetings: {
@@ -793,8 +888,9 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
         await page.evaluate((): void => document.getElementById("blog-tab-preview")?.scrollIntoView({ block: "start" }));
         await capture(page, outDir, `${shot}-preview`, findings);
       }
-      // İçgörüler görünümü kabuğun içinde kayar: alt kartlar (indirme kaynakları, iptal nedenleri) ayrı bir görüntüde.
-      if (target.name === "admin-insights") {
+      // İçgörüler ve ürün görünümleri kabuğun içinde kayar: alt kartlar (indirme kaynakları, iptal nedenleri; birim
+      // ekonomisi, çökmeler) ayrı bir görüntüde.
+      if (target.name === "admin-insights" || target.name === "admin-product") {
         await page.evaluate((): void => document.querySelector(".console__main")?.scrollTo(0, 100_000));
         await capture(page, outDir, `${shot}-bottom`, findings);
       }
