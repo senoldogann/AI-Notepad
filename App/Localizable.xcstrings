@@ -378,7 +378,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ sign-in isn't available in this version yet. For now you can connect with the \"Webhook address\" card."
+            "value": "%@ sign-in isn't available in this version yet. For now you can connect with the \"Webhook URL\" card."
           }
         }
       }
@@ -8525,7 +8525,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook address from Teams (channel › ⋯ › Workflows) into the \"Webhook address\" card."
+            "value": "Your organisation's Microsoft account needs admin approval for this connection. Ask your IT admin, or paste a webhook URL from Teams (channel › ⋯ › Workflows) into the \"Webhook URL\" card."
           }
         }
       }
