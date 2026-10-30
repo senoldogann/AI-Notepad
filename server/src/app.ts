@@ -6,6 +6,7 @@ import { deleteAccount } from "./account";
 import { adminStats, requireAdmin } from "./admin";
 import { adminInsights } from "./adminInsights";
 import { adminOperations } from "./adminOps";
+import { adminProduct } from "./adminProduct";
 import { adminUserDetail, listAdminUsers, parseAdminUserFilter } from "./adminUsers";
 import {
   type ActiveBlog,
@@ -574,6 +575,9 @@ async function routeAdmin(request: Request, env: Env, config: Config, context: R
   }
   if (path === "/v1/admin/insights" && method === "GET") {
     return jsonResponse(200, await adminInsights(db, now));
+  }
+  if (path === "/v1/admin/product" && method === "GET") {
+    return jsonResponse(200, await adminProduct(db, config, now));
   }
   if (path === "/v1/admin/users" && method === "GET") {
     return jsonResponse(200, await listAdminUsers(db, config, parseAdminUserFilter(new URL(request.url)), now));
