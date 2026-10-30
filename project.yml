@@ -18,7 +18,8 @@ targets:
     type: application
     platform: macOS
     sources:
-      # App/Licenses (WhisperKit/SpeakerKit MIT lisansı ve bildirimleri) ve App/Fonts/Inter-OFL.txt da kaynaklarla gelir.
+      # App/Licenses (WhisperKit/SpeakerKit MIT lisansı ve bildirimleri, Sparkle'ın lisansı) ve App/Fonts/Inter-OFL.txt da
+      # kaynaklarla gelir.
       # App/Hosted yalnızca abonelik sürümünündür (AINotepadHosted).
       - path: App
         excludes: ["Hosted/**"]
@@ -82,7 +83,9 @@ targets:
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
         MARKETING_VERSION: "0.1.6"
         CURRENT_PROJECT_VERSION: "15"
-  # Abonelik sürümü: anahtarsız; yapay zekâ ve son geçiş bizim sunucumuz (server/) üzerinden, canlı metin WhisperKit.
+  # Abonelik sürümü: anahtarsız; yapay zekâ, son geçiş ve canlı metin jetonu (Deepgram) bizim sunucumuz (server/)
+  # üzerinden. Canlı motoru her kayıt için sunucu seçer; sunucu Deepgram vermezse canlı metin Mac'te (WhisperKit), bkz.
+  # App/Hosted/HostedSeams.swift.
   # Geliştirici sürümüyle aynı kaynaklar + App/Hosted; farklar yalnızca `HOSTED_EDITION` bayrağıyla birkaç noktada.
   # Ayrı paket kimliği, Anahtar Zinciri servisi ve veri klasörü: iki uygulama aynı Mac'te yan yana durur.
   # Ürün adı Gistsmith (Gistsmith.app, görünen ad, izin metinleri); iç kimlikler (paket kimliği, adres şeması, Anahtar
@@ -92,6 +95,7 @@ targets:
     platform: macOS
     sources:
       # İzin metinleri ve görünen ad bu sürümün kendi kataloğunda (App/Hosted/InfoPlist.xcstrings, "Gistsmith").
+      # App/Licenses (Sparkle'ın lisansı dahil) ve App/Fonts/Inter-OFL.txt geliştirici sürümündeki gibi kaynaklarla gelir.
       # Geliştirici sürümünün Info.plist'i (App/Info.plist) ve bu hedefin kendi Info.plist'i kaynak olarak kopyalanmaz.
       - path: App
         excludes: ["InfoPlist.xcstrings", "Info.plist", "Hosted/Info.plist"]
@@ -162,7 +166,9 @@ targets:
         DEVELOPMENT_LANGUAGE: en
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
-        # Geliştirici sürümünün yetkileri + Apple ile giriş; iCloud yok (eşitleme bu sürümde kapalı).
+        # Geliştirici sürümünün yetkileri, iCloud hariç (eşitleme bu sürümde kapalı). Apple ile giriş yetkisi yok
+        # (Developer ID profillerine verilmez); giriş sitede, uygulama içi giriş penceresinde (bkz.
+        # Packages/AINotepadCore/Sources/AINotepadCore/Hosted/HostedBrowserSignIn.swift).
         CODE_SIGN_ENTITLEMENTS: App/Hosted/AINotepadHosted.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Gistsmith
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Gistsmith toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
@@ -194,9 +200,10 @@ targets:
         buildPhase: resources
       - path: App/Fonts/Inter-OFL.txt
         buildPhase: resources
-      # iPhone da WhisperKit'i bağlar; lisansı ve bildirimleri onunla gelir.
+      # iPhone da WhisperKit'i bağlar; lisansı ve bildirimleri onunla gelir. Sparkle yalnızca Mac'te: lisansı burada yok.
       - path: App/Licenses
         buildPhase: resources
+        excludes: ["Sparkle-LICENSE.txt"]
       - path: NOTICE
         buildPhase: resources
       # Takvim bağlantısı (EventKit) Mac'le aynı.

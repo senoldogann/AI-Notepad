@@ -98,6 +98,17 @@ require_new_build() {
     fi
 }
 
+# Yerel appcast'te bu sürüm zaten varsa durur (her sürümde MARKETING_VERSION da artırılır): aynı sürümün indirme adresi
+# (releases/download/v<sürüm>/) yayınlanmış eski DMG'yi gösterir ve yayın komutu etiket zaten var diye başarısız olur.
+require_new_version() {
+    local appcast="$1"
+    local version="$2"
+    if [[ -f "$appcast" ]] && grep -qF "<sparkle:shortVersionString>$version</sparkle:shortVersionString>" "$appcast"; then
+        echo "$appcast'te $version sürümü zaten var; project.yml'de MARKETING_VERSION'ı artır." >&2
+        exit 1
+    fi
+}
+
 # Şemayı Release olarak arşivler ve Developer ID ile dışa aktarır: Xcode'un otomatik imzalaması profili geliştirici
 # hesabından alır (iCloud profil ister; özel yetkisi olmayan uygulamaya profil gömülmez), hardened runtime ve zaman damgasıyla imzalar. Uygulama
 # `<çıktı>/export/` altına çıkar.
