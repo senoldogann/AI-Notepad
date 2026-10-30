@@ -354,7 +354,7 @@ function contentsUrl(blog: ActiveBlog, repoPath: string): string {
  */
 async function githubRequest(platform: Platform, blog: ActiveBlog, operation: string, method: string, url: string, body: object | null): Promise<GithubReply> {
   return withRetries(
-    { service: "github", attempts: githubAttempts, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableUpstreamError },
+    { service: "github", attempts: githubAttempts, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableUpstreamError, recordRetry: platform.recordRetry },
     async (): Promise<GithubReply> => {
       const headers: Record<string, string> = {
         accept: "application/vnd.github+json",

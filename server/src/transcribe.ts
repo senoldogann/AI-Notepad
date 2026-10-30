@@ -416,6 +416,31 @@ export function billableSeconds(transcription: Transcription, estimatedSeconds: 
   return Math.max(lastEnd, estimatedSeconds);
 }
 
+/**
+ * Günlük dil sayacının dil anahtarı: ISO 639 biçimindeki kod küçük harfle; değilse `other`. İstenen dil yoksa `auto`.
+ * Saf fonksiyondur.
+ */
+export function languageKeyOf(code: string | null): string {
+  if (code === null) {
+    return "auto";
+  }
+  const lower: string = code.toLowerCase();
+  return /^[a-z]{2,3}$/.test(lower) ? lower : "other";
+}
+
+/**
+ * Konuşma tanıma dillerinin günlük sayacı (`transcription_languages_daily`): istenen (`language_code`; yoksa `auto`) ve
+ * algılanan dil başına istek ve ses süresi. İçerik ve kullanıcı yazılmaz.
+ */
+function transcriptionLanguageStatement(db: D1Database, day: string, requested: string | null, detected: string, seconds: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO transcription_languages_daily (day, requested, detected, requests, audio_seconds) VALUES (?, ?, ?, 1, ?)
+       ON CONFLICT(day, requested, detected) DO UPDATE SET requests = requests + 1, audio_seconds = audio_seconds + excluded.audio_seconds`,
+    )
+    .bind(day, languageKeyOf(requested), languageKeyOf(detected), seconds);
+}
+
 /** Üst servis çağrısının sonucu: değer ya da istemciye dönecek hata (kesinleştirme her iki durumda yapılmıştır). */
 type CallOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: ApiError };
 
@@ -523,7 +548,10 @@ async function transcribeAndSettle(
   const seconds: number = billableSeconds(result.transcription, reserved);
   // Ayırma ses başlığından (WAV başlığı ya da FLAC STREAMINFO) kesindir; 1 saniyelik pay yuvarlama içindir.
   const overrun: boolean = seconds > reserved + 1;
-  await db.batch(settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), seconds, now));
+  await db.batch([
+    transcriptionLanguageStatement(db, reservation.day, params.languageCode, result.transcription.language_code, seconds),
+    ...settleAudioStatements(db, reservation, seconds, overrun, transcriptionCostMicroUsd(seconds, usdPerHour), seconds, now),
+  ]);
   // Kesinleşmeden sonraki denetim yanıtı düşürmez (ses faturalandı; istemci yeniden göndermesin).
   try {
     await alertOnElevenLabsCrossing(db, config, seconds, now);

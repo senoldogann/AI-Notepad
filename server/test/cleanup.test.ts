@@ -18,6 +18,39 @@ async function ids(sql: string): Promise<string[]> {
   return rows.results.map((row: { id: string }): string => row.id).sort();
 }
 
+/** Sıfır değerli günlük anlık görüntü satırı. */
+function dailyMetricsRow(dayKey: string): D1PreparedStatement {
+  const zeroColumns: readonly string[] = [
+    "captured_at",
+    "users_total",
+    "users_new",
+    "active_users_day",
+    "active_users_7d",
+    "active_users_30d",
+    "meetings_trial",
+    "meetings_subscription",
+    "trials_started",
+    "trials_active",
+    "trials_exhausted",
+    "subscriptions_active",
+    "subscriptions_grace",
+    "subscriptions_ending",
+    "subscriptions_canceled",
+    "subscriptions_monthly",
+    "subscriptions_yearly",
+    "subscriptions_complimentary",
+    "subscriptions_free_invite_month",
+    "mrr_list_cents",
+    "spend_anthropic_micro_usd",
+    "spend_elevenlabs_micro_usd",
+    "spend_deepgram_micro_usd",
+    "spend_trial_micro_usd",
+    "elevenlabs_audio_seconds",
+    "deepgram_stream_seconds",
+  ];
+  return env.DB.prepare(`INSERT INTO daily_metrics (day, ${zeroColumns.join(", ")}) VALUES (?, ${zeroColumns.map((): string => "0").join(", ")})`).bind(dayKey);
+}
+
 async function insertUser(): Promise<string> {
   const userId: string = randomId();
   await env.DB.prepare("INSERT INTO users (id, created_at) VALUES (?, 0)").bind(userId).run();
@@ -99,6 +132,27 @@ describe("süresi dolmuş satırların temizliği", () => {
         `INSERT INTO subscription_cancellations (stripe_subscription_id, user_id, created_at, event_created, reason) VALUES
            ('sub_c_old', ?1, ?2, 0, 'cancellation_requested'), ('sub_c_new', ?1, ?3, 0, 'cancellation_requested')`,
       ).bind(first, nowMs - 181 * dayMs, nowMs - 179 * dayMs),
+      // Günlük toplamlar 400 gün; anlık görüntü 5 yıl; gelir kayıtları 10 yıl (önce eski faturaların iadeleri).
+      env.DB.prepare("INSERT INTO llm_usage_daily (day, bucket, calls, streamed_calls, input_tokens, output_tokens) VALUES (?, 'meeting_note', 1, 1, 1, 1), (?, 'meeting_note', 1, 1, 1, 1)").bind(
+        day(-401),
+        day(-399),
+      ),
+      env.DB.prepare(
+        "INSERT INTO transcription_languages_daily (day, requested, detected, requests, audio_seconds) VALUES (?, 'auto', 'tur', 1, 1), (?, 'auto', 'tur', 1, 1)",
+      ).bind(day(-401), day(-399)),
+      env.DB.prepare("INSERT INTO download_campaigns (day, utm_source, utm_campaign, count) VALUES (?, 'reddit', '', 1), (?, 'reddit', '', 1)").bind(day(-401), day(-399)),
+      dailyMetricsRow(day(-1827)),
+      dailyMetricsRow(day(-1825)),
+      env.DB.prepare("INSERT INTO daily_revenue_metrics (day, currency, mrr_cents, paying_subscriptions) VALUES (?, 'usd', 1, 1), (?, 'usd', 1, 1)").bind(day(-1827), day(-1825)),
+      env.DB.prepare(
+        `INSERT INTO revenue_invoices (invoice_id, user_id, subscription_id, day, paid_at, currency, amount_paid, total_excluding_tax, discount, tax, billing_reason) VALUES
+           ('in_old_refunded', NULL, 'sub_r', ?1, ?2, 'usd', 599, 483, 0, 116, 'subscription_cycle'),
+           ('in_old', NULL, 'sub_r', ?1, ?2, 'usd', 599, 483, 0, 116, 'subscription_cycle'),
+           ('in_recent', NULL, 'sub_r', ?3, ?4, 'usd', 599, 483, 0, 116, 'subscription_cycle')`,
+      ).bind(day(-3654), nowMs - 3654 * dayMs, day(-3652), nowMs - 3652 * dayMs),
+      env.DB.prepare(
+        "INSERT INTO revenue_refunds (charge_id, invoice_id, day, refunded_at, currency, amount_refunded) VALUES ('ch_old', 'in_old_refunded', ?, ?, 'usd', 599)",
+      ).bind(day(-3650), nowMs - 3650 * dayMs),
       // Hesabı silinmiş davet edilenin satırı 730 gün; hesabı yaşayanınki kalır.
       env.DB.prepare(
         `INSERT INTO referral_redemptions (id, referred_user_id, referred_identity_hash, referrer_user_id, code, status, created_at, updated_at, joined_at) VALUES
@@ -130,8 +184,22 @@ describe("süresi dolmuş satırların temizliği", () => {
       download_sources: 1,
       ops_events: 1,
       subscription_cancellations: 1,
+      llm_usage_daily: 1,
+      transcription_languages_daily: 1,
+      download_campaigns: 1,
+      daily_metrics: 1,
+      daily_revenue_metrics: 1,
+      revenue_refunds: 1,
+      revenue_invoices: 2,
       referral_redemptions: 1,
     });
+    expect(await ids("SELECT day AS id FROM llm_usage_daily")).toEqual([day(-399)]);
+    expect(await ids("SELECT day AS id FROM transcription_languages_daily")).toEqual([day(-399)]);
+    expect(await ids("SELECT day AS id FROM download_campaigns")).toEqual([day(-399)]);
+    expect(await ids("SELECT day AS id FROM daily_metrics")).toEqual([day(-1825)]);
+    expect(await ids("SELECT day AS id FROM daily_revenue_metrics")).toEqual([day(-1825)]);
+    expect(await ids("SELECT invoice_id AS id FROM revenue_invoices")).toEqual(["in_recent"]);
+    expect(await ids("SELECT charge_id AS id FROM revenue_refunds")).toEqual([]);
     expect(await ids("SELECT id FROM referral_redemptions")).toEqual(["ref_live", "ref_recent"]);
     // Silinen eski deneme toplantısı kullanıcının devraldığı denemeye eklendi; başlangıç korunur.
     const user = await env.DB.prepare("SELECT carried_trial_meetings, trial_started_at FROM users WHERE id = ?").bind(first).first<{
@@ -212,6 +280,8 @@ describe("süresi dolmuş satırların temizliği", () => {
     await worker.scheduled(controller, env);
     fetchSpy.mockRestore();
     expect(await ids("SELECT nonce_hash AS id FROM used_nonces WHERE nonce_hash = 'cron_old'")).toEqual([]);
+    // Biten günün anlık görüntüsü yazıldı.
+    expect(await ids("SELECT day AS id FROM daily_metrics WHERE day = '2026-10-14'")).toEqual(["2026-10-14"]);
     expect(await ids("SELECT jwks_url AS id FROM identity_jwks ORDER BY jwks_url")).toEqual([
       "https://appleid.apple.com/auth/keys",
       "https://www.googleapis.com/oauth2/v3/certs",

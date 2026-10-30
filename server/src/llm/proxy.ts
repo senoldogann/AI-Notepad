@@ -27,6 +27,7 @@ import {
 import { recordMeetingFailure, recordOpsEvents } from "../opsEvents";
 import { llmCostMicroUsd } from "../usage";
 import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } from "./request";
+import { type LLMUsageTag, llmUsageStatement, llmUsageTagOf } from "./usageBuckets";
 
 /** Akışsız çağrının zaman aşımı: yanıt başlığı ancak üretim bitince gelir, bu yüzden toplam süredir. */
 const messageTimeoutMs: number = 120_000;
@@ -126,14 +127,16 @@ export function noteMeetingIdOf(scope: LLMScope, request: LLMRequest): string | 
 }
 
 /**
- * Ayırmayı gerçek kullanımla kesinleştirir ve gerçek maliyeti günlük harcamaya ekler (denemedeyse deneme payına da).
- * `noteMeetingId` verildiyse (başarılı not çağrısı) aynı işlemde toplantının ilk not anı yazılır (yalnızca boşsa).
+ * Ayırmayı gerçek kullanımla kesinleştirir ve gerçek maliyeti günlük harcamaya ekler (denemedeyse deneme payına da);
+ * kullanım aynı işlemde çağrının günlük token kovasına (`usageTag`) da yazılır. `noteMeetingId` verildiyse (başarılı not
+ * çağrısı) aynı işlemde toplantının ilk not anı yazılır (yalnızca boşsa).
  */
 async function chargeUsage(
   db: D1Database,
   scope: LLMScope,
   reservation: UsageReservation,
   usage: TokenUsage,
+  usageTag: LLMUsageTag,
   noteMeetingId: string | null,
   now: Date,
 ): Promise<void> {
@@ -141,7 +144,11 @@ async function chargeUsage(
     noteMeetingId === null
       ? []
       : [db.prepare("UPDATE meeting_sessions SET first_note_at = ? WHERE id = ? AND first_note_at IS NULL").bind(now.getTime(), noteMeetingId)];
-  await db.batch([...settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now), ...noteStatements]);
+  await db.batch([
+    llmUsageStatement(db, reservation.day, usageTag, usage),
+    ...settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now),
+    ...noteStatements,
+  ]);
   log("info", "llm_usage", { userId: scope.userId, meetingId: scopeMeetingId(scope), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
 }
 
@@ -162,6 +169,7 @@ async function callMessage(
   scope: LLMScope,
   reservation: UsageReservation,
   estimatedInput: number,
+  usageTag: LLMUsageTag,
   noteMeetingId: string | null,
   now: Date,
 ): Promise<CallOutcome<Anthropic.Message>> {
@@ -173,7 +181,7 @@ async function callMessage(
     return { ok: false, error: mapAnthropicError(error, scope.userId, scopeMeetingId(scope)) };
   }
   const usage: TokenUsage = { inputTokens: totalInputTokens(message.usage), outputTokens: message.usage.output_tokens };
-  await chargeUsage(db, scope, reservation, usage, noteMeetingId, now);
+  await chargeUsage(db, scope, reservation, usage, usageTag, noteMeetingId, now);
   return { ok: true, value: message };
 }
 
@@ -243,15 +251,17 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
     attempts: 3,
     baseDelayMs: context.platform.retryBaseDelayMs,
     isRetryable: isRetryableAnthropicError,
+    recordRetry: context.platform.recordRetry,
   };
   const logFields: LogFields = { userId: scope.userId, meetingId: scopeMeetingId(scope), reservationId: reservation.id };
 
   const noteMeetingId: string | null = noteMeetingIdOf(scope, request);
+  const usageTag: LLMUsageTag = llmUsageTagOf(scope.kind, request);
 
   if (request.stream !== true) {
     const outcome: CallOutcome<Anthropic.Message> = await continueAfterDisconnect(
       context,
-      callMessage(db, client, retry, params, scope, reservation, estimatedInput, noteMeetingId, now),
+      callMessage(db, client, retry, params, scope, reservation, estimatedInput, usageTag, noteMeetingId, now),
       "llm_settle_failed",
       logFields,
     );
@@ -273,7 +283,7 @@ export async function proxyLLM(db: D1Database, context: RequestContext, config: 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   runAfterResponse(
     context,
-    pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, noteMeetingId, now),
+    pumpStream(db, opened.value, writable, scope, reservation, estimatedInput, maxTokens, usageTag, noteMeetingId, now),
     "llm_settle_failed",
     logFields,
   );
@@ -302,6 +312,7 @@ async function pumpStream(
   reservation: UsageReservation,
   estimatedInput: number,
   maxTokens: number,
+  usageTag: LLMUsageTag,
   noteMeetingId: string | null,
   now: Date,
 ): Promise<void> {
@@ -357,7 +368,7 @@ async function pumpStream(
       ? { inputTokens: inputTokens ?? estimatedInput, outputTokens: outputTokens ?? maxTokens }
       : { inputTokens: inputTokens ?? estimatedInput, outputTokens: maxTokens };
     try {
-      await chargeUsage(db, scope, reservation, usage, finished ? noteMeetingId : null, now);
+      await chargeUsage(db, scope, reservation, usage, usageTag, finished ? noteMeetingId : null, now);
     } finally {
       if (!clientGone) {
         await writer.close();

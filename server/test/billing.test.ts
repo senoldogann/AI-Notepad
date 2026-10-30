@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { randomToken } from "../src/crypto";
 import { type Harness, type Session, defaultHarness, envWith, expectError, grantSubscription, req, signIn } from "./helpers";
 import { type FakeStripe, type FakeSubscription, fakeSubscription, fakeSubscriptionWithPrice, stubStripeApi } from "./stripeFake";
+import { paidInvoiceAmounts } from "./stripeEvents";
 
 const siteOrigin: string = "http://localhost:8788";
 const dayMs: number = 86_400_000;
@@ -565,6 +566,7 @@ describe("Stripe webhook", () => {
       (await (await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: { clientRef } }))).json<{ kind: string }>()).kind;
     const invoiceEvent = (eventId: string, type: string, created: number): string =>
       eventOf(eventId, type, created, {
+        ...paidInvoiceAmounts(599, 0, created, "usd"),
         id: id("in_1"),
         object: "invoice",
         customer,
@@ -709,6 +711,7 @@ describe("Stripe webhook: aynı kullanıcının birden çok aboneliği", () => {
     stripe.invoicePayments.set(id("in_B2"), [id("pi_B2")]);
     const latePaid = (eventId: string, invoice: string, subscription: string): string =>
       eventOf(eventId, "invoice.paid", now - 100, {
+        ...paidInvoiceAmounts(599, 0, now - 100, "usd"),
         id: invoice,
         object: "invoice",
         customer,
@@ -793,6 +796,7 @@ describe("Stripe webhook: kopya iadesinin sınırları", () => {
     stripe.invoices.set(id("in_A5"), { subscription: id("sub_A"), paid: true, created: now - 20 * 86_400 });
     stripe.invoicePayments.set(id("in_A5"), [id("pi_A5")]);
     const latePaid: string = eventOf(id("evt_late"), "invoice.paid", now - 50, {
+      ...paidInvoiceAmounts(599, 0, now - 20 * 86_400, "usd"),
       id: id("in_A5"),
       object: "invoice",
       customer,

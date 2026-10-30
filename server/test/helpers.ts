@@ -7,6 +7,7 @@ import { appleIssuer, appleJwksUrl } from "../src/auth/apple";
 import { googleJwksUrl } from "../src/auth/google";
 import { randomId, randomToken, sha256Hex } from "../src/crypto";
 import type { Env } from "../src/env";
+import { retryRecorder } from "../src/opsEvents";
 import type { Platform } from "../src/platform";
 
 /** Dışarı giden istek işleyicisi (sahte üst servis). */
@@ -62,6 +63,7 @@ export async function createHarness(rootPem: string): Promise<Harness> {
     appAttestRootPem: rootPem,
     retryBaseDelayMs: 0,
     jwksCache: new Map(),
+    recordRetry: retryRecorder(env.DB, (): Date => new Date(clock.nowMs)),
   };
   const harness: Harness = {
     clock,

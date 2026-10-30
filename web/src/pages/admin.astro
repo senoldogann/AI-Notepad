@@ -1,7 +1,9 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): yedi görünüm — genel
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): sekiz görünüm — genel
 // bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
-// davet özeti), ürün (etkinlik, kohortlar, tutunma, güvenilirlik, yaklaşık birim ekonomisi, sürüme göre çökmeler), kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
+// davet özeti), ürün (etkinlik, kohortlar, tutunma, güvenilirlik, yaklaşık birim ekonomisi, sürüme göre çökmeler),
+// eğilimler (günlük anlık görüntüler, gerçek gelir, token kovaları, diller, kampanyalar, site istatistikleri),
+// kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
 // işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, kapak
 // seçici, görsel ekleme, önizleme, sitede açma, paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
@@ -22,11 +24,17 @@ import { routes } from "../routes";
 import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-copy";
 import { type AdminBlogCopy, adminBlogCopy } from "../client/admin-blog-copy";
 import { type AdminProductCopy, adminProductCopy } from "../client/admin-product-copy";
+import { type AdminTrendsCopy, type TrendChartId, type TrendTableId, adminTrendsCopy } from "../client/admin-trends-copy";
 
 const text: AdminCopy = copy.admin;
 const inviteText: AdminInviteCopy = adminInviteCopy;
 const blogText: AdminBlogCopy = adminBlogCopy;
 const productText: AdminProductCopy = adminProductCopy;
+const trendsText: AdminTrendsCopy = adminTrendsCopy;
+
+/** Eğilimler görünümünün grafikleri ve tabloları (betik `chart-trend-<id>`, `trend-<id>-rows` doldurur). */
+const trendCharts: readonly TrendChartId[] = ["mrr", "subscribers", "active", "spend", "revenue"];
+const trendTables: readonly TrendTableId[] = ["revenue", "tokens", "languages", "events", "campaigns", "paths", "referrers"];
 
 /** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
 interface KpiSpec {
@@ -110,6 +118,7 @@ const views: readonly { readonly id: string; readonly label: string; readonly ic
   { id: "overview", label: text.views.overview, icon: "chart" },
   { id: "insights", label: text.views.insights, icon: "sparkle" },
   { id: "product", label: productText.view, icon: "waveform" },
+  { id: "trends", label: trendsText.view, icon: "clock" },
   { id: "users", label: text.views.users, icon: "users" },
   { id: "operations", label: text.views.operations, icon: "laptop" },
   { id: "inbox", label: text.views.inbox, icon: "inbox" },
@@ -922,6 +931,69 @@ const productSections: readonly ProductSection[] = [
                   <ul id="user-reports" class="link-list"></ul>
                   <p id="user-reports-empty" class="muted hidden">{text.users.noReports}</p>
                 </div>
+              </div>
+            </section>
+          </div>
+
+          {/* ---------- Eğilimler (admin-trends.ts) ---------- */}
+          <div id="panel-trends" class="admin__panel hidden">
+            <section aria-labelledby="trend-charts-title">
+              <h2 class="title-m section-title" id="trend-charts-title">{trendsText.chartsTitle}</h2>
+              <div class="charts">
+                {
+                  trendCharts.map((chart) => (
+                    <figure class="card chart">
+                      <div class="chart__head">
+                        <h3 class="chart__title">{trendsText.charts[chart].title}</h3>
+                        {trendsText.charts[chart].accent === null ? null : (
+                          <p class="chart__legend small muted" aria-hidden="true">
+                            <span class="legend legend--main">{trendsText.charts[chart].main}</span>
+                            <span class="legend legend--accent">{trendsText.charts[chart].accent}</span>
+                          </p>
+                        )}
+                      </div>
+                      <div id={`chart-trend-${chart}`} class="chart__plot" />
+                      <figcaption id={`chart-trend-${chart}-summary`} class="small muted" />
+                    </figure>
+                  ))
+                }
+              </div>
+              <p class="small muted table-note">{trendsText.chartsNote}</p>
+            </section>
+
+            <section aria-labelledby="trend-tables-title">
+              <h2 class="title-m section-title" id="trend-tables-title">{trendsText.tablesTitle}</h2>
+              <div class="insights-grid">
+                {
+                  trendTables.map((table) => (
+                    <section class="card table-card" aria-labelledby={`trend-${table}-title`}>
+                      <h2 class="detail__label table-card__title" id={`trend-${table}-title`}>
+                        {trendsText.tables[table].title}
+                      </h2>
+                      {table === "paths" ? <p id="trend-site-summary" class="small muted table-note" /> : null}
+                      {table === "paths" ? <p id="trend-site-error" class="notice hidden" role="status" /> : null}
+                      <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`trend-${table}-title`}>
+                        <table class="data-table">
+                          <thead>
+                            <tr>
+                              {trendsText.tables[table].columns.map((column) => (
+                                <th scope="col" class:list={{ numeric: column.numeric }}>
+                                  {column.label}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody id={`trend-${table}-rows`} />
+                        </table>
+                      </div>
+                      <p id={`trend-${table}-empty`} class="muted table-empty hidden">
+                        {trendsText.tables[table].empty}
+                      </p>
+                      {table === "revenue" ? <p id="trend-revenue-paid" class="small muted table-note" /> : null}
+                      {trendsText.tables[table].note === "" ? null : <p class="small muted table-note">{trendsText.tables[table].note}</p>}
+                    </section>
+                  ))
+                }
               </div>
             </section>
           </div>
