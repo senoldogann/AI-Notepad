@@ -36,8 +36,10 @@ interface Props {
   readonly common: CommonCopy;
   /** Bu gösterimin çizildiği sayfa: yapılandırılmış verideki adres ve fiyat bağlantıları bundan. */
   readonly page: "home" | "fi";
+  /** "Fiyat" bağlantılarının hedefi; Fince sayfa kendi fiyat bölümünde kalır (`#pricing`). */
+  readonly pricingHref?: string | undefined;
 }
-const { text, common, page } = Astro.props;
+const { text, common, page, pricingHref = routes.pricing } = Astro.props;
 const heroDownloadUrl: string = macDownloadUrl(siteConfig, "home-hero");
 const ctaDownloadUrl: string = macDownloadUrl(siteConfig, "home-cta");
 const covers: readonly { readonly palette: FilmPalette; readonly layout: FilmLayout }[] = [
@@ -87,7 +89,7 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
           <Icon name="apple" size={16} class="button__apple" />
           {common.downloadCta}
         </a>
-        <a class="button button--secondary" href={routes.pricing}>{text.secondaryCta}</a>
+        <a class="button button--secondary" href={pricingHref}>{text.secondaryCta}</a>
       </div>
       <ul class="hero__assurances small">
         {
@@ -362,7 +364,7 @@ const structuredData: string = structuredDataJson(homeStructuredData(siteConfig,
     <a class="text-link trust__link reveal" href={routes.privacy}>{text.trust.link} <Icon name="arrow-right" size={16} class="" /></a>
   </section>
 
-  <section class="section page" aria-labelledby="pricing-title">
+  <section class="section page" id="pricing" aria-labelledby="pricing-title">
     <div class="pricing-band reveal">
       <div class="pricing-band__text">
         <h2 class="title-xl" id="pricing-title">{text.pricingTitle}</h2>

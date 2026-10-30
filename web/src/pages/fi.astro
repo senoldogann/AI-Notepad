@@ -9,6 +9,15 @@ import { commonFi, homeFi } from "../copy-fi";
 const text = homeFi;
 ---
 
-<Base page="fi" meta={text.meta} indexed={true} social={websiteCard} lang="fi" common={commonFi} featuresHref="#features">
-  <Landing text={text} common={commonFi} page="fi" />
+<Base
+  page="fi"
+  meta={text.meta}
+  indexed={true}
+  social={websiteCard}
+  lang="fi"
+  common={commonFi}
+  featuresHref="#features"
+  pricingHref="#pricing"
+>
+  <Landing text={text} common={commonFi} page="fi" pricingHref="#pricing" />
 </Base>
