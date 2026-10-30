@@ -34,9 +34,20 @@ const origin: string = siteConfig.siteOrigin;
 const canonical: string = `${origin}${sitePagePath(page)}`;
 const ogImage: string = social.kind === "article" ? social.image : `${origin}/og.png`;
 const ogImageAlt: string = social.kind === "article" ? social.imageAlt : common.ogImageAlt;
-/** Öbür dildeki sürüm (varsa): `hreflang` bağlantısı. */
+/** Öbür dildeki sürüm (varsa): `hreflang` bağlantıları. */
 const alternate: PageAlternate | undefined = typeof page === "string" ? pageAlternates[page] : undefined;
-const alternateHref: string | null = alternate === undefined ? null : `${origin}${sitePagePath(alternate.page)}`;
+/**
+ * Dil eşi olan sayfanın `hreflang` kümesi: Google her sürümün kendini de, öbürünü de listelemesini ister; dili
+ * eşleşmeyen ziyaretçi için `x-default` İngilizce sürümdür.
+ */
+const hreflangLinks: ReadonlyArray<{ readonly lang: string; readonly href: string }> =
+  alternate === undefined
+    ? []
+    : [
+        { lang, href: canonical },
+        { lang: alternate.lang, href: `${origin}${sitePagePath(alternate.page)}` },
+        { lang: "x-default", href: lang === "en" ? canonical : `${origin}${sitePagePath(alternate.page)}` },
+      ];
 ---
 
 <!doctype html>
@@ -52,7 +63,7 @@ const alternateHref: string | null = alternate === undefined ? null : `${origin}
     <title>{meta.title}</title>
     <meta name="description" content={meta.description} />
     {indexed ? <link rel="canonical" href={canonical} /> : <meta name="robots" content="noindex" />}
-    {alternate === undefined || alternateHref === null ? null : <link rel="alternate" hreflang={alternate.lang} href={alternateHref} />}
+    {indexed ? hreflangLinks.map((link) => <link rel="alternate" hreflang={link.lang} href={link.href} />) : null}
     <link rel="preload" href="/fonts/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
