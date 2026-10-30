@@ -1,4 +1,5 @@
-# Her PR'da ve main'e her gönderimde: hızlı testler (macOS), Mac uygulaması ve iPhone uygulaması (simülatör) derlemesi.
+# Her PR'da ve main'e her gönderimde: hızlı testler (macOS), Mac uygulamasının iki sürümü (geliştirici sürümü AI-Notepad
+# ve abonelik sürümü Gistsmith) ve iPhone uygulaması (simülatör) derlemesi.
 # İmza yok (CODE_SIGNING_ALLOWED=NO); gerçek bulut ve model testleri yerelde ortam değişkenleriyle çalışır.
 name: CI
 
@@ -38,6 +39,13 @@ jobs:
       - name: Mac uygulaması
         run: >
           xcodebuild -project AINotepad.xcodeproj -scheme AINotepad -configuration Debug
+          -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64'
+          CODE_SIGNING_ALLOWED=NO build -quiet
+      # App/Hosted ve paylaşılan kaynaklardaki `#if HOSTED_EDITION` dalları yalnızca bu hedefte derlenir. Aynı türetilmiş
+      # veri klasörü: paketler bir kez derlenir. Debug sunucu adresi yerel; sır gerekmez.
+      - name: Gistsmith (abonelik sürümü)
+        run: >
+          xcodebuild -project AINotepad.xcodeproj -scheme AINotepadHosted -configuration Debug
           -derivedDataPath .build/xcode -destination 'platform=macOS,arch=arm64'
           CODE_SIGNING_ALLOWED=NO build -quiet
       - name: iPhone uygulaması (simülatör)
