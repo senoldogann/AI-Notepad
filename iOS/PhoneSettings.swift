@@ -68,7 +68,12 @@ func keepPhoneLegacyNoteLanguage(defaults: UserDefaults) {
 
 /// Seçili motor; tanınmayan değer bulut sayılır ve hata loglanır.
 func phoneEngine() -> PhoneEngine {
-    let stored: String = UserDefaults.standard.string(forKey: PhoneSettingsKey.engine) ?? PhoneEngine.cloud.rawValue
+    phoneStoredEngine(value: UserDefaults.standard.string(forKey: PhoneSettingsKey.engine) ?? PhoneEngine.cloud.rawValue)
+}
+
+/// Ayarın ham değerinden motor (görünümlerdeki `@AppStorage(PhoneSettingsKey.engine)` için: motor değişince görünüm
+/// yeniden çizilsin); tanınmayan değer bulut sayılır ve hata loglanır.
+func phoneStoredEngine(value stored: String) -> PhoneEngine {
     guard let engine = PhoneEngine(rawValue: stored) else {
         phoneSettingsLogger.error("Motor ayarı tanınmadı, değer: \(stored, privacy: .public)")
         return .cloud

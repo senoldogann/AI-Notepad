@@ -15,6 +15,8 @@ struct TasksTab: View {
     let store: PhoneStore
     let router: PhoneRouter
     @State private var filter: TaskFilter = .open
+    /// Kullanıcının adı (Ayarlar): girilince "Adını yaz" düğmesi hemen kalksın.
+    @AppStorage(PhoneSettingsKey.userName) private var userName: String = ""
     @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
@@ -77,7 +79,7 @@ struct TasksTab: View {
                                     EmptyStateStep(symbol: "checkmark.circle", title: "Görevlerin burada"),
                                 ]
                             ) {
-                                if phoneUserName().isEmpty {
+                                if userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Button("Adını yaz (görevlerin tanınsın)", systemImage: "person.text.rectangle") { router.tab = .settings }
                                         .buttonStyle(.pillPrimary)
                                 }
