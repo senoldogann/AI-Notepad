@@ -21,11 +21,19 @@ private func writeSineRecording(directory: URL, seconds: Double, sampleRate: Dou
     return url
 }
 
-/// Küçük uçlu tam sayı okur.
-private func littleEndian32(_ data: Data, at offset: Int) -> Int {
-    data[offset..<(offset + 4)].enumerated().reduce(0) { (sum: Int, item: (offset: Int, element: UInt8)) -> Int in
-        sum | Int(item.element) << (8 * item.offset)
+/// Ses dosyasının (WAV ya da FLAC; FLAC'ı Apple'ın çözücüsü açar) mono 16 bit örnekleri. Tek `read` dosyanın
+/// tamamını vermeyebilir (WAV'da 131072 örnekte durur): sona dek okunur.
+private func int16Samples(url: URL) throws -> [Int16] {
+    let file: AVAudioFile = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: true)
+    #expect(file.processingFormat.channelCount == 1)
+    let buffer: AVAudioPCMBuffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 65_536))
+    var samples: [Int16] = []
+    while file.framePosition < file.length {
+        try file.read(into: buffer)
+        let channel: UnsafeMutablePointer<Int16> = try #require(buffer.int16ChannelData?[0])
+        samples += UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))
     }
+    return samples
 }
 
 private func word(_ text: String, _ start: Double, _ end: Double, _ speaker: String) -> DiarizedWord {
@@ -43,13 +51,13 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
 @Suite struct HostedAudioTests {
     @Test func chunkSpansCoverRecordingWithoutGaps() {
         #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4, overlapSamples: 0) == [
-            WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 4, sampleCount: 4), WavChunkSpan(startSample: 8, sampleCount: 2),
+            AudioChunkSpan(startSample: 0, sampleCount: 4), AudioChunkSpan(startSample: 4, sampleCount: 4), AudioChunkSpan(startSample: 8, sampleCount: 2),
         ])
         #expect(wavChunkSpans(totalSamples: 0, maxSamples: 4, overlapSamples: 1).isEmpty)
-        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4, overlapSamples: 1) == [WavChunkSpan(startSample: 0, sampleCount: 4)])
+        #expect(wavChunkSpans(totalSamples: 4, maxSamples: 4, overlapSamples: 1) == [AudioChunkSpan(startSample: 0, sampleCount: 4)])
         // Örtüşen parçalar: her parça öncekinin son örneğiyle başlar.
         #expect(wavChunkSpans(totalSamples: 10, maxSamples: 4, overlapSamples: 1) == [
-            WavChunkSpan(startSample: 0, sampleCount: 4), WavChunkSpan(startSample: 3, sampleCount: 4), WavChunkSpan(startSample: 6, sampleCount: 4),
+            AudioChunkSpan(startSample: 0, sampleCount: 4), AudioChunkSpan(startSample: 3, sampleCount: 4), AudioChunkSpan(startSample: 6, sampleCount: 4),
         ])
     }
 
@@ -61,37 +69,99 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         #expect(minutes > 49 && minutes < 50)
     }
 
-    // 48 kHz stereo kayıt 16 kHz mono WAV parçalarına bölünür: her parça sınırda, başlık gerçek boyutu taşır, konumlar ardışık.
-    @Test func recordingIsWrittenAsBoundedWavChunks() throws {
-        let directory: URL = FileManager.default.temporaryDirectory.appending(path: "hosted-wav-\(UUID().uuidString)", directoryHint: .isDirectory)
+    // 48 kHz stereo kayıt 16 kHz mono FLAC parçalarına bölünür: her parça süre sınırında, STREAMINFO gerçek örnek
+    // sayısını taşır, konumlar ardışık, ortak bölge aynı örneklerdir; ham PCM ara dosyası silinir.
+    @Test func recordingIsWrittenAsBoundedFlacChunks() throws {
+        let directory: URL = FileManager.default.temporaryDirectory.appending(path: "hosted-flac-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
         let source: URL = try writeSineRecording(directory: directory, seconds: 2.5, sampleRate: 48000)
-        let maxBytes: Int = 44 + 16000 * 2
         let overlap: Int = 4000
-        let chunks: [WavChunkFile] = try writeHostedWavChunks(source: source, directory: directory, maxBytes: maxBytes, overlapSamples: overlap)
+        let chunks: [AudioChunkFile] = try writeHostedFlacChunks(source: source, directory: directory, maxBytes: 1_000_000, maxSamples: 16000, overlapSamples: overlap)
         #expect(chunks.count == 3)
         var expectedStart: Int = 0
-        var previousTail: Data?
+        var previousTail: [Int16]?
         for chunk in chunks {
             let data: Data = try Data(contentsOf: chunk.url)
-            #expect(data.count <= maxBytes)
-            #expect(data.count == 44 + chunk.span.sampleCount * 2)
-            #expect(String(decoding: data[0..<4], as: UTF8.self) == "RIFF")
-            #expect(littleEndian32(data, at: 4) == data.count - 8)
-            #expect(littleEndian32(data, at: 24) == hostedTranscribeSampleRate)
-            #expect(littleEndian32(data, at: 40) == chunk.span.sampleCount * 2)
+            #expect(data.count == chunk.bytes)
+            #expect(try flacStreamInfo(header: data) == FlacStreamInfo(sampleRate: 16000, channels: 1, bitsPerSample: 16, totalSamples: chunk.span.sampleCount))
             #expect(chunk.span.startSample == expectedStart)
+            let samples: [Int16] = try int16Samples(url: chunk.url)
+            #expect(samples.count == chunk.span.sampleCount)
             // Parça öncekinin son çeyrek saniyesiyle başlar (aynı örnekler).
             if let previousTail {
-                #expect(data.subdata(in: 44..<(44 + overlap * 2)) == previousTail)
+                #expect(Array(samples.prefix(overlap)) == previousTail)
             }
-            previousTail = data.subdata(in: (data.count - overlap * 2)..<data.count)
+            previousTail = Array(samples.suffix(overlap))
             expectedStart += chunk.span.sampleCount - overlap
         }
         #expect(chunks.map { $0.span.offsetSec(sampleRate: hostedTranscribeSampleRate) }.prefix(2) == [0, 0.75])
         // Örnek hızı dönüştürücüsü uçlarda birkaç örnek oynatabilir.
         #expect(abs(expectedStart + overlap - 40000) < 200)
-        try FileManager.default.removeItem(at: directory)
+        #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "samples.pcm").path))
+    }
+
+    // Gerçek konuşma kaydı (16 kHz mono 16 bit WAV) kayıpsız FLAC'a çevrilir: çözülen örnekler kaynakla bit bit aynı,
+    // STREAMINFO örnek sayısı, hız, kanal ve biti doğru; dosya WAV'ın yarısı kadardır.
+    @Test func flacChunkIsBitIdenticalToSpeechSource() throws {
+        let source: URL = try #require(Bundle.module.url(forResource: "en-meeting", withExtension: "wav", subdirectory: "Fixtures"))
+        let directory: URL = FileManager.default.temporaryDirectory.appending(path: "hosted-flac-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let chunks: [AudioChunkFile] = try writeHostedFlacChunks(
+            source: source, directory: directory, maxBytes: hostedTranscribeMaxBytes,
+            maxSamples: Int(hostedFlacChunkMaxSec * Double(hostedTranscribeSampleRate)), overlapSamples: 960_000
+        )
+        let expected: [Int16] = try int16Samples(url: source)
+        let chunk: AudioChunkFile = try #require(chunks.first)
+        #expect(chunks.count == 1)
+        #expect(try flacStreamInfo(header: try Data(contentsOf: chunk.url)) == FlacStreamInfo(sampleRate: 16000, channels: 1, bitsPerSample: 16, totalSamples: expected.count))
+        #expect(try int16Samples(url: chunk.url) == expected)
+        let wavBytes: Int = try Data(contentsOf: source).count
+        #expect(Double(chunk.bytes) < Double(wavBytes) * 0.7)
+    }
+
+    // Sıkışmayan ses (beyaz gürültü) FLAC'ta PCM'den büyüktür: süre sınırıyla kodlanan parça bayt sınırını aşınca
+    // kısaltılıp yeniden kodlanır; her parça sınıra sığar, örnekler kaynakla aynı kalır.
+    @Test func oversizedFlacChunkIsShortenedToFit() throws {
+        let directory: URL = FileManager.default.temporaryDirectory.appending(path: "hosted-flac-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source: URL = directory.appending(path: "gurultu.wav")
+        try wavData(samples: whiteNoise(seconds: 3, amplitude: 1, seed: 7), sampleRate: 16000).write(to: source)
+        let maxBytes: Int = 20_000
+        let overlap: Int = 1600
+        let chunks: [AudioChunkFile] = try writeHostedFlacChunks(source: source, directory: directory, maxBytes: maxBytes, maxSamples: 32000, overlapSamples: overlap)
+        let expected: [Int16] = try int16Samples(url: source)
+        var expectedStart: Int = 0
+        for chunk in chunks {
+            #expect(chunk.bytes <= maxBytes)
+            #expect(chunk.span.sampleCount < 32000)
+            #expect(chunk.span.startSample == expectedStart)
+            let span: Range<Int> = chunk.span.startSample..<(chunk.span.startSample + chunk.span.sampleCount)
+            #expect(try int16Samples(url: chunk.url) == Array(expected[span]))
+            expectedStart += chunk.span.sampleCount - overlap
+        }
+        #expect(chunks.last.map { $0.span.startSample + $0.span.sampleCount } == expected.count)
+        // Kısalan parça ortak bölgeden uzun olmalı: değilse kayıt ilerlemez, hata.
+        #expect(throws: AudioCaptureError.self) {
+            try shortenedFlacSampleCount(sampleCount: 2000, encodedBytes: 4000, maxBytes: 2000, overlapSamples: 1600)
+        }
+    }
+
+    // STREAMINFO okuyucu bozuk imzayı ve STREAMINFO ile başlamayan dosyayı reddeder.
+    @Test func flacStreamInfoRejectsMalformedHeaders() throws {
+        var header: [UInt8] = Array("fLaC".utf8) + [0x80, 0, 0, 34] + [UInt8](repeating: 0, count: 34)
+        // 16 kHz, mono, 16 bit, 132131 örnek.
+        header.replaceSubrange(18..<26, with: [0x03, 0xE8, 0x00, 0xF0, 0x00, 0x02, 0x04, 0x23])
+        #expect(try flacStreamInfo(header: Data(header)) == FlacStreamInfo(sampleRate: 16000, channels: 1, bitsPerSample: 16, totalSamples: 132_131))
+        var badMagic: [UInt8] = header
+        badMagic[0] = 0x66 + 1
+        #expect(throws: AudioCaptureError.self) { try flacStreamInfo(header: Data(badMagic)) }
+        var notStreamInfo: [UInt8] = header
+        notStreamInfo[4] = 0x04
+        #expect(throws: AudioCaptureError.self) { try flacStreamInfo(header: Data(notStreamInfo)) }
+        #expect(throws: AudioCaptureError.self) { try flacStreamInfo(header: Data(header.prefix(41))) }
     }
 
     // Ortak dakikada aynı kelimeleri söyleyen etiketler aynı kişidir (ElevenLabs etiketleri parçada farklı olsa da);
