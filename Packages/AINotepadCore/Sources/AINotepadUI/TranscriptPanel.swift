@@ -443,7 +443,10 @@ public struct TranscriptPanel: View {
         ScrollViewReader { (proxy: ScrollViewProxy) in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DesignTokens.Spacing.l) {
-                    ForEach(state.blocks) { (block: SpeakerBlock) in
+                    // "Sadece çeviri"de bütünüyle kapsanan blok gizlenir: çevirisi birimin son bölümünün bloğunda.
+                    ForEach(state.blocks.filter { (block: SpeakerBlock) -> Bool in
+                        state.displayMode != .turkishOnly || !isFullyCoveredBlock(block: block, translations: state.translations)
+                    }) { (block: SpeakerBlock) in
                         BlockView(
                             block: block,
                             turkish: blockTurkishText(block: block, translations: state.translations),
@@ -703,7 +706,8 @@ struct BlockView: View {
                 } else {
                     speakerLabelText
                 }
-                if displayMode == .turkishOnly && turkish != nil {
+                // Kapsanan bölüm (birimin çevirisi başka bölümde) varsa da çeviri parçaları: orijinali gizlenir.
+                if displayMode == .turkishOnly && hasTranslationEntries(block: block, translations: translations) {
                     turkishOnlyText
                         .font(appearance.bodyFont)
                         .lineSpacing(appearance.lineSpacing)

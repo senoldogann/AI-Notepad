@@ -160,3 +160,62 @@ func state(transcript: [LiveSegment], isRecording: Bool, errors: [String]) -> Li
         #expect(text.runs.allSatisfy { $0.inlinePresentationIntent == nil })
     }
 }
+
+/// Cümle birimiyle çeviri: birimin çevirisi son bölümde, önceki bölümler kapsandı (boş çeviri).
+@Suite struct CoveredTranslationTests {
+    private let first: LiveSegment = seg(.others, 0, 0, "tarjouksen hinta-", person: 1)
+    private let second: LiveSegment = seg(.others, 1, 2, "laatusuhde on hyvä.", person: 1)
+    private let third: LiveSegment = seg(.others, 2, 4, "Siipien kärkiväli", person: 1)
+
+    private var unitTranslated: [SegmentID: String] {
+        [first.id: "", second.id: "Teklifin fiyat-performans oranı iyi."]
+    }
+
+    // Birleştirmeler boş çeviriyi atlar; "İki dil"de orijinalin altında yalnızca birimin çevirisi.
+    @Test func joinsSkipCovered() {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first, second, third])
+        #expect(blockTurkishText(block: blocks[0], translations: unitTranslated) == "Teklifin fiyat-performans oranı iyi.")
+        #expect(displayedPlainText(blocks: blocks, translations: unitTranslated, displayMode: .bilingual)
+            .hasSuffix("\nTeklifin fiyat-performans oranı iyi."))
+    }
+
+    // "Sadece çeviri": birim çevrilene dek parçalar orijinaliyle; çevrilince kapsanan parçanın orijinali görünmez.
+    @Test func translationOnlyHidesCoveredOnceTranslated() {
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first, second, third])
+        #expect(turkishOnlyParts(block: blocks[0], translations: [:]).map(\.text) == [first.text, second.text, third.text])
+        #expect(turkishOnlyParts(block: blocks[0], translations: unitTranslated) == [
+            DisplayPart(text: "Teklifin fiyat-performans oranı iyi.", isTranslated: true, isFinal: true),
+            DisplayPart(text: third.text, isTranslated: false, isFinal: true),
+        ])
+        #expect(displayedPlainText(blocks: blocks, translations: unitTranslated, displayMode: .turkishOnly)
+            .hasSuffix(": Teklifin fiyat-performans oranı iyi. Siipien kärkiväli"))
+        #expect(hasTranslationEntries(block: blocks[0], translations: unitTranslated))
+        #expect(!hasTranslationEntries(block: blocks[0], translations: [:]))
+    }
+
+    // Birim iki bloğa yayıldıysa çeviri son bölümün bloğunda; yalnızca kapsanan bölümlü blok "Sadece çeviri"de gizlenir.
+    @Test func unitSpanningBlocks() {
+        let other: LiveSegment = seg(.others, 1, 2, "laatusuhde on hyvä.", person: 2)
+        let blocks: [SpeakerBlock] = groupBySpeaker(transcript: [first, other])
+        let translations: [SegmentID: String] = [first.id: "", other.id: "Fiyat-performans oranı iyi."]
+        #expect(blocks.count == 2)
+        #expect(isFullyCoveredBlock(block: blocks[0], translations: translations))
+        #expect(!isFullyCoveredBlock(block: blocks[1], translations: translations))
+        #expect(blockTurkishText(block: blocks[0], translations: translations) == nil)
+        #expect(blockTurkishText(block: blocks[1], translations: translations) == "Fiyat-performans oranı iyi.")
+        #expect(displayedPlainText(blocks: blocks, translations: translations, displayMode: .turkishOnly).components(separatedBy: "\n\n").count == 1)
+    }
+
+    // Ada: birimin çevirisi ana satırda; "İki dil"de alt satır birimin bütün orijinali; bekleyen parça canlı alt satırda.
+    @Test func islandUsesUnitTranslation() {
+        let done: [SpeakerBlock] = groupBySpeaker(transcript: [first, second])
+        #expect(makeIslandLine(block: done[0], translations: unitTranslated, displayMode: .bilingual) == IslandLine(
+            speaker: .others, person: 1, primary: "Teklifin fiyat-performans oranı iyi.", primaryIsOriginal: false,
+            secondary: "tarjouksen hinta- laatusuhde on hyvä."
+        ))
+        let pending: [SpeakerBlock] = groupBySpeaker(transcript: [first, second, third])
+        #expect(makeIslandLine(block: pending[0], translations: unitTranslated, displayMode: .turkishOnly)?.secondary == "Siipien kärkiväli")
+        // Yalnızca kapsanan bölüm varsa (çeviri başka blokta) ada orijinali gösterir.
+        #expect(makeIslandLine(block: groupBySpeaker(transcript: [first])[0], translations: [first.id: ""], displayMode: .bilingual)?.primaryIsOriginal == true)
+    }
+}

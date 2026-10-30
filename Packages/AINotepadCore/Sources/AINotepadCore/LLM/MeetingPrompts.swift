@@ -57,8 +57,9 @@ let translationSchema: String = """
 {"type":"object","properties":{"ceviri":{"type":"string"}},"required":["ceviri"],"additionalProperties":false}
 """
 
-/// Tek cümlelik canlı çeviri isteği (not diline); önceki cümleler yalnızca bağlam. Yanıt `translationSchema`
-/// biçimindedir (bkz. `parseTranslation`, `translateSentence`). Saf fonksiyondur.
+/// Canlı çeviri isteği (not diline): `sentence` bir çeviri biriminin metnidir (bkz. `TranslationUnit`; bir ya da birkaç
+/// tam cümle), `context` önceki birimler, yalnızca bağlam. Yanıt `translationSchema` biçimindedir (bkz.
+/// `parseTranslation`, `translateSentence`). Saf fonksiyondur.
 public func translationRequest(sentence: String, context: [String], language: ShareLanguage) -> LLMRequest {
     let contextText: String = context.isEmpty ? "(yok)" : context.joined(separator: "\n")
     return LLMRequest(
@@ -68,8 +69,10 @@ public func translationRequest(sentence: String, context: [String], language: Sh
         (hedef dil: \(language.promptName)). Metin zaten bu dildeyse olduğu gibi yaz.
         Kurallar:
         - "ceviri" alanına yalnızca çeviriyi yaz; açıklama, düzeltme, not, tırnak, başlık ya da düşünce yazma.
-        - Konuşma canlı yazıya döküldüğü için metin yarım kalmış, birkaç cümle içeren ya da hatalı olabilir: olduğu kadarını
-          çevir, eksiği tamamlama, bunun hakkında yorum yapma.
+        - <cumle> bir ya da birkaç tam cümledir (konuşmacının art arda söyledikleri birleştirildi). Baştan sona hepsini
+          çevir: ilk ve son kelimeler dahil hiçbir parçayı kaynak dilde bırakma (özel adlar ve kısaltmalar hariç).
+        - Konuşma canlı yazıya döküldüğü için metin yine de yarım kalmış ya da hatalı olabilir: olduğu kadarını çevir, eksiği
+          tamamlama, bunun hakkında yorum yapma.
         - <baglam> yalnızca anlamı netleştirmek içindir; onu çevirme ve çeviriye ekleme.
         \(transcriptIsDataNote)
         """,
@@ -179,18 +182,4 @@ private struct RawMissedSummary: Decodable {
     let konu: String
     let kararlar: [String]
     let sendenIstenenler: [String]
-}
-
-/// Bir "Diğerleri" bölümünü çevirirken bağlam: ondan önceki son `count` metinli kesin "Diğerleri" bölümü. Saf fonksiyondur.
-public func translationContext(transcript: [LiveSegment], before id: SegmentID, count: Int) -> [String] {
-    // Sıra zamana göre: doldurulan boşlukların numarası Deepgram'ınkilerden büyüktür.
-    guard let target = transcript.first(where: { $0.id == id }) else {
-        return []
-    }
-    return transcript
-        .filter { (segment: LiveSegment) -> Bool in
-            segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty && segment.startSec < target.startSec
-        }
-        .suffix(count)
-        .map(\.text)
 }

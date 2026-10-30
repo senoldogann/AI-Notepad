@@ -116,17 +116,3 @@ extension CloudTests {
     }
 }
 }
-
-@Suite struct TranslationContextTests {
-    @Test func contextIsPreviousThreeOthersFinals() {
-        let transcript: [LiveSegment] = [
-            block(.others, 0, 0, "a", person: nil),
-            block(.me, 0, 1, "minun", person: nil),
-            block(.others, 1, 2, "b", person: nil),
-            block(.others, 2, 4, "c", person: nil),
-            block(.others, 3, 6, "d", person: nil),
-            block(.others, 4, 8, "e", person: nil),
-        ]
-        #expect(translationContext(transcript: transcript, before: SegmentID(speaker: .others, index: 4), count: 3) == ["b", "c", "d"])
-    }
-}
