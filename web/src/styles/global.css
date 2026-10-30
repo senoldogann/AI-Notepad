@@ -596,7 +596,8 @@ p {
   background: color-mix(in srgb, var(--warn) 8%, var(--card));
 }
 
-/* Kullanım ölçeri (hesap, yönetim): dolgu nötr; yalnızca sınıra yaklaşınca (`meter--warn`) sarı. İz, gri zeminli
+/* Kullanım ölçeri (hesap, yönetim): dolgu nötr; sınıra yaklaşınca (`meter--warn`) sarı, sınır dolunca (`meter--full`)
+   kırmızı (uygulamadaki ölçerle aynı). İz, gri zeminli
    kutularda da görünsün diye yarı saydam mürekkeptir. */
 .meter {
   width: 100%;
@@ -629,6 +630,14 @@ p {
 
 .meter--warn::-moz-progress-bar {
   background: var(--warn);
+}
+
+.meter--full::-webkit-progress-value {
+  background: var(--danger);
+}
+
+.meter--full::-moz-progress-bar {
+  background: var(--danger);
 }
 
 /* ---------- Formlar ---------- */

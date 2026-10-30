@@ -76,13 +76,15 @@ interface TrialMeter {
 
 /**
  * Abonenin aylık saat göstergesi: değer metni ("3.4 / 10.0 hours"), kullanılan (sınırda kesilir), sınır, sınırın
- * %80'inde uyarı, ikincil değer (kalan saat) ve sınır dolduysa sıfırlanma günlü uyarı satırı (dolmadıysa null).
+ * %80'inde uyarı, sınır dolduysa dolu (hata rengi; uygulamadaki ölçerle aynı), ikincil değer (kalan saat) ve sınır
+ * dolduysa sıfırlanma günlü uyarı satırı (dolmadıysa null).
  */
 interface HoursMeter {
   readonly text: string;
   readonly used: number;
   readonly cap: number;
   readonly warn: boolean;
+  readonly full: boolean;
   readonly left: string;
   readonly limitReached: string | null;
 }
@@ -272,7 +274,7 @@ function trialMeter(me: Entitlements, text: ClientCopy): TrialMeter {
   };
 }
 
-/** Abonenin aylık saat ölçeri: sınırın %80'inde uyarır; sınır dolunca sıfırlanma günü (UTC) yazılır. Saf fonksiyondur. */
+/** Abonenin aylık saat ölçeri: sınırın %80'inde uyarır, sınır dolunca hata renginde ve sıfırlanma günü (UTC) yazılır. Saf fonksiyondur. */
 function hoursMeter(me: Entitlements, text: ClientCopy, locale: string): HoursMeter {
   const cap: number = me.monthlyHoursCap;
   const used: number = me.monthlyHoursUsed;
@@ -281,6 +283,7 @@ function hoursMeter(me: Entitlements, text: ClientCopy, locale: string): HoursMe
     used: Math.min(used, cap),
     cap,
     warn: used >= cap * hoursWarnRatio,
+    full: used >= cap,
     left: fill(text.hoursLeft, { left: formatHours(Math.max(cap - used, 0), locale) }),
     limitReached: used >= cap ? fill(text.hoursLimitReached, { date: formatUtcDate(me.monthlyResetsAt, locale) }) : null,
   };
@@ -348,7 +351,8 @@ function renderMeters(trial: TrialMeter | null, hours: HoursMeter | null): void 
     meter.max = hours.cap;
     meter.value = hours.used;
     meter.textContent = hours.text;
-    meter.classList.toggle("meter--warn", hours.warn);
+    meter.classList.toggle("meter--warn", hours.warn && !hours.full);
+    meter.classList.toggle("meter--full", hours.full);
     element("hours-left", HTMLElement).textContent = hours.left;
     element("hours-foot", HTMLElement).classList.toggle("hidden", hours.limitReached !== null);
     const limit: HTMLElement = element("hours-limit", HTMLElement);
