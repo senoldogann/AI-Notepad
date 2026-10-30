@@ -1,11 +1,12 @@
-// Paylaşım kartı görüntüsünü (public/og.png, 1200×630) üretir: sitenin film gradyanı (global.css), uygulamanın kapak
-// ses dalgası (src/lib/film.ts), logo ve slogan. Derlenmiş site sunulurken (scripts/serve.ts) çalıştırılır; çıktı
-// repoya girer, derleme bunu çalıştırmaz.
+// Sitenin paylaşım kartı görüntüsünü (public/og.png, 1200×630) üretir: sitenin film gradyanı (global.css), uygulamanın
+// kapak ses dalgası (src/lib/film.ts), logo ve slogan. Derlenmiş site sunulurken (scripts/serve.ts) çalıştırılır; çıktı
+// repoya girer, derleme bunu çalıştırmaz. Blog yazılarının görselleri ayrıdır (scripts/make-blog-og.ts).
 // Kullanım: node scripts/make-og.ts <site adresi> <Chrome yolu>
 import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, type Page, chromium } from "playwright-core";
 import { productName } from "../src/config.ts";
 import { type WaveBar, coverWaveHeights, waveBars } from "../src/lib/film.ts";
+import { logoSvg, ogViewport, writeOgPng } from "./og-image.ts";
 
 /** Komut satırı bağımsız değişkeni; yoksa hata. */
 function argument(index: number, name: string): string {
@@ -25,8 +26,6 @@ function waveSvg(width: number, height: number): string {
   return `<svg class="wave" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${rects}</svg>`;
 }
 
-const logo: string = `<svg width="88" height="88" viewBox="0 0 32 32"><rect x="0.5" y="0.5" width="31" height="31" rx="8.5" fill="#0a0a0a"/><g fill="#fafafa"><rect x="7.4" y="12" width="2.6" height="8" rx="1.3"/><rect x="11.4" y="8.2" width="2.6" height="15.6" rx="1.3"/><rect x="15.4" y="10.6" width="2.6" height="10.8" rx="1.3"/><rect x="19.6" y="14.7" width="5.6" height="2.6" rx="1.3"/></g></svg>`;
-
 const css: string = `
   html, body { margin: 0; background: #fdfcfc; }
   .og { width: 1200px; height: 630px; border-radius: 0; display: grid; place-items: center; }
@@ -44,7 +43,7 @@ async function main(): Promise<void> {
   const browser: Browser = await chromium.launch({ executablePath: chromePath, headless: true });
   try {
     // Sitenin stil dosyaları ve yazı tipi için site sayfası açılır; içerik betikle değiştirildiğinden CSP atlanır.
-    const context: BrowserContext = await browser.newContext({ viewport: { width: 1200, height: 630 }, colorScheme: "light", bypassCSP: true });
+    const context: BrowserContext = await browser.newContext({ viewport: ogViewport, colorScheme: "light", bypassCSP: true });
     const page: Page = await context.newPage();
     await page.goto(`${base}/404`, { waitUntil: "load" });
     await page.addStyleTag({ content: css });
@@ -54,13 +53,13 @@ async function main(): Promise<void> {
           <div class="og__brand">${mark}<span class="og__name">${name}</span></div>
           <p class="og__title">Listens to your meetings, writes your notes.</p>${wave}</div></div>`;
       },
-      { wave: waveSvg(260, 56), mark: logo, name: productName },
+      { wave: waveSvg(260, 56), mark: logoSvg(88), name: productName },
     );
     await page.evaluate(async (): Promise<void> => {
       await document.fonts.ready;
     });
-    await page.screenshot({ path: output, clip: { x: 0, y: 0, width: 1200, height: 630 } });
-    console.log("og_written", { output });
+    const bytes: number = await writeOgPng(await page.screenshot({ clip: { x: 0, y: 0, ...ogViewport } }), output);
+    console.log("og_written", { output, bytes });
   } finally {
     await browser.close();
   }

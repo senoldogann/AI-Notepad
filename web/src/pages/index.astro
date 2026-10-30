@@ -4,6 +4,7 @@
 // entegrasyonlar (MCP dahil), gizlilik, fiyat, SSS ve kapanış. Her mesaj sayfada bir kez geçer: aynı şeyi söyleyen
 // bölüm ya da kart eklemeden önce var olanı güçlendir.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import AppShot, { type ShotCallout } from "../components/AppShot.astro";
 import BrandTile from "../components/BrandTile.astro";
 import Faq from "../components/Faq.astro";
@@ -67,7 +68,7 @@ const launchVideo: { readonly src: string; readonly poster: string } = {
 const structuredData: string = structuredDataJson(homeStructuredData(siteConfig, common, text.meta, operator, text.faq));
 ---
 
-<Base page="home" meta={text.meta} indexed={true}>
+<Base page="home" meta={text.meta} indexed={true} social={websiteCard}>
   {/* Veri bloğu: Astro işlemez ve paketlemez (`is:inline`), tarayıcı çalıştırmaz; CSP'ye takılmaz. */}
   <script is:inline type="application/ld+json" set:html={structuredData} />
   <section class="hero page">

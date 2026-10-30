@@ -65,6 +65,22 @@ export function blogPostPath(slug: string): string {
   return `${routes.blog}/${slug}`;
 }
 
+/**
+ * Blog yazısının paylaşım görseli (1200×630 PNG): `/blog/<kısa ad>/og.png`. Derlemeden sonra scripts/make-blog-og.ts
+ * üretir; Open Graph, Twitter, JSON-LD ve RSS bu adresi kullanır. Saf fonksiyondur.
+ */
+export function blogOgImagePath(slug: string): string {
+  return `${blogPostPath(slug)}/og.png`;
+}
+
+/**
+ * Blog yazısının görsellerinin klasörü: `/blog/<kısa ad>/` (depoda `web/public/blog/<kısa ad>/`, panel yükler; yazı
+ * silinince klasör de silinir, server/src/blog.ts). Saf fonksiyondur.
+ */
+export function blogImageFolder(slug: string): string {
+  return `${blogPostPath(slug)}/`;
+}
+
 /** Blog yazısı: sayfa kimliği yerine kısa adıyla anılır (yazılar içerik koleksiyonundan gelir). */
 export interface BlogPostRef {
   readonly blogPostSlug: string;

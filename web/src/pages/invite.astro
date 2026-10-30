@@ -6,6 +6,7 @@
 // bağlantısıyla (`/invite?code=…`) gelinirse kod kutusu görünür ve kod bu tarayıcıda saklanır (src/client/invite.ts);
 // hesap sayfası abone olurken onu doldurur. Kurallar sunucunun davet kurallarıyla aynı tutulur.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
@@ -16,7 +17,7 @@ const text: InviteCopy = copy.invite;
 const common: CommonCopy = copy.common;
 ---
 
-<Base page="invite" meta={text.meta} indexed={true}>
+<Base page="invite" meta={text.meta} indexed={true} social={websiteCard}>
   <section class="page invite-hero" id="invite-page" data-account-path={routes.account}>
     <div class="invite-hero__text">
       <p class="eyebrow">{text.eyebrow}</p>

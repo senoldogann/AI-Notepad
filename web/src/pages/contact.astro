@@ -2,6 +2,7 @@
 // İletişim sayfası: e-posta, mesaj ve Turnstile korumalı form (`POST /v1/reports`, tür `contact`); doğrudan e-posta
 // adresi ve işletme bilgisi (unvan, işletme kimliği, adres) de görünür. Betik: src/client/contact.ts.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import { copy, type ContactCopy } from "../copy";
@@ -11,7 +12,7 @@ import { routes } from "../routes";
 const text: ContactCopy = copy.contact;
 ---
 
-<Base page="contact" meta={text.meta} indexed={true}>
+<Base page="contact" meta={text.meta} indexed={true} social={websiteCard}>
   <section class="page contact">
     <div class="contact__intro">
       <p class="eyebrow">{copy.common.nav.contact}</p>

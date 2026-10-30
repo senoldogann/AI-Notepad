@@ -6,6 +6,8 @@ import Header from "../components/Header.astro";
 import PullReveal from "../components/PullReveal.astro";
 import { productName } from "../config";
 import { copy, type PageMeta } from "../copy";
+import type { SocialCard } from "../lib/social";
+import { ogImageSize } from "../lib/structured-data";
 import { blogFeedPath, type SitePage, sitePageKey, sitePagePath } from "../routes";
 import { siteConfig } from "../site";
 
@@ -15,10 +17,14 @@ interface Props {
   readonly meta: PageMeta;
   /** Kişiye özel sayfalar (hesap, yönetim) ve 404 arama motorlarına kapalıdır; kanonik adresleri de verilmez. */
   readonly indexed: boolean;
+  /** Paylaşım kartı: sabit sayfalarda `websiteCard` (public/og.png), blog yazısında kendi görseli ve tarihleri. */
+  readonly social: SocialCard;
 }
-const { page, meta, indexed } = Astro.props;
+const { page, meta, indexed, social } = Astro.props;
 const origin: string = siteConfig.siteOrigin;
 const canonical: string = `${origin}${sitePagePath(page)}`;
+const ogImage: string = social.kind === "article" ? social.image : `${origin}/og.png`;
+const ogImageAlt: string = social.kind === "article" ? social.imageAlt : copy.common.ogImageAlt;
 ---
 
 <!doctype html>
@@ -38,17 +44,30 @@ const canonical: string = `${origin}${sitePagePath(page)}`;
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="alternate" type="application/rss+xml" title={copy.blog.feedTitle} href={blogFeedPath} />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={social.kind} />
     <meta property="og:site_name" content={productName} />
     <meta property="og:title" content={meta.title} />
     <meta property="og:description" content={meta.description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={`${origin}/og.png`} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content={copy.common.ogImageAlt} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content={String(ogImageSize.width)} />
+    <meta property="og:image:height" content={String(ogImageSize.height)} />
+    <meta property="og:image:alt" content={ogImageAlt} />
     <meta property="og:locale" content="en_US" />
+    {
+      social.kind === "article" && (
+        <>
+          <meta property="article:published_time" content={social.published} />
+          <meta property="article:modified_time" content={social.modified} />
+        </>
+      )
+    }
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={meta.title} />
+    <meta name="twitter:description" content={meta.description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
   </head>
   <body>
     <a class="skip-link" href="#main">{copy.common.skipLink}</a>

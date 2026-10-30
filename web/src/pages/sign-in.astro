@@ -3,6 +3,7 @@
 // giriş yapılır (açılır pencere yok: Apple ve Google'a yönlendirilir, dönüş bu sayfaya `#` parçasıyla gelir) ve jeton
 // uygulamaya iletilir. Betik: src/client/sign-in.ts.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Logo from "../components/Logo.astro";
@@ -15,7 +16,7 @@ const text: SignInCopy = copy.signIn;
 const common: CommonCopy = copy.common;
 ---
 
-<Base page="signIn" meta={text.meta} indexed={true}>
+<Base page="signIn" meta={text.meta} indexed={true} social={websiteCard}>
   <section class="page auth" id="signin" data-account-path={routes.account} data-redirect-uri={pageUrl("signIn", siteConfig.siteOrigin)}>
     <Film palette="violet" layout="clouds-right" class="auth__cover">
       <div class="glass auth__badge">

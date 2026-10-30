@@ -7,6 +7,7 @@
 // tarayıcıda `/v1/me` ve `/v1/referral`'dan doldurulur (src/client/account.ts); kimlikler scripts/e2e.ts ve
 // scripts/screenshots.ts ile aynı tutulur.
 import Base from "../layouts/Base.astro";
+import { websiteCard } from "../lib/social";
 import Film from "../components/Film.astro";
 import Icon from "../components/Icon.astro";
 import Waveform from "../components/Waveform.astro";
@@ -25,7 +26,7 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
 ];
 ---
 
-<Base page="account" meta={text.meta} indexed={false}>
+<Base page="account" meta={text.meta} indexed={false} social={websiteCard}>
   <section class="page account" id="account" data-sign-in-path={routes.signIn} data-home-path={routes.home}>
     <header class="account__head">
       <div class="account__title">
