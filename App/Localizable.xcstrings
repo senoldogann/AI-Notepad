@@ -1619,17 +1619,6 @@
         }
       }
     },
-    "%lld toplantıdan %lld tanesi kaldı": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld free meetings: %lld left"
-          }
-        }
-      }
-    },
     "1 dk sonra: %@": {
       "localizations": {
         "en": {
@@ -1993,17 +1982,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show / hide island and panel"
-          }
-        }
-      }
-    },
-    "Adil kullanım sınırı; ay başında sıfırlanır (%@).": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fair-use limit; resets at the start of each month (%@)."
           }
         }
       }
@@ -2691,47 +2669,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings…"
-          }
-        }
-      }
-    },
-    "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Your monthly limit leaves %lld minute for this meeting; recording ends at %@."
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Your monthly limit leaves %lld minutes for this meeting; recording ends at %@."
-                }
-              }
-            }
-          }
-        },
-        "tr": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter."
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Aylık sınırına göre bu toplantıya %lld dakika kaldı; kayıt %@ itibarıyla biter."
-                }
-              }
-            }
           }
         }
       }
@@ -3682,17 +3619,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "You've reached this month's usage limit; it resets at the start of the month."
-          }
-        }
-      }
-    },
-    "Bu ayki kullanımının yüzde 80'i doldu": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You've used 80 percent of this month's hours"
           }
         }
       }
@@ -4838,17 +4764,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "The trial lasts %@. Subscribe now to keep going without a break."
-          }
-        }
-      }
-    },
-    "Deneme %@ tarihinde biter (%@, hangisi önce dolarsa).": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your trial ends on %@ (%@, whichever comes first)."
           }
         }
       }
@@ -7607,16 +7522,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Who spoke when"
-          }
-        }
-      }
-    },
-    "Kim ne zaman konuştu · tıkla, oradan çal": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Who spoke when · click to play from there"
           }
         }
       }
@@ -14319,47 +14224,6 @@
         }
       }
     },
-    "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld meeting left in your free trial. Subscribe and every meeting gets a note like this, automatically."
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld meetings left in your free trial. Subscribe and every meeting gets a note like this, automatically."
-                }
-              }
-            }
-          }
-        },
-        "tr": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır."
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Ücretsiz denemende %lld toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "Ücretsiz denemende 1 toplantı kaldı": {
       "extractionState": "manual",
       "localizations": {
@@ -15224,17 +15088,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pick a plan to keep going without a break. Your meetings and notes stay on this Mac."
-          }
-        }
-      }
-    },
-    "Canlı metin, hazır not ve görevler; ayda 10 saate kadar kayıt. İstediğin zaman iptal edebilirsin.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Live transcript, a ready note and tasks, up to 10 hours of recording a month. Cancel anytime."
           }
         }
       }
@@ -16199,6 +16052,161 @@
           "stringUnit": {
             "state": "translated",
             "value": "The info from Settings › Diagnostics (account status, permissions, connection, recent errors) is added to the end of your message; no audio, transcripts, notes, keys or tokens."
+          }
+        }
+      }
+    },
+    "<1 dk": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "<1 min"
+          }
+        }
+      }
+    },
+    "Adil kullanım sınırı: bu ay kaydedilen toplantıların toplam süresi. Ay başında sıfırlanır; sınır dolunca yeni kayıt başlatılamaz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fair-use limit: the total length of meetings recorded this month. It resets at the start of each month; once it's reached, new recordings can't start."
+          }
+        }
+      }
+    },
+    "Aylık sınırına göre kayıt %@ itibarıyla biter.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Because of your monthly limit, recording ends at %@."
+          }
+        }
+      }
+    },
+    "Bitiş": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ends"
+          }
+        }
+      }
+    },
+    "Bu ayki kullanım sınırına yaklaştın": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're close to this month's limit"
+          }
+        }
+      }
+    },
+    "Bu ayki kullanım sınırına yaklaştın: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're close to this month's limit: %@"
+          }
+        }
+      }
+    },
+    "Canlı metin, hazır not ve görevler. İstediğin zaman iptal edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live transcript, a ready note and tasks. Cancel anytime."
+          }
+        }
+      }
+    },
+    "Canlı metin, hazır not ve görevler; ayda %@ saate kadar kayıt. İstediğin zaman iptal edebilirsin.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live transcript, a ready note and tasks, up to %@ hours of recording a month. Cancel anytime."
+          }
+        }
+      }
+    },
+    "Sıfırlanma: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resets: %@"
+          }
+        }
+      }
+    },
+    "Tıkla, oradan çal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click to play from there"
+          }
+        }
+      }
+    },
+    "Ücretsiz deneme: %@. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free trial: %@. Subscribe and every meeting gets a note like this, automatically."
+          }
+        }
+      }
+    },
+    "İlk toplantıyla başlar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starts with your first meeting"
+          }
+        }
+      }
+    },
+    "Bu toplantıya %lld dakika kaldı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minute left for this meeting"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minutes left for this meeting"
+                }
+              }
+            }
           }
         }
       }

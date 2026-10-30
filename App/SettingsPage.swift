@@ -1250,6 +1250,21 @@ private struct BrandTile: View {
     }
 }
 
+/// "Bağlı" durumu: tüm bağlantılarda aynı sakin görünüm, mürekkep renginde onay simgesi ve metin (iyi durum renkle
+/// vurgulanmaz; renk yalnızca uyarı ve hatada).
+private struct ConnectedLabel: View {
+    let text: Text
+
+    var body: some View {
+        Label {
+            text
+        } icon: {
+            Image(systemName: "checkmark.circle.fill")
+        }
+        .foregroundStyle(Theme.ink)
+    }
+}
+
 /// Bağlantı kartı: marka kutusu, ad, kısa açıklama, (varsa) "bağlı" rozeti ve sağda eylem.
 private struct ConnectionCard<Action: View>: View {
     let tile: BrandTile
@@ -1279,12 +1294,8 @@ private struct ConnectionCard<Action: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
                 // Rozet başlığın altında: yanında dururken uzun adları (İngilizcede) kesiyordu.
                 if let badge {
-                    Text(verbatim: badge)
-                        .appFont(size: 10, weight: .semibold)
-                        .foregroundStyle(Color.green)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.12), in: Capsule())
+                    ConnectedLabel(text: Text(verbatim: badge))
+                        .appFont(size: 12, weight: .medium)
                 }
                 detail
                     .appFont(size: 12, weight: .regular)
@@ -1369,8 +1380,7 @@ private struct MCPClientCard: View {
                     } else if let errorMessage {
                         NoticeText(errorMessage, severity: .error)
                     } else if isConnected {
-                        Label(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(Color.green)
+                        ConnectedLabel(text: Text(justConnected ? "Bağlandı — uygulamayı yeniden aç" : "Bağlı"))
                     } else {
                         Text("Tek tıkla bağla").foregroundStyle(Theme.muted)
                     }
@@ -1701,8 +1711,8 @@ private struct WebhookSettings: View {
             .appFont(size: 13, weight: .regular)
             .padding(.bottom, 8)
         case .done(let message):
-            Label(message, systemImage: "checkmark.circle.fill")
-                .appFont(size: 13, weight: .medium).foregroundStyle(.tint).padding(.bottom, 8)
+            ConnectedLabel(text: Text(message))
+                .appFont(size: 13, weight: .medium).padding(.bottom, 8)
                 .transition(.opacity)
         case .failed(let message):
             NoticeText(message, severity: .error)
@@ -2058,7 +2068,10 @@ private struct TaskTrackerSettings: View {
     @ViewBuilder
     private func trackerCard(service: MCPService) -> some View {
         if let tracker = model.taskTrackers.first(where: { $0.service == service }) {
-            ConnectionCard(tile: tile(service: service), title: Text(verbatim: service.displayName), detail: Text("Bağlı"), badge: nil) {
+            ConnectionCard(
+                tile: tile(service: service), title: Text(verbatim: service.displayName),
+                detail: Text(service == .linear ? "Takımındaki işler" : "Jira projesindeki işler"), badge: String(localized: "Bağlı")
+            ) {
                 HStack(spacing: 6) {
                     TrackerTargetPicker(model: model, tracker: tracker)
                     Menu {

@@ -2,11 +2,6 @@ import AINotepadCore
 import AINotepadUI
 import SwiftUI
 
-/// Deneme sayacı: "3 toplantıdan 2 tanesi kaldı" (iyelik eki sayıya göre değiştiği için "tanesi"). Saf fonksiyondur.
-func hostedTrialText(left: Int, total: Int) -> String {
-    String(localized: "\(total) toplantıdan \(left) tanesi kaldı")
-}
-
 /// Aylık kullanım: "Bu ay 2,5 / 10 saat". Saf fonksiyondur.
 func hostedMonthlyUsageText(used: Double, cap: Double) -> String {
     let style: FloatingPointFormatStyle<Double> = .number.precision(.fractionLength(0...1)).locale(interfaceLocale())
@@ -268,9 +263,10 @@ struct HostedSignInStep: View {
                     .appFont(size: 15, weight: .medium)
                     .foregroundStyle(Theme.ink)
                 switch hostedPlanStatus(entitlements: entitlements) {
-                case .trial(let left, let total):
-                    Text(verbatim: hostedTrialText(left: left, total: total))
+                case .trial(let left, _):
+                    Text(verbatim: hostedTrialLeftText(left: left))
                         .appFont(size: 13, weight: .regular)
+                        .monospacedDigit()
                         .foregroundStyle(Theme.muted)
                 case .subscribed, .complimentary, .ending, .grace:
                     Text("Aboneliğin etkin.")

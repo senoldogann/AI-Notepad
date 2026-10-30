@@ -327,6 +327,7 @@ struct MeetingRow: View {
                 // Tek metin, tek satır: dar listede tarih, süre ve durum ayrı sütunlara bölünüp alt alta kaymaz.
                 infoLine
                     .appFont(size: 11, weight: .regular)
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -1633,16 +1634,16 @@ private struct SummaryTab: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
-                    Text(String(localized: "\(max(1, Int((seconds / 60).rounded()))) dk"))
+                    Text(verbatim: shareMinutesText(seconds: seconds))
                         .appFont(size: 11, weight: .regular)
                         .monospacedDigit()
                         .foregroundStyle(Theme.muted)
-                        .fixedSize()
+                        .frame(width: 44, alignment: .trailing)
                     Text(fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))
                         .appFont(size: 12, weight: .semibold)
                         .monospacedDigit()
                         .foregroundStyle(Theme.ink)
-                        .fixedSize()
+                        .frame(width: 38, alignment: .trailing)
                 }
                 // Pay çubuğu kişinin renginde (gradyanla hafif derinlik).
                 GeometryReader { (proxy: GeometryProxy) in
@@ -2223,6 +2224,11 @@ private func speakerName(key: SpeakerKey, speakerNames: [Int: String]) -> String
     return speakerLabel(speaker: key.speaker, person: key.person)
 }
 
+/// Konuşma payının dakikası, ör. "12 dk"; bir dakikanın altı "<1 dk" (yukarı yuvarlanıp 1 dk görünmez). Saf fonksiyondur.
+private func shareMinutesText(seconds: Double) -> String {
+    seconds < 60 ? String(localized: "<1 dk") : String(localized: "\(Int((seconds / 60).rounded())) dk")
+}
+
 /// Rozet harfi: adın baş harfi, adsız numaralı kişide numara, "Sen"/"Diğerleri"nde etiketin baş harfi. Saf fonksiyondur.
 private func avatarText(key: SpeakerKey, speakerNames: [Int: String]) -> String {
     if let person = key.person, speakerNames[person]?.isEmpty ?? true {
@@ -2287,12 +2293,18 @@ private struct SpeakerTimeline: View {
             }
             .frame(height: 14)
             HStack(spacing: DesignTokens.Spacing.s) {
-                Text(verbatim: "00:00")
+                Text(verbatim: timestamp(seconds: 0))
                 Spacer(minLength: 0)
-                Text(canPlay ? "Kim ne zaman konuştu · tıkla, oradan çal" : "Kim ne zaman konuştu")
-                    .lineLimit(1)
+                if canPlay {
+                    Text("Kim ne zaman konuştu")
+                        .lineLimit(1)
+                        .hoverHint("Tıkla, oradan çal", alignment: .center, edge: .bottom)
+                } else {
+                    Text("Kim ne zaman konuştu")
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
-                Text(timestamp(seconds: totalSec))
+                Text(verbatim: timestamp(seconds: totalSec))
             }
             .appFont(size: 11, weight: .regular)
             .monospacedDigit()
