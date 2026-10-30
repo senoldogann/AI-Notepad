@@ -45,6 +45,28 @@ enum DemoScene: String {
     case tasks = "gorevler"
 }
 
+/// Sor sahnesinde soru alanına yazılmış taslak (görsel kontrol: `@` önerileri ve etiketler).
+struct DemoAskDraft {
+    let question: String
+    /// Etiketlenecek son toplantı sayısı.
+    let chips: Int
+}
+
+/// `--tanitim-soru <metin>` ve `--tanitim-etiket <sayı>` argümanlarından taslak; ikisi de yoksa nil (soru yoksa boş,
+/// etiket sayısı yoksa 0). Saf fonksiyondur.
+func demoAskDraft(arguments: [String]) -> DemoAskDraft? {
+    let question: String? = arguments.firstIndex(of: "--tanitim-soru").flatMap { (index: Int) -> String? in
+        arguments.indices.contains(index + 1) ? arguments[index + 1] : nil
+    }
+    let chips: Int? = arguments.firstIndex(of: "--tanitim-etiket").flatMap { (index: Int) -> Int? in
+        arguments.indices.contains(index + 1) ? Int(arguments[index + 1]) : nil
+    }
+    guard question != nil || chips != nil else {
+        return nil
+    }
+    return DemoAskDraft(question: question ?? "", chips: chips ?? 0)
+}
+
 /// `--tanitim-boyut <genişlik>x<yükseklik>` argümanından ana pencerenin boyutu (dar pencere denetimi için); yoksa ya da
 /// biçim tanınmazsa nil. Saf fonksiyondur.
 func demoWindowSize(arguments: [String]) -> NSSize? {

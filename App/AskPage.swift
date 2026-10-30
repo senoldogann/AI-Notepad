@@ -7,15 +7,28 @@ import SwiftUI
 /// parıltılı "Düşünüyor…", cevap akarak yumuşakça gelir, altında küçük ve kapalı "Kaynaklar" ve "nasıl cevaplandı"
 /// satırları; metindeki [1] işaretleri toplantıyı açar. Devam soruları önceki cevapları bağlam alır. Boşken film
 /// gradyanlı giriş ve örnek sorular. Sohbetler saklanır; "Geçmiş" soldaki ince sütunda açılır (yeniden aç, sil).
+///
+/// Soru alanı: Enter gönderir, Shift+Enter yeni satır. `@` yazınca alanın üstünde toplantı önerileri açılır (yazdıkça
+/// süzülür; ↑/↓ gezinir, Tab ya da Enter seçer, Esc kapatır); seçilen toplantı alanda kaldırılabilir etiket olur ve soru
+/// yalnız etiketli toplantılara sorulur. Boş alanda ↑ son soruyu düzenlemeye getirir; öneri kapalıyken Esc alanı temizler.
 struct AskPage: View {
     let model: AppModel
     let router: MainWindowRouter
     @State private var question: String = ""
+    /// Soru alanında imlecin konumu (UTF-16): `@` bahsi imlecin önünde aranır.
+    @State private var cursor: Int = 0
     /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; soru gönderilince alandan kalkar.
     @State private var mentioned: [MeetingRecord] = []
-    /// `@` önerilerinde klavyeyle seçili satır.
+    /// `@` ya da "/" önerilerinde klavyeyle seçili satır.
     @State private var highlighted: Int = 0
-    @FocusState private var isFocused: Bool
+    /// Esc ile kapatılan `@` bahsinin başlangıcı: aynı bahiste öneriler yeniden açılmaz (yeni `@` açar).
+    @State private var dismissedMentionStart: Int?
+    /// "/" önerileri Esc ile kapatıldı: soru "/" ile başladıkça yeniden açılmaz.
+    @State private var isRecipeDismissed: Bool = false
+    @State private var isFocused: Bool = false
+    /// Arttıkça soru alanı odağı alır.
+    @State private var focusRequest: Int = 0
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
     /// Soldaki sohbet geçmişi sütunu açık (düğmesi pencerenin üst çubuğunda).
     @AppStorage(SettingsKey.askHistoryVisible) private var isShowingHistory: Bool = false
 
@@ -25,14 +38,16 @@ struct AskPage: View {
                 AskHistoryColumn(model: model) { (id: UUID) -> Void in
                     model.openConversation(id: id)
                     mentioned = []
-                    isFocused = true
+                    focusRequest += 1
                 }
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
             chat
         }
         .animation(.smooth(duration: 0.25), value: isShowingHistory)
-        .onAppear { isFocused = true }
+        #if DEBUG
+        .task { await applyDemoDraft() }
+        #endif
     }
 
     private var chat: some View {
@@ -92,6 +107,8 @@ struct AskPage: View {
                         run(recipe: recipe)
                     } onDelete: { (recipe: Recipe) -> Void in
                         model.deleteRecipe(id: recipe.id)
+                        // Liste kısaldı: seçili satır listenin dışında kalmasın.
+                        highlighted = 0
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
@@ -102,10 +119,14 @@ struct AskPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 composer
+                Text("Enter gönderir · Shift+Enter yeni satır · @ toplantı seç")
+                    .appFont(size: 11, weight: .regular)
+                    .foregroundStyle(Theme.muted.opacity(0.85))
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
             .animation(.smooth(duration: 0.2), value: isMentioning || isPickingRecipe)
             .padding(.horizontal, 40)
-            .padding(.bottom, 22)
+            .padding(.bottom, 14)
             .frame(maxWidth: 780)
         }
         .frame(maxWidth: .infinity)
@@ -115,13 +136,22 @@ struct AskPage: View {
                     Button("Yeni sohbet", systemImage: "square.and.pencil") {
                         model.clearArchiveConversation()
                         mentioned = []
-                        isFocused = true
+                        focusRequest += 1
                     }
                     .controlSize(.small)
                     .hoverHint("Önceki cevaplar bağlam olmaz; bu sohbet geçmişte kalır", alignment: .trailing, edge: .bottom)
                 }
             }
             .padding(16)
+        }
+        .onChange(of: question) { (_: String, _: String) in
+            highlighted = 0
+            resetDismissedSuggestions()
+        }
+        .onChange(of: cursor) { (_: Int, _: Int) in
+            // İmleç başka bir bahse geçince liste değişir: seçili satır baştan başlar.
+            highlighted = 0
+            resetDismissedSuggestions()
         }
     }
 
@@ -142,6 +172,16 @@ struct AskPage: View {
         !model.archiveExchanges.isEmpty
     }
 
+    /// Soru alanının yer tutucusu (ve VoiceOver etiketi).
+    private var placeholder: String {
+        if !mentioned.isEmpty {
+            return String(localized: "Etiketlenen toplantılara sor…")
+        }
+        return model.archiveExchanges.isEmpty
+            ? String(localized: "Toplantılarına bir şey sor… (@ toplantı, / tarif)")
+            : String(localized: "Devam sorusu sor…")
+    }
+
     private var composer: some View {
         let isEmpty: Bool = question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let shape: RoundedRectangle = RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -151,28 +191,33 @@ struct AskPage: View {
                     ForEach(mentioned, id: \.id) { (record: MeetingRecord) in
                         RemovableMentionChip(title: record.note?.title ?? record.title) {
                             withAnimation(.smooth(duration: 0.2)) { mentioned.removeAll { $0.id == record.id } }
+                            focusRequest += 1
                         }
                     }
                 }
                 .padding(.top, 4)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Etiketlenen toplantılar")
             }
             HStack(alignment: .bottom, spacing: 10) {
-                TextField(
-                    mentioned.isEmpty
-                        ? (model.archiveExchanges.isEmpty ? "Toplantılarına bir şey sor… (@ toplantı, / tarif)" : "Devam sorusu sor…")
-                        : "Etiketlenen toplantılara sor…",
-                    text: $question, axis: .vertical
-                )
-                .textFieldStyle(.plain)
-                .appFont(size: 15, weight: .regular)
-                .lineLimit(1...6)
-                .focused($isFocused)
-                .onSubmit(send)
-                .onKeyPress(.downArrow) { moveHighlight(by: 1) }
-                .onKeyPress(.upArrow) { moveHighlight(by: -1) }
-                .onKeyPress(.return) { pickHighlighted() }
-                .onKeyPress(.escape) { dismissSuggestions() }
-                .onChange(of: question) { (_: String, _: String) in highlighted = 0 }
+                AskInputField(
+                    text: $question, cursor: $cursor, accessibilityLabel: placeholder, font: askInputFont(appearance: appearance, size: 15),
+                    textColor: NSColor(Theme.ink), maxLines: 6, focusRequest: focusRequest
+                ) { (focused: Bool) -> Void in
+                    isFocused = focused
+                } onCommand: { (command: AskInputCommand) -> Bool in
+                    handle(command: command)
+                }
+                .overlay(alignment: .topLeading) {
+                    if question.isEmpty {
+                        Text(placeholder)
+                            .appFont(size: 15, weight: .regular)
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .padding(.vertical, 6)
                 if model.isAnsweringArchive {
                     Button(action: model.stopArchiveAnswer) {
@@ -215,6 +260,46 @@ struct AskPage: View {
         .animation(.smooth(duration: 0.25), value: model.isAnsweringArchive)
     }
 
+    /// Soru alanının tuş komutu; true dönerse işlendi (işlenmeyen ↑/↓ imleci taşır, Tab odağı geçirir).
+    private func handle(command: AskInputCommand) -> Bool {
+        switch command {
+        case .submit:
+            submit()
+            return true
+        case .moveUp:
+            guard isMentioning || isPickingRecipe else {
+                return recallLastQuestion()
+            }
+            moveHighlight(by: -1)
+            return true
+        case .moveDown:
+            guard isMentioning || isPickingRecipe else {
+                return false
+            }
+            moveHighlight(by: 1)
+            return true
+        case .complete:
+            guard isMentioning else {
+                return false
+            }
+            pick(record: suggestions[highlighted])
+            return true
+        case .cancel:
+            return cancel()
+        }
+    }
+
+    /// Enter: öneri açıksa seçili satırı seçer (soru gönderilmez), değilse soruyu gönderir.
+    private func submit() {
+        if isMentioning {
+            pick(record: suggestions[highlighted])
+        } else if isPickingRecipe {
+            run(recipe: recipeMatches[highlighted])
+        } else {
+            send()
+        }
+    }
+
     private func send() {
         // Öneri seçilirken gönderilmez; eşleşen öneri yoksa ("@Mikko ne dedi?") soru olduğu gibi gider.
         guard !model.isAnsweringArchive, !isMentioning, !isPickingRecipe, unavailableReason == nil,
@@ -229,24 +314,70 @@ struct AskPage: View {
         }
         #endif
         model.askArchive(question: question, meetingIDs: mentioned.map(\.id), recipeTitle: nil)
+        clearInput()
+    }
+
+    /// Soru alanını ve etiketleri boşaltır (etiket bu soruya aitti: sohbette sorunun üstünde kalır).
+    private func clearInput() {
+        cursor = 0
         question = ""
-        // Etiket bu soruya aitti: sohbette sorunun üstünde kalır, soru alanından kalkar.
+        highlighted = 0
         withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
     }
 
-    /// `@` önerileri açık: sondaki `@` bahsine eşleşen toplantı var.
+    /// Boş alanda ↑: sohbetteki son soru düzenlemeye gelir (imleç sonda). Alan doluysa ya da soru yoksa işlenmez.
+    private func recallLastQuestion() -> Bool {
+        guard question.isEmpty, let last = lastAskedQuestion(exchanges: model.archiveExchanges) else {
+            return false
+        }
+        cursor = last.utf16.count
+        question = last
+        return true
+    }
+
+    /// Esc: önce açık öneriyi kapatır (yazılan metin kalır), öneri yoksa alanı ve etiketleri temizler.
+    private func cancel() -> Bool {
+        if isMentioning, let mention = mentionQuery(text: question, cursor: cursor) {
+            dismissedMentionStart = mention.start
+            return true
+        }
+        if isPickingRecipe {
+            isRecipeDismissed = true
+            return true
+        }
+        guard !question.isEmpty || !mentioned.isEmpty else {
+            return false
+        }
+        clearInput()
+        return true
+    }
+
+    /// Kapatılan öneri, bahsi ya da "/" silinince unutulur (yeniden yazılınca açılsın).
+    private func resetDismissedSuggestions() {
+        if let dismissed = dismissedMentionStart, mentionQuery(text: question, cursor: cursor)?.start != dismissed {
+            dismissedMentionStart = nil
+        }
+        if isRecipeDismissed, recipeQuery(text: question) == nil {
+            isRecipeDismissed = false
+        }
+    }
+
+    /// `@` önerileri açık: imlecin önünde (Esc ile kapatılmamış) bahse eşleşen toplantı var.
     private var isMentioning: Bool {
-        mentionQuery(text: question) != nil && !suggestions.isEmpty
+        !suggestions.isEmpty
     }
 
     /// "/" önerileri açık: eşleşen tarif var.
     private var isPickingRecipe: Bool {
-        recipeQuery(text: question) != nil && !recipeMatches.isEmpty
+        !recipeMatches.isEmpty
     }
 
-    /// "/" ile eşleşen tarifler.
+    /// "/" ile eşleşen tarifler; "/" yoksa ya da Esc ile kapatıldıysa boş.
     private var recipeMatches: [Recipe] {
-        recipeCandidates(recipes: model.recipes, query: recipeQuery(text: question) ?? "")
+        guard !isRecipeDismissed, let query = recipeQuery(text: question) else {
+            return []
+        }
+        return recipeCandidates(recipes: model.recipes, query: query)
     }
 
     /// Tarifi çalıştırır: etiketli toplantılar varsa onlara, yoksa tüm arşive.
@@ -255,62 +386,52 @@ struct AskPage: View {
             return
         }
         model.askArchive(question: recipe.prompt, meetingIDs: mentioned.map(\.id), recipeTitle: recipe.title)
-        question = ""
-        highlighted = 0
-        withAnimation(.smooth(duration: 0.2)) { mentioned = [] }
+        clearInput()
     }
 
-    /// `@` önerileri (en fazla 6).
+    /// `@` önerileri (en fazla 6): imlecin önündeki bahse eşleşen toplantılar; bahis yoksa ya da Esc ile kapatıldıysa boş.
     private var suggestions: [MeetingRecord] {
-        mentionCandidates(records: model.meetings, query: mentionQuery(text: question) ?? "", excluding: mentioned.map(\.id), limit: 6)
+        guard let mention = mentionQuery(text: question, cursor: cursor), mention.start != dismissedMentionStart else {
+            return []
+        }
+        return mentionCandidates(records: model.meetings, query: mention.query, excluding: mentioned.map(\.id), limit: 6)
     }
 
-    /// Toplantıyı etikete ekler; yazılan "@…" silinir.
+    /// Toplantıyı etikete ekler; yazılan "@…" silinir, imleç onun yerine gelir.
     private func pick(record: MeetingRecord) {
+        guard let edit = removingMention(text: question, cursor: cursor) else {
+            preconditionFailure("Toplantı önerisi seçildi ama imlecin önünde @ bahsi yok")
+        }
         withAnimation(.smooth(duration: 0.2)) { mentioned.append(record) }
-        question = removingMentionQuery(text: question)
+        cursor = edit.cursor
+        question = edit.text
         highlighted = 0
-        isFocused = true
+        focusRequest += 1
     }
 
-    private func moveHighlight(by step: Int) -> KeyPress.Result {
-        let count: Int = isMentioning ? suggestions.count : (isPickingRecipe ? recipeMatches.count : 0)
-        guard count > 0 else {
-            return .ignored
-        }
+    private func moveHighlight(by step: Int) {
+        let count: Int = isMentioning ? suggestions.count : recipeMatches.count
         highlighted = (highlighted + step + count) % count
-        return .handled
     }
 
-    /// Öneriler açıkken Return seçili toplantıyı ekler (soru gönderilmez).
-    private func pickHighlighted() -> KeyPress.Result {
-        if isPickingRecipe {
-            if recipeMatches.indices.contains(highlighted) {
-                run(recipe: recipeMatches[highlighted])
+    #if DEBUG
+    /// Tanıtım modunda (`--tanitim-soru`, `--tanitim-etiket`) soru alanına taslak ve etiketler yazılır (görsel kontrol).
+    private func applyDemoDraft() async {
+        guard isDemoMode, let draft = demoAskDraft(arguments: CommandLine.arguments) else {
+            return
+        }
+        for _ in 0..<40 where model.meetings.isEmpty {
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return
             }
-            return .handled
         }
-        guard isMentioning else {
-            return .ignored
-        }
-        if suggestions.indices.contains(highlighted) {
-            pick(record: suggestions[highlighted])
-        }
-        return .handled
+        mentioned = Array(mentionCandidates(records: model.meetings, query: "", excluding: [], limit: draft.chips))
+        cursor = draft.question.utf16.count
+        question = draft.question
     }
-
-    /// Escape önerileri kapatır: yazılan "@…" silinir.
-    private func dismissSuggestions() -> KeyPress.Result {
-        if isPickingRecipe {
-            question = ""
-            return .handled
-        }
-        guard isMentioning else {
-            return .ignored
-        }
-        question = removingMentionQuery(text: question)
-        return .handled
-    }
+    #endif
 }
 
 /// Sohbet geçmişi: soldaki ince sütunda yeniden eskiye sohbetler (başlık ve tarih); açık sohbet gri hap. Üzerine gelince
