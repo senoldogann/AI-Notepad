@@ -1,5 +1,6 @@
 ---
-// Entegrasyon logosu (src/lib/brands.ts): tek renk, `currentColor`. Erişilebilir adı `title` ve `aria-label` taşır.
+// Entegrasyon logosu (src/lib/brands.ts): tek renk, `currentColor`. Süstür (`aria-hidden`), Icon.astro gibi: markanın
+// adını her kullanımda yanındaki görünür metin verir.
 // Kare işaret `size`×`size` çizilir; yazı biçimli (geniş) işaret görsel ağırlığı denk olsun diye en çok 1,6 kat geniş.
 import { type Brand, type BrandMark, brands } from "../lib/brands";
 
@@ -20,10 +21,8 @@ const height: number = Math.round((width / aspect) * 10) / 10;
   height={height}
   viewBox={`${mark.viewBox.x} ${mark.viewBox.y} ${mark.viewBox.width} ${mark.viewBox.height}`}
   fill="currentColor"
-  role="img"
-  aria-label={mark.name}
+  aria-hidden="true"
   focusable="false"
 >
-  <title>{mark.name}</title>
   <path d={mark.path} fill-rule={mark.fillRule}></path>
 </svg>

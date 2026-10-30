@@ -2,7 +2,9 @@
 // Açık/koyu tema. <head> içinde engelleyici, harici bir betik olarak yüklenir (CSP satır içi betiğe izin vermez): ilk
 // boyamadan önce `<html data-theme>` yazılır, sayfa yanlış temada yanıp sönmez. Kullanıcı seçim yapmadıysa sistem
 // tercihi izlenir; düğmeyle yapılan seçim localStorage'da kalır. Tema değişince `gistsmith:themechange` olayı yayılır
-// (Turnstile ve Google düğmesi temayı buradan alır). Derlenmez: TypeScript denetimi JSDoc tipleriyle yapılır.
+// (Turnstile parçacığı temayı buradan alır). Tarayıcı çubuğunun rengi (`<meta name="theme-color">`) de seçilen temaya
+// uyar; bu yüzden Base.astro'da meta etiketleri bu betikten önce gelir. Derlenmez: TypeScript denetimi JSDoc
+// tipleriyle yapılır.
 
 (() => {
   /** Tema adı. @typedef {"light" | "dark"} Theme */
@@ -10,6 +12,9 @@
   const storageKey = "gistsmith.theme";
   const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const root = document.documentElement;
+  // Tarayıcı çubuğunun rengi; global.css `--bg` ile aynı kalmalı.
+  const lightBarColor = "#fdfcfc";
+  const darkBarColor = "#0a0a0a";
 
   /**
    * Saklanan seçim; yoksa null. Depolama kapalıysa (ör. tarayıcı ayarı) uyarı yazılır ve sistem tercihi kullanılır.
@@ -31,11 +36,15 @@
   }
 
   /**
-   * Temayı sayfaya yazar ve düğmeleri günceller.
+   * Temayı sayfaya yazar; tarayıcı çubuğunun rengini ve düğmeleri günceller. İki `theme-color` etiketi de (sistem
+   * tercihine göre seçilenler) aynı renge çekilir, böylece elle seçilen tema sistem teması yerine geçer.
    * @param {Theme} theme
    */
   function apply(theme) {
     root.dataset["theme"] = theme;
+    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+      meta.setAttribute("content", theme === "dark" ? darkBarColor : lightBarColor);
+    }
     for (const button of document.querySelectorAll("[data-theme-toggle]")) {
       button.setAttribute("aria-pressed", String(theme === "dark"));
     }

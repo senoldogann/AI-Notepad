@@ -1,27 +1,12 @@
 // Uygulamanın film gradyanı ve kapak ses dalgasının site karşılığı (AINotepadUI/FilmGradient.swift,
-// CoverBackground.swift). Renkler ve dalga yükseklikleri uygulamadakiyle aynı; çizim CSS'tedir (global.css).
+// CoverBackground.swift). Ailelerin renkleri yalnızca global.css `.film--<aile>` kurallarındadır ve uygulamadaki
+// `FilmPalette.colors` ile aynı kalmalıdır; dalga yükseklikleri uygulamadakiyle aynı sayıları üretir.
 
 /** Film gradyanının renk ailesi. */
 export type FilmPalette = "sunset" | "coral" | "ocean" | "mint" | "rose" | "violet";
 
 /** Bulutların yerleşimi: yumuşak bulutlar (gölge solda ya da sağda) veya çapraz ışık süzmeleri. */
 export type FilmLayout = "clouds-left" | "clouds-right" | "streaks";
-
-/** Bir ailenin zemini ve bulutları: açık ton, krem ışık, karşıt pastel, derin ton. */
-export interface PaletteColors {
-  readonly base: string;
-  readonly clouds: readonly [string, string, string, string];
-}
-
-/** Uygulamadaki `FilmPalette.colors` ile aynı değerler. */
-export const paletteColors: Readonly<Record<FilmPalette, PaletteColors>> = {
-  sunset: { base: "#F0AE92", clouds: ["#F7CDB8", "#FFF3E6", "#C9A3E0", "#E9896A"] },
-  coral: { base: "#F0C49B", clouds: ["#F7DCC0", "#FFF6E8", "#F2A7B4", "#E0A36F"] },
-  ocean: { base: "#A9BCEE", clouds: ["#CBD6F6", "#F4F1FF", "#E9B9D6", "#8EA3E6"] },
-  mint: { base: "#A9CDB8", clouds: ["#CCE3D4", "#F6F7EA", "#E9D7A8", "#7FB096"] },
-  rose: { base: "#EBA7B5", clouds: ["#F6CBD4", "#FFF1EC", "#B9C9F0", "#DE8AA3"] },
-  violet: { base: "#C7B3EC", clouds: ["#DED1F5", "#FFF4EE", "#F4C0A8", "#A98BDB"] },
-};
 
 const mask64: bigint = (1n << 64n) - 1n;
 

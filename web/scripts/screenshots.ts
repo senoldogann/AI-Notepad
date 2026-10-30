@@ -3,7 +3,7 @@
 // birkaç karesini, tema düğmesini ve gösterimin ana iş parçacığı maliyetini (5 sn, Chrome başarım ölçüleri) denetler.
 // Hesap ve yönetim sayfaları için tarayıcıya örnek bir oturum yazılır ve sunucu yanıtları aşağıdaki örnek verilerle
 // karşılanır: bu yalnızca görünüm denetimidir; sunucuyla gerçek akış sunucunun kendi testlerindedir. Hesap sayfası her
-// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor; ücretsiz erişim) çekilir; abonede davet
+// plan durumunda (deneme başlamadı, sürüyor, bitti; abonelik etkin, iptal edildi, ödeme bekliyor, bitti; ücretsiz erişim) çekilir; abonede davet
 // kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir. Sayfa sonundaki
 // çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
 // denetlenir.
@@ -27,7 +27,7 @@ interface Finding {
 }
 
 /** Hesap sayfasının örnek plan durumları (`/v1/me` yanıtı bunlardan seçilir). */
-type AccountState = "trial-new" | "trial-running" | "trial-ended" | "active" | "canceling" | "grace" | "complimentary";
+type AccountState = "trial-new" | "trial-running" | "trial-ended" | "active" | "canceling" | "grace" | "ended" | "complimentary";
 
 /**
  * Görüntülenecek sayfa; `ready` sayfanın hazır olduğunu gösteren seçici (Turnstile ağı hiç boşaltmaz). `account` hesap
@@ -74,6 +74,7 @@ const targets: readonly Target[] = [
   { name: "account-trial-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "trial-ended" },
   { name: "account-canceling", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "canceling" },
   { name: "account-grace", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "grace" },
+  { name: "account-ended", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "ended" },
   { name: "account-complimentary", path: "/account", ready: "#account-content:not(.hidden)", signedIn: true, account: "complimentary" },
   // Davet koduyla gelinir: kod saklanır (sonraki hesap sayfalarında da dolar), bu yüzden hesap sayfalarından sonra.
   { name: "account-invite", path: "/account?code=k7m2-qx9d&plan=monthly", ready: "#invite-status.invite__ok", signedIn: true, account: "trial-ended" },
@@ -151,6 +152,15 @@ function meFixture(state: AccountState, now: Date): object {
     active: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 3.4, subscription: subscription("active", null) },
     canceling: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 7.6, subscription: subscription("active", at(20)) },
     grace: { ...base, plan: "subscription", trialMeetingsLeft: 0, trialEndsAt: null, monthlyHoursUsed: 1.2, subscription: subscription("grace", null) },
+    // Aboneliği bitmiş, denemesi de kalmamış eski abone: "plan yok", Abone ol ve (Stripe müşterisi olduğu için) Yönet.
+    ended: {
+      ...base,
+      plan: "trial",
+      trialMeetingsLeft: 0,
+      trialEndsAt: at(-40),
+      monthlyHoursUsed: 0,
+      subscription: { status: "canceled", plan: "monthly", currentPeriodEnd: at(-3), cancelAt: at(-3), complimentary: false, access: "none", graceEndsAt: null },
+    },
     complimentary: {
       ...base,
       plan: "subscription",

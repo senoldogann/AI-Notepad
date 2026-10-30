@@ -15,8 +15,12 @@ function linkAccount(header: HTMLElement): void {
   for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-session-link]")) {
     link.href = href;
     link.textContent = label;
+    // Bağlantı artık hesap sayfasına gider: "geçerli sayfa" işareti yalnızca hesap sayfasındayken kalır (ör. /sign-in'de
+    // derlemede konan işaret silinir).
     if (current) {
       link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
     }
   }
 }

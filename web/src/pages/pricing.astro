@@ -1,6 +1,7 @@
 ---
-// Fiyat sayfası: iki plan (aylık 5,99 $, yıllık 49 $; vergiler dahil; yıllık önerilen), neler dahil, sınırlar, ödeme
-// ve vergiler (satıcı Link) ve SSS. Plan düğmeleri hesap sayfasına seçilen planla gider (`/account?plan=…`); hesap
+// Fiyat sayfası: iki plan (aylık 5,99 $, yıllık 49 $; vergiler dahil; yıllık önerilen), davet sayfasına bağlantı, neler
+// dahil (yalnızca özellikler), sınırlar (deneme, aylık saat, toplantı süresi, iptal), ödeme ve vergiler (satıcı Link) ve
+// SSS. Her bilgi sayfada bir kez geçer. Plan düğmeleri hesap sayfasına seçilen planla gider (`/account?plan=…`); hesap
 // sayfası oturum yoksa önce girişe yönlendirir.
 import Base from "../layouts/Base.astro";
 import Faq from "../components/Faq.astro";
@@ -17,10 +18,13 @@ const text: PricingCopy = copy.pricing;
 const common: CommonCopy = copy.common;
 /** Arama motorları için sayfanın sık sorulan soruları (JSON-LD; aşağıdaki `Faq` ile aynı girdiler). */
 const structuredData: string = structuredDataJson(faqStructuredData(text.faq, pageUrl("pricing", siteConfig.siteOrigin)));
-/** Plan notunun davet bağlantısından önceki ve sonraki parçası (`{invite}`). */
+/** Plan notunun davet bağlantısından önceki ve sonraki parçası; metinde tam bir `{invite}` yoksa derleme durur. */
 const [noteBefore, noteAfter]: readonly [string, string] = ((): readonly [string, string] => {
-  const parts: readonly string[] = text.plansNote.split("{invite}");
-  return [parts[0] ?? "", parts[1] ?? ""];
+  const [before, after, ...rest]: readonly string[] = text.plansNote.split("{invite}");
+  if (before === undefined || after === undefined || rest.length > 0) {
+    throw new Error(`copy.pricing.plansNote tam bir "{invite}" yer tutucusu içermeli; gelen: ${JSON.stringify(text.plansNote)}`);
+  }
+  return [before, after];
 })();
 ---
 

@@ -35,7 +35,6 @@ export type IconName =
   | "timer"
   | "tokens"
   | "translate"
-  | "user"
   | "users"
   | "wallet"
   | "waveform";
@@ -98,7 +97,6 @@ export const icons: Readonly<Record<IconName, IconShape>> = {
   timer: { style: "stroke", body: '<circle cx="12" cy="13.25" r="7.25"/><path d="M12 9.5v3.75M9.75 2.75h4.5M18.25 6.75l1.25-1.25"/>' },
   tokens: { style: "stroke", body: '<ellipse cx="12" cy="6.5" rx="7" ry="2.75"/><path d="M5 6.5v5.5c0 1.5 3.1 2.75 7 2.75s7-1.25 7-2.75V6.5M5 12v5.5c0 1.5 3.1 2.75 7 2.75s7-1.25 7-2.75V12"/>' },
   translate: { style: "stroke", body: '<path d="M3.75 5.75h9M8.25 3.75v2M5.75 5.75c.6 3.4 2.6 5.9 5.75 7.25M10.75 5.75c-.6 3.4-2.6 5.9-5.75 7.25"/><path d="m12.25 20.25 3.75-9 3.75 9M13.6 17h4.8"/>' },
-  user: { style: "stroke", body: '<circle cx="12" cy="8.25" r="3.75"/><path d="M4.75 20c.9-3.6 3.75-5.5 7.25-5.5s6.35 1.9 7.25 5.5"/>' },
   users: { style: "stroke", body: '<circle cx="9.5" cy="8.5" r="3.5"/><path d="M3.25 19.5c.8-3.3 3.2-5 6.25-5s5.45 1.7 6.25 5M15.5 5.2a3.5 3.5 0 0 1 0 6.6M17.5 14.7c1.6.6 2.75 2.2 3.25 4.8"/>' },
   wallet: { style: "stroke", body: '<path d="M18.75 7.5V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25h12.75A1.5 1.5 0 0 0 20.25 18.75v-9.75a1.5 1.5 0 0 0-1.5-1.5H6"/><path d="M16.5 14h.01"/>' },
   waveform: { style: "stroke", body: '<path d="M3.5 12h1M7 8.5v7M10.5 5v14M14 8v8M17.5 10v4M20.5 12h.01"/>' },

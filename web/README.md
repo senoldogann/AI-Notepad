@@ -1,7 +1,7 @@
 # Gistsmith web sitesi
 
 Cloudflare Pages'te durağan, yalnızca İngilizce site (https://gistsmith.com): tanıtım, fiyat, indirme, giriş (Apple ve
-Google), hesap, iletişim formu, yönetim paneli ve yasal metinler. Abonelik sunucusuyla (`../server`,
+Google), davet, hesap, iletişim formu, yönetim paneli ve yasal metinler. Abonelik sunucusuyla (`../server`,
 https://api.gistsmith.com) tarayıcıdan konuşur.
 
 **Yığın:** Astro (durağan çıktı) ve katı TypeScript. Sayfalar derlemede HTML olur; tarayıcıya yalnızca küçük betikler
@@ -22,6 +22,7 @@ yalnızca toplu sayfa görüntüleme, yönlendiren site, ülke ve cihaz türü s
 | `/blog`, `/blog/<kısa ad>`, `/blog/rss.xml` | Blog: yazılar `src/content/blog/*.md` (içerik koleksiyonu, `src/content.config.ts`) |
 | `/mcp` | Uygulamanın yerel MCP sunucusu: araçlar, bağlama, yapılandırma |
 | `/sign-in` | Apple ve Google ile giriş; Apple dönüş adresi; Mac uygulaması `?app=1&nonce=<64 hex>` ile açar |
+| `/invite` | Davet bağlantısı (`?code=`; sunucu `inviteUrl` üretir): kod `localStorage`'da (`gistsmith.invite`) saklanır, hesap sayfası abone olurken doğrulayıp ödemeye taşır |
 | `/account` | Hesap (`?payment=done`: Stripe Checkout dönüşü; Müşteri Portalı dönüşü `/account`) |
 | `/contact` | İletişim formu |
 | `/admin` | Yönetim paneli (menüde ve site haritasında yok, `noindex`) |
@@ -75,7 +76,7 @@ Tek kaynak `src/config.ts`; gizli değer yoktur.
 
 Ad değişince elle güncellenecekler: `public/og.png` (`make-og.ts` ile yeniden üretilir); uygulama simgesi
 (`apple-touch-icon.png`, uygulamadan kopyalanır) ve `favicon.svg` yazı içermez. Tarayıcı depolama anahtarları
-(`gistsmith.theme`, `gistsmith.session`) ürün adını taşır ve gizlilik politikasında adlarıyla geçer. İç kimlikler bilerek
+(`gistsmith.theme`, `gistsmith.session`, `gistsmith.invite`, `gistsmith.plan`) ürün adını taşır ve gizlilik politikasında adlarıyla geçer. İç kimlikler bilerek
 eski adı taşır: uygulama adres şeması (`com.senoldogan.ainotepad.hosted://`) ve Apple Services ID.
 
 **Tema.** `public/theme.js` `<head>`'de engelleyici harici betik olarak yüklenir (CSP satır içi betiğe izin vermez) ve
@@ -90,8 +91,9 @@ görünür; ikisi de açılır pencere yerine yönlendirme kullanır). Uygulaman
 sunucuya değil `com.senoldogan.ainotepad.hosted://auth/<apple|google>#idToken=…` ile uygulamaya iletilir
 (`src/client/app-handoff.ts`). Geçerli `nonce` ya da bilinen bir `provider` yoksa sayfa açık bir hata gösterir.
 
-Apple Services ID ayarı: alan adı `gistsmith.com`, dönüş adresi `https://gistsmith.com/sign-in` (giriş açılır
-pencereyle yapılır, Apple yine de adresi denetler).
+Apple Services ID ayarı: alan adı `gistsmith.com`, dönüş adresi `https://gistsmith.com/sign-in` (sitenin kendi girişi
+açılır pencereyle yapılır; Mac uygulaması adına girişte Apple kimlik jetonunu bu adrese `#` parçasıyla döndürür, adres
+birebir eşleşmeli).
 
 **CSP.** `src/lib/headers.ts` yapılandırmadan üretir. Dış hizmetler yalnızca kullanıldıkları sayfada açıktır: Apple'ın
 betiği `/sign-in`'de, Turnstile `/contact`'ta (Google ile giriş Google'a yönlendirir, betik yüklenmez). Pages aynı başlığı

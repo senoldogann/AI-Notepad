@@ -198,15 +198,19 @@ const linkSupportUrl: string = "https://support.link.com/topics/sold-through-lin
         accounts that have never subscribed before, and each person can use one invite only once.
       </li>
       <li>
-        <strong>Your reward.</strong> When your friend's first payment has gone through and has not been refunded or
-        disputed for 30 days, a credit of USD 5.99 is added to your Stripe customer balance and taken off your next
-        payment (on the monthly plan, that covers a month). The reward is cancelled if that payment is refunded or
+        <strong>Your reward.</strong> Your reward is one free month: when your friend's first paid charge (after the free
+        month on the monthly plan) has gone through and has not been refunded or disputed for 30 days, a credit of USD
+        5.99 is added to your Stripe customer balance and taken off your next payment. On the monthly plan that covers a
+        month; on the yearly plan it comes off your next renewal. The reward is cancelled if that payment is refunded or
         disputed before then.
       </li>
       <li>
-        <strong>Limits.</strong> You can earn up to 12 rewards in any 12 months, and one reward per new paying account.
-        Using your own code, a code from another account of yours, or an account created to collect rewards doesn't
-        count; we may cancel rewards and discounts obtained that way, or in breach of these terms.
+        <strong>Limits.</strong> You can earn up to 12 rewards in any 12 months, one reward per new paying account, and
+        at most 3 invites can be waiting for their reward at the same time. Using your own code, a code from another
+        account of yours, the same card on several invited accounts, or an account created to collect rewards doesn't
+        count; we may cancel rewards and discounts obtained that way, or in breach of these terms. Accounts with free
+        access granted by us can share their code, and their friends still get the discount, but they don't earn rewards
+        while that access lasts.
       </li>
       <li>
         <strong>No cash value.</strong> Rewards and discounts are credit towards future payments for {productName} only.
@@ -250,7 +254,8 @@ const linkSupportUrl: string = "https://support.link.com/topics/sold-through-lin
   <LegalSection sections={sections} id="content">
     <p>
       Your recordings, transcripts and notes belong to you. You give us permission to process them only as needed to
-      provide the service to you. We don't store your meeting content on our servers and don't use it to train AI models.
+      provide the service to you. Our servers don't store your audio or notes; the final transcript is kept encrypted for
+      at most 2 hours so it can be re-sent, then deleted. We don't use your meeting content to train AI models.
       Because your notes are stored on your Mac, keeping backups of your Mac is up to you.
     </p>
   </LegalSection>
