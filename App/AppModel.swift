@@ -195,6 +195,14 @@ final class AppModel {
     /// Toplantı → konuşmacı incelemesi kartı.
     var speakerReviews: [String: SpeakerReviewState] = [:]
 
+    /// Canlı çevirinin cümle birimlerini kuran durum (bkz. `TranslationUnit`): kesin bölümler cümle sonuna dek birikir.
+    @ObservationIgnored private var unitBuilder: TranslationUnitBuilder = .empty
+    /// Bu kayıtta kurulan çeviri birimleri (kuruluş sırasıyla): bağlam ve "Tekrar dene" bunlardan.
+    @ObservationIgnored private var translationUnits: [TranslationUnit] = []
+    /// Konuşmacı başına sessizlik beklemesi: süre dolunca bekleyen yarım birim çevrilir. Yeni kesin bölüm (bekleme
+    /// yeniden kurulur), yeni kayıt ve kayıt sonu iptal eder; duraklatma etmez (duraklatılan konuşmanın son cümlesi de
+    /// çevrilsin).
+    @ObservationIgnored private var idleFlushTasks: [Speaker: Task<Void, Never>] = [:]
     /// Sırası gelmemiş çeviriler (gelme sırasıyla).
     @ObservationIgnored private var translationQueue: [TranslationJob] = []
     /// Süren çeviriler: en fazla `maxParallelTranslations` aynı anda. Tek tek sırayla yapılınca hızlı konuşmada her
@@ -377,11 +385,12 @@ final class AppModel {
         let resumesTranslation: Bool = mode.needsLiveTranslation && !displayMode.needsLiveTranslation
         displayMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: SettingsKey.displayMode)
-        // "Sadece orijinal"den dönünce o sırada çevrilmeyen cümleler de çevrilir (toplantıda çevirisi eksik kalmasın).
+        // "Sadece orijinal"den dönünce o sırada çevrilmeyen cümleler de birimlere girip çevrilir (toplantıda çevirisi eksik
+        // kalmasın); birime girmiş bölüm yeniden girmez.
         if resumesTranslation, isRecording {
             for segment in transcript where segment.id.speaker == .others && segment.isFinal && !segment.text.isEmpty
                 && translations[segment.id] == nil && !failedTranslations.contains(segment.id) {
-                enqueueTranslation(segment: segment)
+                addForTranslation(segment: segment)
             }
         }
     }
@@ -457,8 +466,9 @@ final class AppModel {
         (lockedLanguage ?? fixedLanguage(mode: languageMode)).map { [$0] } ?? []
     }
 
-    /// Kesinleşmiş "Diğerleri" bölümünü sıraya alıp not diline çevirir (hızlı model).
-    private func enqueueTranslation(segment: LiveSegment) {
+    /// Kesinleşmiş "Diğerleri" bölümünü çeviri birimlerine ekler: tamamlanan birimler (cümle sonu, süre ya da uzunluk
+    /// sınırı) çeviriye gider; yarım birim konuşmacı susunca (`liveTranslationUnitLimits.idleSec`) çevrilir.
+    private func addForTranslation(segment: LiveSegment) {
         // "Sadece orijinal" görünümünde canlı çeviri yapılmaz (maliyet); toplantı sonu not yine üretilir.
         guard displayMode.needsLiveTranslation else {
             return
@@ -467,21 +477,78 @@ final class AppModel {
         guard needsLiveTranslation(spoken: lockedLanguage ?? fixedLanguage(mode: languageMode), noteLanguage: selectedNoteLanguage()) else {
             return
         }
+        let step: TranslationUnitStep = addingFinal(
+            builder: unitBuilder, segment: segment, nowSec: translationUnitClockSeconds(), limits: liveTranslationUnitLimits
+        )
+        unitBuilder = step.builder
+        step.ready.forEach { (unit: TranslationUnit) -> Void in startTranslation(unit: unit) }
+        scheduleIdleFlush(speaker: segment.id.speaker)
+    }
+
+    /// Konuşmacının yarım birimi varsa sessizlik süresi sonunda çevrilmek üzere bekletir (önceki bekleme iptal edilir).
+    private func scheduleIdleFlush(speaker: Speaker) {
+        idleFlushTasks[speaker]?.cancel()
+        idleFlushTasks[speaker] = nil
+        guard !unitBuilder.pendingSegments(speaker: speaker).isEmpty else {
+            return
+        }
+        let generation: Int = recordingGeneration
+        idleFlushTasks[speaker] = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(liveTranslationUnitLimits.idleSec))
+            } catch {
+                // İptal: konuşmacıdan yeni bölüm geldi (bekleme yeniden kuruldu) ya da kayıt bitti ya da yenisi başladı.
+                return
+            }
+            self?.flushIdleUnits(speaker: speaker, generation: generation)
+        }
+    }
+
+    /// Sessizlik süresi dolan yarım birimleri çeviriye gönderir.
+    private func flushIdleUnits(speaker: Speaker, generation: Int) {
+        guard generation == recordingGeneration else {
+            return
+        }
+        idleFlushTasks[speaker] = nil
+        let step: TranslationUnitStep = flushingIdle(builder: unitBuilder, nowSec: translationUnitClockSeconds(), limits: liveTranslationUnitLimits)
+        unitBuilder = step.builder
+        step.ready.forEach { (unit: TranslationUnit) -> Void in startTranslation(unit: unit) }
+        // Süre saat payı yüzünden henüz dolmadıysa bekleme yeniden kurulur: yarım birim takılı kalmaz.
+        scheduleIdleFlush(speaker: speaker)
+    }
+
+    /// Kayıt sonu: sessizlik beklemeleri iptal edilir, bütün yarım birimler çeviriye gider.
+    private func flushAllUnits() {
+        idleFlushTasks.values.forEach { $0.cancel() }
+        idleFlushTasks = [:]
+        let step: TranslationUnitStep = flushingAll(builder: unitBuilder)
+        unitBuilder = step.builder
+        step.ready.forEach { (unit: TranslationUnit) -> Void in startTranslation(unit: unit) }
+    }
+
+    /// Yeni kurulan birimi kaydın birimlerine ekleyip çeviriye gönderir.
+    private func startTranslation(unit: TranslationUnit) {
+        translationUnits.append(unit)
+        enqueueTranslation(unit: unit)
+    }
+
+    /// Birimi sıraya alıp not diline çevirir (hızlı model); çevrilemiyorsa birimin bütün bölümleri "Tekrar dene"de kalır.
+    private func enqueueTranslation(unit: TranslationUnit) {
         guard !translationDisabled, let provider = llmProvider else {
             // Çeviri şu an yapılamıyor (anahtar reddedildi ya da sağlayıcı yok): cümle kaybolmasın, "Tekrar dene"de kalsın.
-            failedTranslations.insert(segment.id)
+            failedTranslations.formUnion(unit.segmentIDs)
             return
         }
         do {
             try requireOnDeviceLanguages(provider: provider, meetingLanguages: liveMeetingLanguages(), outputLanguage: selectedNoteLanguage())
         } catch {
             // Cihaz içi model bu dili anlamıyor: bozuk çeviri yerine açık mesaj; sağlayıcı değişince "Tekrar dene"de çevrilir.
-            failedTranslations.insert(segment.id)
+            failedTranslations.formUnion(unit.segmentIDs)
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
             return
         }
-        let context: [String] = translationContext(transcript: transcript, before: segment.id, count: 3)
-        translationQueue.append(TranslationJob(segment: segment, context: context, provider: provider, generation: recordingGeneration))
+        let context: [String] = translationContext(units: translationUnits, before: unit, count: 3)
+        translationQueue.append(TranslationJob(unit: unit, context: context, provider: provider, generation: recordingGeneration))
         startQueuedTranslations()
     }
 
@@ -496,52 +563,53 @@ final class AppModel {
             let job: TranslationJob = translationQueue.removeFirst()
             let id: UUID = UUID()
             translationsInFlight[id] = Task { [weak self] in
-                await self?.translate(segment: job.segment, context: job.context, provider: job.provider, generation: job.generation)
+                await self?.translate(unit: job.unit, context: job.context, provider: job.provider, generation: job.generation)
                 self?.translationsInFlight[id] = nil
                 self?.startQueuedTranslations()
             }
         }
     }
 
-    private func translate(segment: LiveSegment, context: [String], provider: LLMProvider, generation: Int) async {
+    private func translate(unit: TranslationUnit, context: [String], provider: LLMProvider, generation: Int) async {
         guard generation == recordingGeneration else {
             return
         }
         guard !translationDisabled else {
             // Anahtar reddedildi (401/403) ya da kayıt sonu süresi doldu: sıradaki cümle kaybolmasın, "Tekrar dene"de kalsın.
-            failedTranslations.insert(segment.id)
+            failedTranslations.formUnion(unit.segmentIDs)
             return
         }
         do {
-            let translated: String = try await translateSentence(provider: provider, sentence: segment.text, context: context, language: selectedNoteLanguage())
+            let translated: String = try await translateSentence(provider: provider, sentence: unit.text, context: context, language: selectedNoteLanguage())
             // Bu arada yeni kayıt başladıysa sonuç başka bir toplantının aynı numaralı bölümüne yazılmaz.
             guard generation == recordingGeneration else {
                 return
             }
             // Cümle zaten not dilindeyse (model aynen döndürdü) çeviri saklanmaz: aynı cümle iki kez görünmesin.
-            if isDistinctTranslation(original: segment.text, translated: translated) {
-                translations[segment.id] = translated
+            if isDistinctTranslation(original: unit.text, translated: translated) {
+                translations = applyingUnitTranslation(translations: translations, unit: unit, translation: translated)
             }
-            failedTranslations.remove(segment.id)
+            failedTranslations.subtract(unit.segmentIDs)
         } catch {
             guard generation == recordingGeneration else {
                 return
             }
             // Kayıt sonunda süre dolunca iptal edilen çeviri hata değildir (panelde "Çeviri: …" hatası çıkmasın).
             if error is CancellationError || (error as? URLError)?.code == .cancelled {
-                failedTranslations.insert(segment.id)
+                failedTranslations.formUnion(unit.segmentIDs)
                 return
             }
             if stopsLiveTranslation(error: error) {
                 translationDisabled = true
             }
-            failedTranslations.insert(segment.id)
-            Self.logger.error("Çeviri başarısız, bölüm: \(segmentKey(id: segment.id), privacy: .public), hata: \(String(describing: error), privacy: .private)")
+            failedTranslations.formUnion(unit.segmentIDs)
+            Self.logger.error("Çeviri başarısız, birim sonu: \(segmentKey(id: unit.carrierID), privacy: .public), bölüm sayısı: \(unit.segmentIDs.count, privacy: .public), hata: \(String(describing: error), privacy: .private)")
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
         }
     }
 
-    /// Başarısız çevirileri yeniden dener; anahtar sonradan düzeltilmiş olabileceği için sağlayıcı yeniden çözülür.
+    /// Başarısız çevirileri yeniden dener: verilen bölümleri içeren birimler bütünüyle yeniden çevrilir (birim iki bloğa
+    /// yayılsa da); anahtar sonradan düzeltilmiş olabileceği için sağlayıcı yeniden çözülür.
     func retryTranslations(ids: [SegmentID]) {
         // Kayıt bittikten sonra çevrilen cümle toplantıya yazılmaz (kayıt çoktan saklandı ve işlendi): yalnızca kayıtta.
         guard isRecording, !isFinishing else {
@@ -551,12 +619,11 @@ final class AppModel {
             guard await refreshLLMProvider() else {
                 return
             }
-            for id in ids {
-                guard let segment = transcript.first(where: { $0.id == id && $0.isFinal && !$0.text.isEmpty }) else {
-                    continue
-                }
-                failedTranslations.remove(id)
-                enqueueTranslation(segment: segment)
+            // Yalnızca hâlâ başarısız bölümü olan birimler: çevrilmiş birim ikinci kez çevrilmez.
+            for unit in unitsContaining(ids: ids, units: translationUnits)
+            where unit.segmentIDs.contains(where: { (id: SegmentID) -> Bool in failedTranslations.contains(id) }) {
+                failedTranslations.subtract(unit.segmentIDs)
+                enqueueTranslation(unit: unit)
             }
         }
     }
@@ -783,6 +850,10 @@ final class AppModel {
         translations = [:]
         failedTranslations = []
         recordingGeneration += 1
+        unitBuilder = .empty
+        translationUnits = []
+        idleFlushTasks.values.forEach { $0.cancel() }
+        idleFlushTasks = [:]
         translationQueue = []
         translationsInFlight.values.forEach { $0.cancel() }
         translationsInFlight = [:]
@@ -1159,7 +1230,7 @@ final class AppModel {
         switch event {
         case .segment(let segment):
             if segment.id.speaker == .others, segment.isFinal, !segment.text.isEmpty {
-                enqueueTranslation(segment: segment)
+                addForTranslation(segment: segment)
             }
             logLiveLagIfHigh(segment: segment)
         case .languageLocked(let language):
@@ -1210,8 +1281,10 @@ final class AppModel {
         Self.logger.warning("Canlı metin gecikiyor, gecikme: \(lag, privacy: .public), kesin: \(segment.isFinal, privacy: .public), konuşmacı: \(segment.id.speaker.rawValue, privacy: .public)")
     }
 
-    /// Oturum bitti: bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı kaydedilip işlenir.
+    /// Oturum bitti: yarım çeviri birimleri çeviriye gider, bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı
+    /// kaydedilip işlenir.
     private func sessionEnded() async {
+        flushAllUnits()
         await waitForPendingTranslations(timeoutSec: 10)
         // Biten kayıt ilk beklemeden önce oturumdan alınır ve "devrediliyor" sayılır: sunucu oturumu kapatılırken yeni
         // kayıt bu kaydın `session`ını ezemez, kuyruk ve çıkış/güncelleme beklenir (isBusy), kayıt düzenlenemez.
@@ -3759,9 +3832,9 @@ private func sendResultFadeDelay(state: WebhookSendState) -> Duration? {
     }
 }
 
-/// Sırası bekleyen canlı çeviri.
+/// Sırası bekleyen canlı çeviri (bir cümle birimi).
 private struct TranslationJob {
-    let segment: LiveSegment
+    let unit: TranslationUnit
     let context: [String]
     let provider: LLMProvider
     let generation: Int

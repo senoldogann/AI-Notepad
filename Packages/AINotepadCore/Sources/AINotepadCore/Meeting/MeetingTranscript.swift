@@ -76,7 +76,8 @@ public func transcriptParagraphs(record: MeetingRecord) -> [TranscriptParagraph]
         guard let first = group.first, let last = group.last else {
             return nil
         }
-        let turkish: [String] = group.compactMap { record.translations[$0.key] }
+        // Kapsanan canlı bölümün boş çevirisi atlanır (bkz. `TranslationUnit`): çevirisi birimin son bölümünde.
+        let turkish: [String] = group.compactMap { record.translations[$0.key] }.filter { !$0.isEmpty }
         return TranscriptParagraph(
             id: first.key, speaker: first.speaker, person: first.person, startSec: first.startSec, endSec: last.endSec,
             text: group.map(\.text).joined(separator: " "),

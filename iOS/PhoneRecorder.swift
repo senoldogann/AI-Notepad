@@ -73,7 +73,14 @@ final class PhoneRecorder {
     /// Cihaz içi konuşma tanıma motoru (model kayıtlar arasında bellekte kalır).
     @ObservationIgnored private let speechEngine: AppleSpeechEngine = AppleSpeechEngine()
     @ObservationIgnored private var active: ActiveRecording?
-    @ObservationIgnored private var translationQueue: [SegmentID] = []
+    /// Canlı çevirinin cümle birimlerini kuran durum (bkz. `TranslationUnit`): kesin bölümler cümle sonuna dek birikir.
+    @ObservationIgnored private var unitBuilder: TranslationUnitBuilder = .empty
+    /// Bu kayıtta kurulan çeviri birimleri (kuruluş sırasıyla): bağlam bunlardan.
+    @ObservationIgnored private var translationUnits: [TranslationUnit] = []
+    /// Konuşmacı başına sessizlik beklemesi: süre dolunca bekleyen yarım birim çevrilir; yeni kesin bölüm, yeni kayıt ve
+    /// kayıt sonu iptal eder.
+    @ObservationIgnored private var idleFlushTasks: [Speaker: Task<Void, Never>] = [:]
+    @ObservationIgnored private var translationQueue: [TranslationUnit] = []
     @ObservationIgnored private var translationsInFlight: Int = 0
     /// Her kayıtta artar: önceki kaydın geç gelen çevirisi yenisine yazılmaz.
     @ObservationIgnored private var generation: Int = 0
@@ -106,6 +113,10 @@ final class PhoneRecorder {
         transcript = []
         translations = [:]
         translationQueue = []
+        unitBuilder = .empty
+        translationUnits = []
+        idleFlushTasks.values.forEach { $0.cancel() }
+        idleFlushTasks = [:]
         lockedLanguage = nil
         errorMessages = []
         highlights = []
@@ -339,7 +350,7 @@ final class PhoneRecorder {
         switch event {
         case .segment(let segment):
             if segment.isFinal, !segment.text.isEmpty {
-                enqueueTranslation(segment: segment)
+                addForTranslation(segment: segment)
                 updateActivityThrottled(state: RecordingActivityAttributes.ContentState(
                     lastLine: segment.text, speaker: segment.person.map { speakerLabel(speaker: segment.id.speaker, person: $0) } ?? "",
                     isFinishing: phase == .finishing
@@ -368,8 +379,10 @@ final class PhoneRecorder {
         }
     }
 
-    /// Oturum bitti: bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı saklanıp işlenir.
+    /// Oturum bitti: yarım çeviri birimleri çeviriye gider, bekleyen çeviriler (en fazla 10 sn) beklenir, toplantı
+    /// saklanıp işlenir.
     private func sessionEnded() async {
+        flushAllUnits()
         let completed: Bool = await finishesWithin(seconds: 10) { [weak self] in
             while await self?.hasPendingTranslations() == true {
                 do {
@@ -649,8 +662,10 @@ final class PhoneRecorder {
 
     // MARK: Çeviri
 
-    /// Kesinleşmiş bölümü not diline çevirmek üzere sıraya alır; toplantı not dilindeyse metin olduğu gibi kalır.
-    private func enqueueTranslation(segment: LiveSegment) {
+    /// Kesinleşmiş bölümü çeviri birimlerine ekler (Mac'teki gibi): tamamlanan birimler (cümle sonu, süre ya da uzunluk
+    /// sınırı) çeviriye gider; yarım birim konuşmacı susunca (`liveTranslationUnitLimits.idleSec`) çevrilir. Toplantı
+    /// not dilindeyse metin olduğu gibi kalır.
+    private func addForTranslation(segment: LiveSegment) {
         // Toplantı not dilindeyse aynı dile çeviri yapılmaz: orijinal tek başına görünür (LLM'e gitmez).
         guard needsLiveTranslation(spoken: lockedLanguage ?? fixedMeetingLanguage(mode: languageMode), noteLanguage: phoneNoteLanguage()) else {
             return
@@ -666,7 +681,59 @@ final class PhoneRecorder {
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
             return
         }
-        translationQueue.append(segment.id)
+        let step: TranslationUnitStep = addingFinal(
+            builder: unitBuilder, segment: segment, nowSec: translationUnitClockSeconds(), limits: liveTranslationUnitLimits
+        )
+        unitBuilder = step.builder
+        step.ready.forEach { (unit: TranslationUnit) -> Void in enqueueTranslation(unit: unit) }
+        scheduleIdleFlush(speaker: segment.id.speaker)
+    }
+
+    /// Konuşmacının yarım birimi varsa sessizlik süresi sonunda çevrilmek üzere bekletir (önceki bekleme iptal edilir).
+    private func scheduleIdleFlush(speaker: Speaker) {
+        idleFlushTasks[speaker]?.cancel()
+        idleFlushTasks[speaker] = nil
+        guard !unitBuilder.pendingSegments(speaker: speaker).isEmpty else {
+            return
+        }
+        let flushGeneration: Int = generation
+        idleFlushTasks[speaker] = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(liveTranslationUnitLimits.idleSec))
+            } catch {
+                // İptal: konuşmacıdan yeni bölüm geldi (bekleme yeniden kuruldu) ya da kayıt bitti ya da yenisi başladı.
+                return
+            }
+            self?.flushIdleUnits(speaker: speaker, generation: flushGeneration)
+        }
+    }
+
+    /// Sessizlik süresi dolan yarım birimleri çeviriye gönderir.
+    private func flushIdleUnits(speaker: Speaker, generation flushGeneration: Int) {
+        guard flushGeneration == generation else {
+            return
+        }
+        idleFlushTasks[speaker] = nil
+        let step: TranslationUnitStep = flushingIdle(builder: unitBuilder, nowSec: translationUnitClockSeconds(), limits: liveTranslationUnitLimits)
+        unitBuilder = step.builder
+        step.ready.forEach { (unit: TranslationUnit) -> Void in enqueueTranslation(unit: unit) }
+        // Süre saat payı yüzünden henüz dolmadıysa bekleme yeniden kurulur: yarım birim takılı kalmaz.
+        scheduleIdleFlush(speaker: speaker)
+    }
+
+    /// Kayıt sonu: sessizlik beklemeleri iptal edilir, bütün yarım birimler çeviriye gider.
+    private func flushAllUnits() {
+        idleFlushTasks.values.forEach { $0.cancel() }
+        idleFlushTasks = [:]
+        let step: TranslationUnitStep = flushingAll(builder: unitBuilder)
+        unitBuilder = step.builder
+        step.ready.forEach { (unit: TranslationUnit) -> Void in enqueueTranslation(unit: unit) }
+    }
+
+    /// Birimi kaydın birimlerine ekleyip çeviri sırasına alır.
+    private func enqueueTranslation(unit: TranslationUnit) {
+        translationUnits.append(unit)
+        translationQueue.append(unit)
         startQueuedTranslations()
     }
 
@@ -675,22 +742,19 @@ final class PhoneRecorder {
             return
         }
         while translationsInFlight < Self.maxParallelTranslations, !translationQueue.isEmpty {
-            let id: SegmentID = translationQueue.removeFirst()
-            guard let segment = transcript.first(where: { $0.id == id && $0.isFinal }) else {
-                continue
-            }
-            let context: [String] = translationContext(transcript: transcript, before: id, count: 3)
+            let unit: TranslationUnit = translationQueue.removeFirst()
+            let context: [String] = translationContext(units: translationUnits, before: unit, count: 3)
             let requestGeneration: Int = generation
             translationsInFlight += 1
             Task {
                 do {
-                    let translated: String = try await translateSentence(provider: provider, sentence: segment.text, context: context, language: phoneNoteLanguage())
+                    let translated: String = try await translateSentence(provider: provider, sentence: unit.text, context: context, language: phoneNoteLanguage())
                     // Cümle zaten not dilindeyse (model aynen döndürdü) çeviri saklanmaz: aynı cümle iki kez görünmesin.
-                    if requestGeneration == generation, isDistinctTranslation(original: segment.text, translated: translated) {
-                        translations[id] = translated
+                    if requestGeneration == generation, isDistinctTranslation(original: unit.text, translated: translated) {
+                        translations = applyingUnitTranslation(translations: translations, unit: unit, translation: translated)
                     }
                 } catch {
-                    Self.logger.error("Çeviri başarısız, bölüm: \(segmentKey(id: id), privacy: .public), hata: \(String(describing: error), privacy: .private)")
+                    Self.logger.error("Çeviri başarısız, birim sonu: \(segmentKey(id: unit.carrierID), privacy: .public), bölüm sayısı: \(unit.segmentIDs.count, privacy: .public), hata: \(String(describing: error), privacy: .private)")
                     if requestGeneration == generation {
                         errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Çeviri: \(userFacingMessage(error: error))"))
                     }

@@ -515,8 +515,9 @@ private struct LiveBlockView: View {
         return finalText.isEmpty || partial.isEmpty ? partial : " " + partial
     }
 
+    /// Bloğun çevirisi; kapsanan bölümlerin boş çevirisi atlanır (çevirileri birimin son bölümünde).
     private var translation: String {
-        block.segments.compactMap { translations[$0.id] }.joined(separator: " ")
+        blockTurkishText(block: block, translations: translations) ?? ""
     }
 }
 

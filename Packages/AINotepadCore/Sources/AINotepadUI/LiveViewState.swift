@@ -92,29 +92,42 @@ public struct IslandLine: Sendable, Equatable {
     public let secondary: String?
 }
 
-/// Adada en fazla bu kadar son bölüm birleştirilir (cümle bağlamı yetsin, ada dolmasın).
+/// Adada en fazla bu kadar son çeviri (çeviri birimi) birleştirilir (cümle bağlamı yetsin, ada dolmasın).
 let islandSegmentCount: Int = 2
 
-/// Son "Diğerleri" bloğundan ada satırlarını üretir. Saf fonksiyondur.
+/// Son "Diğerleri" bloğundan ada satırlarını üretir. Kapanan bölüm (boş çeviri; çevirisi birimin son bölümünde, bkz.
+/// `TranslationUnit`) çevrilmiş sayılır ama satıra çeviri eklemez. Saf fonksiyondur.
 public func makeIslandLine(block: SpeakerBlock, translations: [SegmentID: String], displayMode: DisplayMode) -> IslandLine? {
     let spoken: [LiveSegment] = block.segments.filter { $0.failureMessage == nil && !$0.text.isEmpty }
     guard !spoken.isEmpty else {
         return nil
     }
     let recentOriginal: String = spoken.suffix(islandSegmentCount).map(\.text).joined(separator: " ")
-    guard displayMode.needsLiveTranslation, let lastTranslated = spoken.lastIndex(where: { translations[$0.id] != nil }) else {
+    let carriers: [Int] = Array(spoken.indices.filter { shownTranslation(translations: translations, id: spoken[$0].id) != nil }.suffix(islandSegmentCount))
+    guard displayMode.needsLiveTranslation, !carriers.isEmpty, let lastDone = spoken.lastIndex(where: { translations[$0.id] != nil }) else {
         return IslandLine(speaker: block.speaker, person: block.person, primary: recentOriginal, primaryIsOriginal: displayMode.needsLiveTranslation, secondary: nil)
     }
-    let translated: [LiveSegment] = Array(spoken[...lastTranslated].filter { translations[$0.id] != nil }.suffix(islandSegmentCount))
-    let pending: [LiveSegment] = Array(spoken[(lastTranslated + 1)...])
+    // Bir çevirinin orijinali, önündeki kapsanan bölümlerle (aynı birim) birlikte kendi metnidir.
+    let translatedOriginal: String = carriers
+        .map { (carrier: Int) -> String in
+            let unitStart: Int = spoken[..<carrier].lastIndex { translations[$0.id] != "" }.map { $0 + 1 } ?? 0
+            return spoken[unitStart...carrier].map(\.text).joined(separator: " ")
+        }
+        .joined(separator: " ")
+    let pending: [LiveSegment] = Array(spoken[(lastDone + 1)...])
     let secondary: String? = pending.isEmpty
-        ? (displayMode == .bilingual ? translated.map(\.text).joined(separator: " ") : nil)
+        ? (displayMode == .bilingual ? translatedOriginal : nil)
         : pending.map(\.text).joined(separator: " ")
     return IslandLine(
         speaker: block.speaker, person: block.person,
-        primary: translated.compactMap { translations[$0.id] }.joined(separator: " "),
+        primary: carriers.compactMap { shownTranslation(translations: translations, id: spoken[$0].id) }.joined(separator: " "),
         primaryIsOriginal: false, secondary: secondary
     )
+}
+
+/// Bölümün gösterilecek çevirisi: yoksa ya da bölüm kapsandıysa (boş çeviri, bkz. `TranslationUnit`) nil. Saf fonksiyondur.
+public func shownTranslation(translations: [SegmentID: String], id: SegmentID) -> String? {
+    translations[id].flatMap { (text: String) -> String? in text.isEmpty ? nil : text }
 }
 
 /// Uygulama durumundan görünüm durumunu üretir. Saf fonksiyondur.
@@ -175,9 +188,10 @@ public func truncateFromStart(text: String, maxCharacters: Int) -> String {
     text.count <= maxCharacters ? text : "…" + String(text.suffix(maxCharacters))
 }
 
-/// Bloktaki bölümlerin çevirilerini sırayla birleştirir; hiç çeviri yoksa nil. Saf fonksiyondur.
+/// Bloktaki bölümlerin çevirilerini sırayla birleştirir (kapsanan bölümlerin boş çevirisi atlanır); hiç çeviri yoksa
+/// nil. Saf fonksiyondur.
 public func blockTurkishText(block: SpeakerBlock, translations: [SegmentID: String]) -> String? {
-    let parts: [String] = block.segments.compactMap { (segment: LiveSegment) -> String? in translations[segment.id] }
+    let parts: [String] = block.segments.compactMap { (segment: LiveSegment) -> String? in shownTranslation(translations: translations, id: segment.id) }
     return parts.isEmpty ? nil : parts.joined(separator: " ")
 }
 
@@ -222,12 +236,25 @@ public func displayedPlainText(blocks: [SpeakerBlock], translations: [SegmentID:
 }
 
 /// "Sadece çeviri": çevirisi olan bölüm çevirisiyle, olmayan (yeni ya da kesinleşmemiş) bölüm orijinal haliyle;
-/// böylece canlı konuşma çeviri gelene kadar da görünür. Saf fonksiyondur.
+/// böylece canlı konuşma çeviri gelene kadar da görünür. Kapsanan bölüm (birimi çevrildi, çevirisi birimin son
+/// bölümünde; bkz. `TranslationUnit`) hiç görünmez; birimi çevrilene dek orijinaliyle görünür. Saf fonksiyondur.
 public func turkishOnlyParts(block: SpeakerBlock, translations: [SegmentID: String]) -> [DisplayPart] {
     block.segments
-        .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty }
+        .filter { (segment: LiveSegment) -> Bool in segment.failureMessage == nil && !segment.text.isEmpty && translations[segment.id] != "" }
         .map { (segment: LiveSegment) -> DisplayPart in
             translations[segment.id].map { (turkish: String) -> DisplayPart in DisplayPart(text: turkish, isTranslated: true, isFinal: true) }
                 ?? DisplayPart(text: segment.text, isTranslated: false, isFinal: segment.isFinal)
         }
+}
+
+/// Bloğun bütün bölümleri kapsanmış mı (çevirileri sonraki bloktaki birim sonunda): "Sadece çeviri"de blok gösterilmez,
+/// çevirisi o blokta görünür. Hatalı ya da boş bölümü olan blok kapsanmış sayılmaz. Saf fonksiyondur.
+public func isFullyCoveredBlock(block: SpeakerBlock, translations: [SegmentID: String]) -> Bool {
+    !block.segments.isEmpty && block.segments.allSatisfy { (segment: LiveSegment) -> Bool in translations[segment.id] == "" }
+}
+
+/// Blokta çeviri ya da kapsanan bölüm var mı: "Sadece çeviri"de blok çeviri parçalarıyla (`turkishOnlyParts`) gösterilir.
+/// Saf fonksiyondur.
+public func hasTranslationEntries(block: SpeakerBlock, translations: [SegmentID: String]) -> Bool {
+    block.segments.contains { (segment: LiveSegment) -> Bool in translations[segment.id] != nil }
 }
