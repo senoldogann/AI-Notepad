@@ -1,0 +1,12 @@
+---
+// Tanım ipucu: küçük bilgi simgesi; üstüne gelince ya da klavyeyle odaklanınca metin balonda görünür (yalnızca CSS,
+// `data-hint`). Ekran okuyucu metni `aria-label`'dan okur.
+import Icon from "../Icon.astro";
+
+interface Props {
+  readonly text: string;
+}
+const { text } = Astro.props;
+---
+
+<span class="hint" tabindex="0" role="note" aria-label={text} data-hint={text}><Icon name="info" size={14} class="" /></span>

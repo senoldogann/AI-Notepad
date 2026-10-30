@@ -1,0 +1,39 @@
+---
+// Özet şeridi: tek kutuda yan yana ölçüler (aralarında ince çizgi). Her ölçü: etiket (ve varsa tanım ipucu), değer,
+// isteğe bağlı ölçer, kısa alt satır ve küçük eğri. Betik `kpi-<id>`, `kpi-<id>-sub`, `kpi-<id>-meter`,
+// `kpi-<id>-spark` doldurur; uyarıda `kpi-<id>-card`'a `kpi--warn` ekler.
+import Hint from "./Hint.astro";
+
+export interface StatSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly hint: string | null;
+  readonly meter: boolean;
+  readonly spark: boolean;
+}
+
+interface Props {
+  readonly label: string;
+  readonly stats: readonly StatSpec[];
+}
+const { label, stats } = Astro.props;
+---
+
+<div class:list={["kpis", `kpis--${stats.length}`]} role="group" aria-label={label}>
+  {
+    stats.map((stat: StatSpec) => (
+      <div class="kpi" id={`kpi-${stat.id}-card`}>
+        <p class="kpi__label">
+          <span>{stat.label}</span>
+          {stat.hint === null ? null : <Hint text={stat.hint} />}
+        </p>
+        <div class="kpi__row">
+          <p id={`kpi-${stat.id}`} class="kpi__value tabular" />
+          {stat.spark ? <div id={`kpi-${stat.id}-spark`} class="kpi__spark" aria-hidden="true" /> : null}
+        </div>
+        {stat.meter ? <progress id={`kpi-${stat.id}-meter`} class="meter kpi__meter" aria-label={stat.label} max="1" value="0" /> : null}
+        <p id={`kpi-${stat.id}-sub`} class="kpi__sub" />
+      </div>
+    ))
+  }
+</div>

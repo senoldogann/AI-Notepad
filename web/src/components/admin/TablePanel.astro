@@ -1,0 +1,55 @@
+---
+// Tablolu kart: başlık, (varsa) `lead` yuvası, kenara dayalı tablo, boş bildirimi ve not. Betik `<id>-rows` gövdesini,
+// `<id>-empty` bildirimini doldurur; `<id>-note` sabit nottur ya da (boşsa) betik yazar ve boşken görünmez. `scroll`
+// uzun tabloyu kartın içinde kaydırır (başlık satırı yapışkan).
+import type { Column, PanelSpan } from "../../lib/admin-table";
+import Hint from "./Hint.astro";
+
+interface Props {
+  readonly id: string;
+  readonly title: string;
+  readonly hint: string | null;
+  readonly columns: readonly Column[];
+  readonly span: PanelSpan;
+  readonly empty: string | null;
+  readonly note: string | null;
+  readonly scroll: boolean;
+}
+const { id, title, hint, columns, span, empty, note, scroll } = Astro.props;
+---
+
+<section class:list={["panel", "panel--flush", `span-${span}`]} aria-labelledby={`${id}-title`}>
+  <header class="panel__head">
+    <h3 class="panel__title" id={`${id}-title`}>
+      {title}
+      {hint === null ? null : <Hint text={hint} />}
+    </h3>
+    <slot name="actions" />
+  </header>
+  <slot name="lead" />
+  <div class:list={["table-scroll", { "table-scroll--tall": scroll }]} tabindex="0" role="region" aria-labelledby={`${id}-title`}>
+    <table class="data-table">
+      <thead>
+        <tr>
+          {
+            columns.map((column: Column) => (
+              <th scope="col" class:list={{ numeric: column.numeric }}>
+                {column.label}
+              </th>
+            ))
+          }
+        </tr>
+      </thead>
+      <tbody id={`${id}-rows`} />
+    </table>
+  </div>
+  {
+    empty === null ? null : (
+      <p id={`${id}-empty`} class="table-empty hidden">
+        {empty}
+      </p>
+    )
+  }
+  <p id={`${id}-note`} class="panel__note">{note ?? ""}</p>
+  <slot name="foot" />
+</section>

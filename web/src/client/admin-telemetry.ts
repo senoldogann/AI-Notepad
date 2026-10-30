@@ -1,4 +1,5 @@
-// Yönetim panelinin telemetri görünümü (`/v1/admin/telemetry`, son 30 gün): sürüm benimsenmesi (Mac uygulamasının ve
+// Yönetim panelinin telemetri verisi (`/v1/admin/telemetry`, son 30 gün; öğeleri kullanım, güvenilirlik ve maliyet
+// görünümlerindedir): sürüm benimsenmesi (Mac uygulamasının ve
 // macOS'un sürümüne göre etkin hesaplar), amaca göre yapay zekâ tokenları, istemci güvenilirlik olayları (uygulama
 // sürümüne ve güne göre), son geçiş ve not süresinin dağılımı, günlük özellik raporları. Sürümler hesap başına son
 // değerdir; diğer her şey hesaba bağlı olmayan günlük toplamdır. Yanıt sınırda katı biçimde doğrulanır.

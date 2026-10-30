@@ -505,47 +505,9 @@ export interface AdminCopy {
   readonly refresh: string;
   /** Nötr yükleme satırı. */
   readonly loading: string;
-  readonly kpis: {
-    readonly downloads: string;
-    readonly users: string;
-    readonly trials: string;
-    readonly subscribers: string;
-    readonly mrr: string;
-    readonly spend: string;
-    readonly hours: string;
-    readonly tokens: string;
-    readonly elevenLabs: string;
-    readonly deepgram: string;
-    readonly conversion: string;
-    readonly churn: string;
-    readonly payments: string;
-    readonly meetings: string;
-    readonly audio: string;
-    readonly refusals: string;
-  };
-  /** Özet kutusu gruplarının başlıkları. */
-  readonly groups: { readonly growth: string; readonly revenue: string; readonly usage: string; readonly costs: string };
-  /** Panelin görünümleri (üstteki sekmeler). */
-  readonly views: {
-    readonly label: string;
-    readonly overview: string;
-    readonly insights: string;
-    readonly users: string;
-    readonly operations: string;
-    readonly inbox: string;
-  };
   readonly users: AdminUsersCopy;
   readonly operations: AdminOperationsCopy;
   readonly insights: AdminInsightsCopy;
-  readonly chartsTitle: string;
-  readonly charts: {
-    readonly downloads: string;
-    readonly users: string;
-    readonly meetings: string;
-    readonly spend: string;
-  };
-  readonly legendTrial: string;
-  readonly legendSubscription: string;
   readonly inboxTitle: string;
   readonly tabs: { readonly feedback: string; readonly crash: string; readonly contact: string };
   readonly statusOpen: string;
@@ -1462,26 +1424,6 @@ export const copy: Copy = {
     backToSite: "Back to site",
     refresh: "Refresh",
     loading: "Loading…",
-    kpis: {
-      downloads: "Downloads",
-      users: "Users",
-      trials: "Trials",
-      subscribers: "Subscribers",
-      mrr: "MRR",
-      spend: "AI spend today",
-      hours: "Meeting hours this month",
-      tokens: "Tokens this month",
-      elevenLabs: "Transcription capacity",
-      deepgram: "Live transcript budget",
-      conversion: "Trial to paid",
-      churn: "Cancellations, 30 days",
-      payments: "Payment issues",
-      meetings: "Meetings this month",
-      audio: "Transcribed audio this month",
-      refusals: "Trials refused, 30 days",
-    },
-    groups: { growth: "Growth", revenue: "Revenue", usage: "Usage", costs: "Costs & capacity" },
-    views: { label: "Dashboard sections", overview: "Overview", insights: "Insights", users: "Users", operations: "Operations", inbox: "Inbox" },
     users: {
       title: "Users",
       searchLabel: "Account ID",
@@ -1584,15 +1526,6 @@ export const copy: Copy = {
       noCancellations: "No cancellation reasons yet. They appear once the cancellation reason form is on in Stripe's customer portal.",
       recentCancellationsTitle: "Latest cancellations",
     },
-    chartsTitle: "Last 30 days",
-    charts: {
-      downloads: "Downloads per day",
-      users: "New users per day",
-      meetings: "Meetings per day",
-      spend: "AI spend per day",
-    },
-    legendTrial: "Trial",
-    legendSubscription: "Subscription",
     inboxTitle: "Inbox",
     tabs: { feedback: "Feedback", crash: "Crashes", contact: "Contact" },
     statusOpen: "Open",

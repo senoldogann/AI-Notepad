@@ -1,0 +1,38 @@
+---
+// Grafik kartı: başlık, dönemin değeri ve açıklaması (okumada o günün değeri), lejant ve çizim alanı. Betik
+// (admin-chart.ts `renderChart`) `chart-<id>`, `chart-<id>-value` ve `chart-<id>-summary` doldurur.
+import type { PanelSpan } from "../../lib/admin-table";
+import Hint from "./Hint.astro";
+
+interface Props {
+  readonly id: string;
+  readonly title: string;
+  readonly hint: string | null;
+  readonly span: PanelSpan;
+  readonly legend: { readonly main: string; readonly accent: string } | null;
+  readonly size: "large" | "small";
+}
+const { id, title, hint, span, legend, size } = Astro.props;
+---
+
+<figure class:list={["panel", "chart", `chart--${size}`, `span-${span}`]} aria-labelledby={`chart-${id}-title`}>
+  <figcaption class="chart__head">
+    <div class="chart__heading">
+      <h3 class="panel__title" id={`chart-${id}-title`}>
+        {title}
+        {hint === null ? null : <Hint text={hint} />}
+      </h3>
+      <p class="chart__value tabular" id={`chart-${id}-value`}></p>
+      <p class="chart__caption" id={`chart-${id}-summary`}></p>
+    </div>
+    {
+      legend === null ? null : (
+        <p class="chart__legend" aria-hidden="true">
+          <span class="legend legend--main">{legend.main}</span>
+          <span class="legend legend--accent">{legend.accent}</span>
+        </p>
+      )
+    }
+  </figcaption>
+  <div id={`chart-${id}`} class="chart__plot"></div>
+</figure>

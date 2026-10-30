@@ -1,16 +1,20 @@
-// Yönetim paneli: yedi görünüm — genel bakış (özet kutuları ve son 30 günün çubuk grafikleri; satır içi SVG,
-// kütüphanesiz, her grafiğin metin özeti var), içgörüler (admin-insights.ts: sorunlar, huni, indirme kaynakları, iptal
-// nedenleri), ürün (admin-product.ts: kohortlar, tutunma, güvenilirlik, birim ekonomisi), eğilimler (admin-trends.ts), telemetri (admin-telemetry.ts: sürümler, amaca göre token, istemci olayları, özellikler), kullanıcılar (admin-users.ts), işletim (admin-ops.ts), bildirim kutusu
-// (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı, "bitti" işaretleme) ve blog (admin-blog.ts: haftalık
-// yazılar, düzenleyici, zamanlama, paylaşım). Panel yalnızca `/v1/admin/stats`
-// başarılı olunca şablondan eklenir; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
-// "sayfa bulunamadı" görünümü gösterilir, girişe yönlendirilmez (panelin varlığı belli olmaz). Kullanıcılar ve işletim
-// görünümleri (içgörüler ve blog da) ilk açılışlarında yüklenir; "Yenile" açık görünümü ve özet istatistikleri yeniler.
+// Yönetim paneli kabuğu: gruplu menü ve on görünüm (admin-layout-copy.ts). Analiz görünümleri (genel bakış, gelir,
+// büyüme, kullanım, güvenilirlik, maliyet) birden çok veri kaynağını birlikte gösterir; her kaynağın modülü kendi
+// öğelerini hangi görünümde olursa olsun doldurur (admin-insights.ts, admin-product.ts, admin-trends.ts,
+// admin-telemetry.ts, admin-ops.ts). Bir görünüm açılınca yalnızca onun kaynakları (`viewSources`) ilk kez yüklenir;
+// "Yenile" açık görünümün kaynaklarını ve özet istatistikleri yeniler. Özet istatistikler (`/v1/admin/stats`) bu
+// dosyada çizilir: özet şeritleri, döküm kartları, günlük grafikler ve genel bakıştaki "dikkat" listesi (istatistikler,
+// içgörüler ve işletim verisinden). Bildirim kutusu (geri bildirim, çökme, iletişim; açık/bitti süzgeci, ayrıntı,
+// "bitti" işaretleme) da buradadır. Panel yalnızca `/v1/admin/stats` başarılı olunca şablondan eklenir; oturum yoksa ya
+// da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart "sayfa bulunamadı" görünümü gösterilir, girişe
+// yönlendirilmez (panelin varlığı belli olmaz).
 import { ApiRequestError } from "./api";
 import {
   type AdminStats,
   type DayCount,
   type DayMeetings,
+  type Insights,
+  type Operations,
   type ReportDetail,
   type ReportKind,
   type ReportPage,
@@ -22,33 +26,49 @@ import {
   setReportStatus,
 } from "./admin-api";
 import { type BlogView, createBlogView } from "./admin-blog";
-import { fillCounts, formatCount, formatCompact, formatDay, formatRate, formatTime, formatUsd } from "./admin-format";
+import { type ChartPoint, renderDailyBars, renderSparkline } from "./admin-chart";
+import { fillCounts, formatCount, formatCompact, formatRate, formatTime, formatUsd } from "./admin-format";
 import { type InsightsView, createInsightsView } from "./admin-insights";
+import { type AdminLayoutCopy, type AdminView, adminLayoutCopy, adminViews } from "./admin-layout-copy";
 import { type OperationsView, createOperationsView } from "./admin-ops";
 import { type ProductView, createProductView } from "./admin-product";
-import { type TrendsView, createTrendsView } from "./admin-trends";
+import { type AdminTrends, type TrendDay, type TrendsView, createTrendsView } from "./admin-trends";
 import { type TelemetryView, createTelemetryView } from "./admin-telemetry";
 import { type UsersView, createUsersView } from "./admin-users";
 import { type AdminClientCopy, type ClientCopy, clientCopy, fill } from "./copy";
 import { MissingElementError, dataValue, element, errorText, hideNotice, showNotice } from "./dom";
 import { SignedOutError, claimTabSession, hasSession } from "./session";
 
-const svgNamespace: string = "http://www.w3.org/2000/svg";
+const text: ClientCopy = clientCopy;
+const adminText: AdminClientCopy = clientCopy.admin;
+const layout: AdminLayoutCopy = adminLayoutCopy;
 
-/** Grafik çizim alanı (SVG birimi). */
-const chartWidth: number = 300;
-const chartHeight: number = 60;
-const barGap: number = 3;
+/** Bir günün milisaniyesi. */
+const dayMs: number = 86_400_000;
+/** Kapasite uyarısının eşiği (kullanımın sınıra oranı). */
+const capacityWarnRatio: number = 0.8;
 
-/** Panelin görünümleri. */
-type AdminView = "overview" | "insights" | "product" | "trends" | "telemetry" | "users" | "operations" | "inbox" | "blog";
-const adminViews: readonly AdminView[] = ["overview", "insights", "product", "trends", "telemetry", "users", "operations", "inbox", "blog"];
+/** Görünümlerin yüklediği veri kaynakları (özet istatistikler her zaman yüklüdür). */
+type DataSource = "insights" | "product" | "trends" | "telemetry" | "operations" | "users" | "blog";
 
-/** Grafikteki bir günün çubuk parçaları (yığılmış: alttan üste). */
-interface ChartDay {
-  readonly day: string;
-  readonly parts: readonly { readonly value: number; readonly tone: "main" | "accent" }[];
-  readonly title: string;
+/** Görünüm başına kaynaklar. */
+const viewSources: Readonly<Record<AdminView, readonly DataSource[]>> = {
+  overview: ["insights", "operations", "trends"],
+  revenue: ["insights", "product", "trends"],
+  growth: ["insights", "product", "trends"],
+  engagement: ["product", "telemetry", "trends"],
+  reliability: ["product", "telemetry", "insights"],
+  costs: ["product", "trends", "telemetry"],
+  users: ["users"],
+  inbox: [],
+  operations: ["operations"],
+  blog: ["blog"],
+};
+
+/** Yüklenebilen kaynak: ilk açılışta yükle ve yenile. */
+interface Loadable {
+  readonly ensureLoaded: () => Promise<void>;
+  readonly refresh: () => Promise<void>;
 }
 
 /**
@@ -64,79 +84,22 @@ interface InboxState {
   listRequest: number;
 }
 
-const text: ClientCopy = clientCopy;
-const adminText: AdminClientCopy = clientCopy.admin;
+/** "Dikkat" satırının önemi (sıralama da buna göredir). */
+type AttentionTone = "danger" | "warn" | "info";
 
-/** Grafiğin metin özeti: toplam ve en yüksek gün. Saf fonksiyondur. */
-export function chartSummary(days: readonly ChartDay[], format: (value: number) => string): string {
-  const totals: number[] = days.map((day: ChartDay): number => day.parts.reduce((sum: number, part): number => sum + part.value, 0));
-  const total: number = totals.reduce((sum: number, value: number): number => sum + value, 0);
-  if (total === 0) {
-    return adminText.chartEmpty;
-  }
-  const peak: number = Math.max(...totals);
-  const peakDay: ChartDay | undefined = days[totals.indexOf(peak)];
-  return fill(adminText.chartSummary, { total: format(total), peak: format(peak), day: peakDay === undefined ? "" : formatDay(peakDay.day) });
+/** "Dikkat" listesinin satırı: önem, ne olduğu, değeri ve tıklanınca açılan görünüm. */
+interface AttentionItem {
+  readonly tone: AttentionTone;
+  readonly label: string;
+  readonly value: string;
+  readonly view: AdminView;
 }
 
-/** SVG öğesi oluşturur. */
-function svgElement(name: string, attributes: Readonly<Record<string, string>>): SVGElement {
-  const node: SVGElement = document.createElementNS(svgNamespace, name) as SVGElement;
-  for (const [key, value] of Object.entries(attributes)) {
-    node.setAttribute(key, value);
-  }
-  return node;
-}
-
-/** Çubuk grafiği çizer; özeti `figcaption`'a yazar. */
-function renderChart(id: string, days: readonly ChartDay[], format: (value: number) => string): void {
-  const plot: HTMLElement = element(`chart-${id}`, HTMLElement);
-  const summary: HTMLElement = element(`chart-${id}-summary`, HTMLElement);
-  const totals: number[] = days.map((day: ChartDay): number => day.parts.reduce((sum: number, part): number => sum + part.value, 0));
-  const max: number = Math.max(0, ...totals);
-  const barWidth: number = days.length === 0 ? 0 : (chartWidth - barGap * (days.length - 1)) / days.length;
-  const svg: SVGElement = svgElement("svg", {
-    viewBox: `0 0 ${chartWidth} ${chartHeight}`,
-    class: "chart__svg",
-    role: "img",
-    "aria-labelledby": `chart-${id}-summary`,
-  });
-  days.forEach((day: ChartDay, index: number): void => {
-    const x: number = index * (barWidth + barGap);
-    const group: SVGElement = svgElement("g", {});
-    const title: SVGElement = svgElement("title", {});
-    title.textContent = day.title;
-    group.append(title);
-    // Değersiz gün ince bir taban çizgisi olarak görünür (sıfır ile eksik veri ayırt edilsin).
-    group.append(svgElement("rect", { x: x.toFixed(2), y: String(chartHeight - 1.5), width: barWidth.toFixed(2), height: "1.5", rx: "0.75", class: "chart__base" }));
-    let top: number = chartHeight;
-    for (const part of day.parts) {
-      if (part.value <= 0 || max === 0) {
-        continue;
-      }
-      const height: number = Math.max(2, (part.value / max) * (chartHeight - 4));
-      top -= height;
-      group.append(svgElement("rect", { x: x.toFixed(2), y: top.toFixed(2), width: barWidth.toFixed(2), height: height.toFixed(2), rx: "1", class: `chart__bar chart__bar--${part.tone}` }));
-    }
-    svg.append(group);
-  });
-  const first: ChartDay | undefined = days[0];
-  const last: ChartDay | undefined = days.at(-1);
-  const axis: HTMLElement = document.createElement("div");
-  axis.className = "chart__axis";
-  axis.setAttribute("aria-hidden", "true");
-  const start: HTMLSpanElement = document.createElement("span");
-  start.textContent = first === undefined ? "" : formatDay(first.day);
-  const end: HTMLSpanElement = document.createElement("span");
-  end.textContent = last === undefined ? "" : formatDay(last.day);
-  axis.append(start, end);
-  plot.replaceChildren(svg, axis);
-  summary.textContent = chartSummary(days, format);
-}
-
-/** Tek değerli günleri grafiğe çevirir. Saf fonksiyondur. */
-function countDays(days: readonly DayCount[], format: (value: number) => string): ChartDay[] {
-  return days.map((day: DayCount): ChartDay => ({ day: day.day, parts: [{ value: day.count, tone: "main" }], title: fill(adminText.barTitle, { day: formatDay(day.day), value: format(day.count) }) }));
+/** "Dikkat" listesinin kaynakları (henüz yüklenmeyen null). */
+interface AttentionSources {
+  stats: AdminStats;
+  insights: Insights | null;
+  operations: Operations | null;
 }
 
 /** Son `count` günün toplamı (seri eskiden yeniye). Saf fonksiyondur. */
@@ -144,156 +107,301 @@ function lastDaysTotal(days: readonly DayCount[], count: number): number {
   return days.slice(-count).reduce((total: number, day: DayCount): number => total + day.count, 0);
 }
 
-/** Kutunun değerini ve alt satırını yazar. */
-function setKpi(id: string, value: string, sub: string): void {
-  element(`kpi-${id}`, HTMLElement).textContent = value;
-  element(`kpi-${id}-sub`, HTMLElement).textContent = sub;
+/** Oran yüzde olarak ("82%"; payda 0 ise "—"). Saf fonksiyondur. */
+function percent(part: number, whole: number): string {
+  return formatRate(part, whole);
 }
 
-/** Ölçerli kutunun uyarı görünümünü (ölçer rengi, kenar, alt satır) açar ya da kapatır. */
-function setKpiWarning(id: string, meter: HTMLProgressElement, warn: boolean): void {
-  meter.classList.toggle("meter--warn", warn);
+/** Tek değerli günler grafiğe. Saf fonksiyondur. */
+function countPoints(days: readonly DayCount[]): ChartPoint[] {
+  return days.map((day: DayCount): ChartPoint => ({ day: day.day, parts: [{ value: day.count, tone: "main", label: "" }] }));
+}
+
+/** Toplantı günleri grafiğe (abonelik altta, deneme üstte). Saf fonksiyondur. */
+function meetingPoints(days: readonly DayMeetings[]): ChartPoint[] {
+  return days.map(
+    (day: DayMeetings): ChartPoint => ({
+      day: day.day,
+      parts: [
+        { value: day.subscription, tone: "main", label: layout.charts.subscription },
+        { value: day.trial, tone: "accent", label: layout.charts.trial },
+      ],
+    }),
+  );
+}
+
+/** Özet ölçüsünün değerini ve alt satırını yazar; uyarıda ölçü vurgulanır. */
+function setKpi(id: string, value: string, sub: string, warn: boolean): void {
+  element(`kpi-${id}`, HTMLElement).textContent = value;
+  element(`kpi-${id}-sub`, HTMLElement).textContent = sub;
   element(`kpi-${id}-card`, HTMLElement).classList.toggle("kpi--warn", warn);
 }
 
-/** Kutunun ölçerini doldurur (`max` en az 0,01: boş ölçer). */
-function setMeter(id: string, value: number, max: number): HTMLProgressElement {
+/** Ölçerli özet ölçüsünü doldurur (`max` en az 0,01: boş ölçer); uyarıda ölçer de uyarı rengindedir. */
+function setMeter(id: string, value: number, max: number, warn: boolean): void {
   const meter: HTMLProgressElement = element(`kpi-${id}-meter`, HTMLProgressElement);
   meter.max = Math.max(max, 0.01);
   meter.value = Math.min(value, meter.max);
-  return meter;
+  meter.classList.toggle("meter--warn", warn);
 }
 
-/** Büyüme ve gelir kutuları. */
-function renderGrowthAndRevenue(stats: AdminStats): void {
-  const sum = (days: readonly DayCount[]): number => lastDaysTotal(days, days.length);
-  setKpi("downloads", formatCount(stats.downloads.total), fill(adminText.downloadsSub, { count: formatCount(sum(stats.downloads.last30Days)) }));
-  setKpi(
-    "users",
-    formatCount(stats.users.total),
-    `${fill(adminText.usersSub, { count: formatCount(sum(stats.users.newLast30Days)), apple: formatCount(stats.users.byProvider.apple), google: formatCount(stats.users.byProvider.google) })} · ${fillCounts(adminText.usersRecent, { today: lastDaysTotal(stats.users.newLast30Days, 1), week: lastDaysTotal(stats.users.newLast30Days, 7) })}`,
-  );
-  setKpi("trials", formatCount(stats.trials.activeTrialUsers), fill(adminText.trialsSub, { count: formatCount(stats.trials.exhaustedTrialUsers) }));
-  setKpi(
-    "subscribers",
-    formatCount(stats.subscriptions.active),
-    `${fill(adminText.subscribersSub, {
-      monthly: formatCount(stats.subscriptions.monthly),
-      yearly: formatCount(stats.subscriptions.yearly),
-      grace: formatCount(stats.subscriptions.grace),
-      ending: formatCount(stats.subscriptions.ending),
-      canceled: formatCount(stats.subscriptions.canceledTotal),
-      free: formatCount(stats.subscriptions.complimentary),
-      invite: formatCount(stats.subscriptions.freeInviteMonth),
-    })}. ${fillCounts(adminText.referralsSub, {
-      joined: stats.referrals.joined,
-      pending: stats.referrals.pending,
-      granted: stats.referrals.granted,
-      voided: stats.referrals.voided,
-    })}`,
-  );
-  setKpi("mrr", formatUsd(stats.subscriptions.mrrUsd), `${adminText.mrrSub} · ${stats.stripe.mode === "live" ? adminText.stripeLive : adminText.stripeTest}`);
+/** Döküm kartının satırını yazar; uyarıda satır vurgulanır. */
+function setFact(panel: string, row: string, value: string, warn: boolean): void {
+  element(`${panel}-${row}`, HTMLElement).textContent = value;
+  element(`${panel}-${row}-row`, HTMLElement).classList.toggle("is-warn", warn);
+}
 
+/** Kullanımın sınıra oranı eşiği aştı mı. Saf fonksiyondur. */
+function nearLimit(used: number, limit: number): boolean {
+  return limit > 0 && used >= limit * capacityWarnRatio;
+}
+
+/** Deneme reddi sayılarının toplamı. Saf fonksiyondur. */
+function refusalTotal(counts: AdminStats["trialRefusals"]["today"]): number {
+  return counts.deviceUsed + counts.exhausted + counts.expired + counts.ipDailyLimit;
+}
+
+/** Genel bakış: özet şeridi, grafikler ve kapasite kartı. */
+function renderOverview(stats: AdminStats): void {
+  const meetings30: number = stats.meetings.last30Days.reduce((sum: number, day: DayMeetings): number => sum + day.subscription + day.trial, 0);
+  setKpi("ov-mrr", formatUsd(stats.subscriptions.mrrUsd), stats.stripe.mode === "live" ? adminText.stripeLive : adminText.stripeTest, stats.stripe.mode !== "live");
+  setKpi("ov-subscribers", formatCount(stats.subscriptions.active), fillCounts(layout.subs.plans, { monthly: stats.subscriptions.monthly, yearly: stats.subscriptions.yearly }), false);
+  setKpi("ov-users", formatCount(lastDaysTotal(stats.users.newLast30Days, stats.users.newLast30Days.length)), fillCounts(layout.subs.accountsTotal, { count: stats.users.total }), false);
+  setKpi("ov-meetings", formatCount(meetings30), fillCounts(layout.subs.liveNow, { count: stats.usage.openMeetings }), false);
+  renderSparkline("ov-users", stats.users.newLast30Days.map((day: DayCount): number => day.count));
+  renderSparkline("ov-meetings", stats.meetings.last30Days.map((day: DayMeetings): number => day.subscription + day.trial));
+
+  renderDailyBars("ov-meetings", meetingPoints(stats.meetings.last30Days), formatCount);
+  renderDailyBars("ov-users", countPoints(stats.users.newLast30Days), formatCount);
+  renderDailyBars("ov-downloads", countPoints(stats.downloads.last30Days), formatCount);
+
+  setFact("ov-capacity", "spend", `${formatUsd(stats.spend.todayUsd)} / ${formatUsd(stats.spend.ceilingUsd)}`, nearLimit(stats.spend.todayUsd, stats.spend.ceilingUsd));
+  setFact(
+    "ov-capacity",
+    "elevenlabs",
+    `${formatCount(stats.elevenLabs.usedHours)} / ${formatCount(stats.elevenLabs.capHours)} h · ${Math.round(stats.elevenLabs.percent)}%`,
+    stats.elevenLabs.percent >= capacityWarnRatio * 100,
+  );
+  setFact(
+    "ov-capacity",
+    "deepgram",
+    `${formatUsd(stats.deepgram.estimatedUsd)} / ${formatUsd(stats.deepgram.budgetUsd)} · ${Math.round(stats.deepgram.percent)}%`,
+    stats.deepgram.percent >= capacityWarnRatio * 100,
+  );
+  setFact("ov-capacity", "near", formatCount(stats.usage.usersNearTokenCap), stats.usage.usersNearTokenCap > 0);
+}
+
+/** Genel bakışın gelir eğrileri (günlük anlık görüntülerden; görüntüsüz gün boşluk). */
+function renderOverviewTrends(trends: AdminTrends): void {
+  renderSparkline("ov-mrr", trends.daily.map((day: TrendDay): number | null => day.snapshot?.mrrListUsd ?? null));
+  renderSparkline(
+    "ov-subscribers",
+    trends.daily.map((day: TrendDay): number | null => (day.snapshot === null ? null : day.snapshot.subscriptionsMonthly + day.snapshot.subscriptionsYearly)),
+  );
+}
+
+/** Gelir görünümü: özet şeridi, abonelik ve fatura dökümleri. */
+function renderRevenue(stats: AdminStats): void {
+  const subscriptions: AdminStats["subscriptions"] = stats.subscriptions;
   const conversion: AdminStats["conversion"] = stats.conversion;
+  setKpi("mrr", formatUsd(subscriptions.mrrUsd), stats.stripe.mode === "live" ? adminText.stripeLive : adminText.stripeTest, stats.stripe.mode !== "live");
+  setKpi("subscribers", formatCount(subscriptions.active), fillCounts(layout.subs.plans, { monthly: subscriptions.monthly, yearly: subscriptions.yearly }), false);
   setKpi(
     "conversion",
-    formatRate(conversion.converted, conversion.trialStarted),
-    fill(adminText.conversionSub, {
+    percent(conversion.converted, conversion.trialStarted),
+    fill(layout.subs.converted, {
       converted: formatCount(conversion.converted),
       started: formatCount(conversion.trialStarted),
-      recentRate: formatRate(conversion.convertedLast30Days, conversion.startedLast30Days),
-      direct: formatCount(conversion.subscribedWithoutTrial),
+      recent: percent(conversion.convertedLast30Days, conversion.startedLast30Days),
     }),
+    false,
   );
-  setMeter("conversion", conversion.converted, conversion.trialStarted);
-  setKpi("churn", formatCount(stats.churn.canceledLast30Days), fillCounts(adminText.churnSub, { ending: stats.subscriptions.ending, pastDue: stats.churn.pastDue, unpaid: stats.churn.unpaid }));
+  setKpi("churn", formatCount(stats.churn.canceledLast30Days), fillCounts(layout.subs.ending, { count: subscriptions.ending }), false);
+
+  setFact("rev-subscriptions", "monthly", formatCount(subscriptions.monthly), false);
+  setFact("rev-subscriptions", "yearly", formatCount(subscriptions.yearly), false);
+  setFact("rev-subscriptions", "invite", formatCount(subscriptions.freeInviteMonth), false);
+  setFact("rev-subscriptions", "grace", formatCount(subscriptions.grace), subscriptions.grace > 0);
+  setFact("rev-subscriptions", "ending", formatCount(subscriptions.ending), false);
+  setFact("rev-subscriptions", "canceled", formatCount(subscriptions.canceledTotal), false);
+  setFact("rev-subscriptions", "free", formatCount(subscriptions.complimentary), false);
+
   const billing: AdminStats["billing"] = stats.billing;
-  const paymentIssues: number = billing.refundsLast30Days + billing.disputesLast30Days + billing.paymentFailuresLast30Days;
-  setKpi(
-    "payments",
-    formatCount(paymentIssues),
-    fillCounts(adminText.paymentsSub, {
-      refunds: billing.refundsLast30Days,
-      disputes: billing.disputesLast30Days,
-      failed: billing.paymentFailuresLast30Days,
-      duplicates: stats.churn.duplicateSubscriptions,
-    }),
-  );
+  setFact("rev-billing", "refunds", formatCount(billing.refundsLast30Days), false);
   // İtiraz her zaman uyarıdır (Stripe ücreti ve hesap riski); iade ve başarısız ödeme yalnızca bilgi.
-  element("kpi-payments-card", HTMLElement).classList.toggle("kpi--warn", billing.disputesLast30Days > 0);
+  setFact("rev-billing", "disputes", formatCount(billing.disputesLast30Days), billing.disputesLast30Days > 0);
+  setFact("rev-billing", "failed", formatCount(billing.paymentFailuresLast30Days), false);
+  setFact("rev-billing", "duplicates", formatCount(stats.churn.duplicateSubscriptions), false);
+  setFact("rev-billing", "past-due", formatCount(stats.churn.pastDue), stats.churn.pastDue > 0);
+  setFact("rev-billing", "unpaid", formatCount(stats.churn.unpaid), stats.churn.unpaid > 0);
 }
 
-/** Kullanım, maliyet ve kapasite kutuları. */
-function renderUsageAndCosts(stats: AdminStats): void {
-  const usage: AdminStats["usage"] = stats.usage;
-  setKpi("meetings", formatCount(usage.meetingsThisMonth), fillCounts(adminText.meetingsSub, { open: usage.openMeetings, deferred: usage.deferredThisMonth, reprocessed: usage.reprocessedThisMonth }));
-  setKpi("hours", formatCount(stats.meetings.hoursThisMonth), adminText.hoursSub);
-  setKpi("audio", fill(adminText.hours, { hours: formatCount(usage.audioHoursThisMonth) }), fillCounts(adminText.audioSub, { minutes: stats.deepgram.streamMinutes }));
-  setKpi(
-    "tokens",
-    formatCompact(stats.tokens.thisMonth),
-    fill(adminText.tokensUsageSub, { account: formatCompact(usage.accountTokensThisMonth), near: formatCount(usage.usersNearTokenCap), cap: formatCompact(usage.monthlyTokenCapPerUser) }),
-  );
-  element("kpi-tokens-card", HTMLElement).classList.toggle("kpi--warn", usage.usersNearTokenCap > 0);
+/** Büyüme görünümü: özet şeridi, grafikler, kayıt, deneme reddi ve davet dökümleri. */
+function renderGrowth(stats: AdminStats): void {
+  const newUsers: readonly DayCount[] = stats.users.newLast30Days;
+  const refusals: AdminStats["trialRefusals"] = stats.trialRefusals;
+  setKpi("downloads", formatCount(stats.downloads.total), fillCounts(layout.subs.inLast30, { count: lastDaysTotal(stats.downloads.last30Days, stats.downloads.last30Days.length) }), false);
+  setKpi("users", formatCount(stats.users.total), fillCounts(layout.subs.newRecent, { month: lastDaysTotal(newUsers, newUsers.length), today: lastDaysTotal(newUsers, 1) }), false);
+  setKpi("trials", formatCount(stats.trials.activeTrialUsers), fillCounts(layout.subs.usedUp, { count: stats.trials.exhaustedTrialUsers }), false);
+  setKpi("refusals", formatCount(refusalTotal(refusals.last30Days)), fillCounts(layout.subs.today, { count: refusalTotal(refusals.today) }), false);
+  renderDailyBars("downloads", countPoints(stats.downloads.last30Days), formatCount);
+  renderDailyBars("users", countPoints(newUsers), formatCount);
 
-  setKpi("spend", formatUsd(stats.spend.todayUsd), fill(adminText.spendSub, { ceiling: formatUsd(stats.spend.ceilingUsd) }));
-  setKpiWarning("spend", setMeter("spend", stats.spend.todayUsd, stats.spend.ceilingUsd), stats.spend.todayUsd >= stats.spend.ceilingUsd * 0.8);
+  setFact("growth-signups", "today", formatCount(lastDaysTotal(newUsers, 1)), false);
+  setFact("growth-signups", "week", formatCount(lastDaysTotal(newUsers, 7)), false);
+  setFact("growth-signups", "month", formatCount(lastDaysTotal(newUsers, newUsers.length)), false);
+  setFact("growth-signups", "apple", formatCount(stats.users.byProvider.apple), false);
+  setFact("growth-signups", "google", formatCount(stats.users.byProvider.google), false);
+
+  setFact("growth-refusals", "device", formatCount(refusals.last30Days.deviceUsed), false);
+  setFact("growth-refusals", "ip", formatCount(refusals.last30Days.ipDailyLimit), false);
+  setFact("growth-refusals", "exhausted", formatCount(refusals.last30Days.exhausted), false);
+  setFact("growth-refusals", "expired", formatCount(refusals.last30Days.expired), false);
+  setFact("growth-refusals", "today", formatCount(refusalTotal(refusals.today)), false);
+
+  setFact("growth-referrals", "joined", formatCount(stats.referrals.joined), false);
+  setFact("growth-referrals", "pending", formatCount(stats.referrals.pending), false);
+  setFact("growth-referrals", "granted", formatCount(stats.referrals.granted), false);
+  setFact("growth-referrals", "voided", formatCount(stats.referrals.voided), false);
+}
+
+/** Kullanım görünümü: bu ayın toplantıları ve grafiği. */
+function renderEngagement(stats: AdminStats): void {
+  const usage: AdminStats["usage"] = stats.usage;
+  setKpi("meetings", formatCount(usage.meetingsThisMonth), fillCounts(layout.subs.meetingHours, { hours: stats.meetings.hoursThisMonth }), false);
+  renderDailyBars("meetings", meetingPoints(stats.meetings.last30Days), formatCount);
+  setFact("eng-month", "meetings", formatCount(usage.meetingsThisMonth), false);
+  setFact("eng-month", "open", formatCount(usage.openMeetings), false);
+  setFact("eng-month", "deferred", formatCount(usage.deferredThisMonth), false);
+  setFact("eng-month", "reprocessed", formatCount(usage.reprocessedThisMonth), false);
+  setFact("eng-month", "hours", fill(adminText.hours, { hours: formatCount(stats.meetings.hoursThisMonth) }), false);
+  setFact("eng-month", "audio", fill(adminText.hours, { hours: formatCount(usage.audioHoursThisMonth) }), false);
+  setFact("eng-month", "stream", formatCount(stats.deepgram.streamMinutes), false);
+}
+
+/** Maliyet görünümü: harcama ve kapasite ölçerleri, token dökümü. */
+function renderCosts(stats: AdminStats): void {
+  const spendWarn: boolean = nearLimit(stats.spend.todayUsd, stats.spend.ceilingUsd);
+  setKpi("spend", formatUsd(stats.spend.todayUsd), fill(layout.subs.ofCeiling, { ceiling: formatUsd(stats.spend.ceilingUsd) }), spendWarn);
+  setMeter("spend", stats.spend.todayUsd, stats.spend.ceilingUsd, spendWarn);
+  const elevenWarn: boolean = stats.elevenLabs.percent >= capacityWarnRatio * 100;
   setKpi(
     "elevenlabs",
     `${Math.round(stats.elevenLabs.percent)}%`,
-    fill(adminText.elevenLabsSub, { used: formatCount(stats.elevenLabs.usedHours), cap: formatCount(stats.elevenLabs.capHours) }),
+    fill(layout.subs.ofHours, { used: formatCount(stats.elevenLabs.usedHours), cap: formatCount(stats.elevenLabs.capHours) }),
+    elevenWarn,
   );
-  setKpiWarning("elevenlabs", setMeter("elevenlabs", stats.elevenLabs.usedHours, stats.elevenLabs.capHours), stats.elevenLabs.percent >= 80);
-  setKpi("deepgram", `${Math.round(stats.deepgram.percent)}%`, fill(adminText.deepgramSub, { used: formatUsd(stats.deepgram.estimatedUsd), budget: formatUsd(stats.deepgram.budgetUsd) }));
-  setKpiWarning("deepgram", setMeter("deepgram", stats.deepgram.estimatedUsd, stats.deepgram.budgetUsd), stats.deepgram.percent >= 80);
-  const refusals: AdminStats["trialRefusals"] = stats.trialRefusals;
-  const refusalTotal = (counts: AdminStats["trialRefusals"]["today"]): number => counts.deviceUsed + counts.exhausted + counts.expired + counts.ipDailyLimit;
+  setMeter("elevenlabs", stats.elevenLabs.usedHours, stats.elevenLabs.capHours, elevenWarn);
+  const deepgramWarn: boolean = stats.deepgram.percent >= capacityWarnRatio * 100;
   setKpi(
-    "refusals",
-    formatCount(refusalTotal(refusals.last30Days)),
-    fillCounts(adminText.refusalsSub, {
-      device: refusals.last30Days.deviceUsed,
-      ip: refusals.last30Days.ipDailyLimit,
-      exhausted: refusals.last30Days.exhausted,
-      expired: refusals.last30Days.expired,
-      today: refusalTotal(refusals.today),
-    }),
+    "deepgram",
+    `${Math.round(stats.deepgram.percent)}%`,
+    fill(layout.subs.ofCredit, { used: formatUsd(stats.deepgram.estimatedUsd), budget: formatUsd(stats.deepgram.budgetUsd) }),
+    deepgramWarn,
   );
+  setMeter("deepgram", stats.deepgram.estimatedUsd, stats.deepgram.budgetUsd, deepgramWarn);
+  const usage: AdminStats["usage"] = stats.usage;
+  setKpi("tokens", formatCompact(stats.tokens.thisMonth), fillCounts(layout.subs.nearCap, { count: usage.usersNearTokenCap }), usage.usersNearTokenCap > 0);
+
+  setFact("costs-tokens", "total", formatCompact(stats.tokens.thisMonth), false);
+  setFact("costs-tokens", "account", formatCompact(usage.accountTokensThisMonth), false);
+  setFact("costs-tokens", "cap", formatCompact(usage.monthlyTokenCapPerUser), false);
+  setFact("costs-tokens", "account-cap", formatCompact(usage.monthlyAccountTokenCapPerUser), false);
+  setFact("costs-tokens", "near", formatCount(usage.usersNearTokenCap), usage.usersNearTokenCap > 0);
 }
 
-/** Özet kutularını, grafikleri ve bildirim sayaçlarını çizer. */
+/** Özet istatistiklerin tüm öğelerini ve bildirim sayaçlarını çizer. */
 function renderStats(stats: AdminStats): void {
   element("admin-updated", HTMLElement).textContent = fill(adminText.updated, { time: formatTime(stats.generatedAt) });
-  renderGrowthAndRevenue(stats);
-  renderUsageAndCosts(stats);
-
-  renderChart("downloads", countDays(stats.downloads.last30Days, formatCount), formatCount);
-  renderChart("users", countDays(stats.users.newLast30Days, formatCount), formatCount);
-  renderChart(
-    "meetings",
-    stats.meetings.last30Days.map(
-      (day: DayMeetings): ChartDay => ({
-        day: day.day,
-        parts: [
-          { value: day.subscription, tone: "main" },
-          { value: day.trial, tone: "accent" },
-        ],
-        title: fill(adminText.meetingBarTitle, { day: formatDay(day.day), trial: formatCount(day.trial), subscription: formatCount(day.subscription) }),
-      }),
-    ),
-    formatCount,
-  );
-  renderChart(
-    "spend",
-    stats.spend.last30Days.map((day): ChartDay => ({ day: day.day, parts: [{ value: day.usd, tone: "main" }], title: fill(adminText.barTitle, { day: formatDay(day.day), value: formatUsd(day.usd) }) })),
-    formatUsd,
-  );
-
+  renderOverview(stats);
+  renderRevenue(stats);
+  renderGrowth(stats);
+  renderEngagement(stats);
+  renderCosts(stats);
   element("count-feedback", HTMLElement).textContent = formatCount(stats.reports.openFeedback);
   element("count-crash", HTMLElement).textContent = formatCount(stats.reports.openCrash);
   element("count-contact", HTMLElement).textContent = formatCount(stats.reports.openContact);
   const openReports: number = stats.reports.openFeedback + stats.reports.openCrash + stats.reports.openContact;
   element("count-inbox", HTMLElement).textContent = openReports === 0 ? "" : formatCount(openReports);
+}
+
+/** Önemin sırası (önce kırmızı). Saf fonksiyondur. */
+function toneRank(tone: AttentionTone): number {
+  return tone === "danger" ? 0 : tone === "warn" ? 1 : 2;
+}
+
+/** İstatistiklerden "dikkat" satırları. Saf fonksiyondur. */
+function statsAttention(stats: AdminStats): AttentionItem[] {
+  const words: AdminLayoutCopy["attention"] = layout.attention;
+  const openReports: number = stats.reports.openFeedback + stats.reports.openCrash + stats.reports.openContact;
+  const spendRatio: number = stats.spend.ceilingUsd > 0 ? stats.spend.todayUsd / stats.spend.ceilingUsd : 0;
+  const items: (AttentionItem | null)[] = [
+    stats.billing.disputesLast30Days > 0 ? { tone: "danger", label: words.disputes, value: formatCount(stats.billing.disputesLast30Days), view: "revenue" } : null,
+    spendRatio >= capacityWarnRatio ? { tone: spendRatio >= 1 ? "danger" : "warn", label: words.spend, value: percent(stats.spend.todayUsd, stats.spend.ceilingUsd), view: "costs" } : null,
+    stats.elevenLabs.percent >= capacityWarnRatio * 100 ? { tone: "warn", label: words.elevenLabs, value: `${Math.round(stats.elevenLabs.percent)}%`, view: "costs" } : null,
+    stats.deepgram.percent >= capacityWarnRatio * 100 ? { tone: "warn", label: words.deepgram, value: `${Math.round(stats.deepgram.percent)}%`, view: "costs" } : null,
+    stats.churn.pastDue > 0 ? { tone: "warn", label: words.pastDue, value: formatCount(stats.churn.pastDue), view: "revenue" } : null,
+    stats.churn.unpaid > 0 ? { tone: "warn", label: words.unpaid, value: formatCount(stats.churn.unpaid), view: "revenue" } : null,
+    stats.usage.usersNearTokenCap > 0 ? { tone: "info", label: words.nearCap, value: formatCount(stats.usage.usersNearTokenCap), view: "costs" } : null,
+    openReports > 0 ? { tone: "info", label: words.inbox, value: formatCount(openReports), view: "inbox" } : null,
+  ];
+  return items.filter((item: AttentionItem | null): item is AttentionItem => item !== null);
+}
+
+/** İçgörülerden (son 7 gün) "dikkat" satırları. Saf fonksiyondur. */
+function insightsAttention(insights: Insights): AttentionItem[] {
+  const words: AdminLayoutCopy["attention"] = layout.attention;
+  const week: Insights["problems"]["last7Days"] = insights.problems.last7Days;
+  const providerErrors: number = week.providerErrors.reduce((sum: number, item): number => sum + item.count, 0);
+  const items: (AttentionItem | null)[] = [
+    week.serverErrorsTotal > 0 ? { tone: "danger", label: words.serverErrors, value: formatCount(week.serverErrorsTotal), view: "reliability" } : null,
+    providerErrors > 0 ? { tone: "warn", label: words.providerErrors, value: formatCount(providerErrors), view: "reliability" } : null,
+    week.trialCapacityReached > 0 ? { tone: "warn", label: words.trialCeiling, value: formatCount(week.trialCapacityReached), view: "growth" } : null,
+    week.spendCeilingReached > 0 ? { tone: "warn", label: words.spendCeiling, value: formatCount(week.spendCeilingReached), view: "costs" } : null,
+  ];
+  return items.filter((item: AttentionItem | null): item is AttentionItem => item !== null);
+}
+
+/** İşletim verisinden "dikkat" satırları. Saf fonksiyondur. */
+function operationsAttention(ops: Operations): AttentionItem[] {
+  const words: AdminLayoutCopy["attention"] = layout.attention;
+  const oldest: number | null = ops.reservations.oldestExpiredAt;
+  const items: (AttentionItem | null)[] = [
+    ops.deepgram.stale > 0 ? { tone: "warn", label: words.deepgramStale, value: formatCount(ops.deepgram.stale), view: "operations" } : null,
+    oldest !== null && ops.generatedAt - oldest > dayMs ? { tone: "warn", label: words.reservations, value: formatCount(ops.reservations.expired), view: "operations" } : null,
+    ops.meetings.unendedLast7Days > 0 ? { tone: "info", label: words.unended, value: formatCount(ops.meetings.unendedLast7Days), view: "operations" } : null,
+  ];
+  return items.filter((item: AttentionItem | null): item is AttentionItem => item !== null);
+}
+
+/** "Dikkat" listesini çizer: önce kırmızı, sonra sarı, sonra bilgi; satır tıklanınca ilgili görünüm açılır. */
+function renderAttention(sources: AttentionSources, onOpen: (view: AdminView) => void): void {
+  const items: AttentionItem[] = [
+    ...statsAttention(sources.stats),
+    ...(sources.insights === null ? [] : insightsAttention(sources.insights)),
+    ...(sources.operations === null ? [] : operationsAttention(sources.operations)),
+  ].sort((a: AttentionItem, b: AttentionItem): number => toneRank(a.tone) - toneRank(b.tone));
+  const nodes: HTMLLIElement[] = items.map((item: AttentionItem): HTMLLIElement => {
+    const row: HTMLLIElement = document.createElement("li");
+    const button: HTMLButtonElement = document.createElement("button");
+    button.type = "button";
+    button.className = `attention__item attention__item--${item.tone}`;
+    const dot: HTMLSpanElement = document.createElement("span");
+    dot.className = "attention__dot";
+    dot.setAttribute("aria-hidden", "true");
+    const label: HTMLSpanElement = document.createElement("span");
+    label.className = "attention__label";
+    label.textContent = item.label;
+    const value: HTMLSpanElement = document.createElement("span");
+    value.className = "attention__value tabular";
+    value.textContent = item.value;
+    button.append(dot, label, value);
+    button.addEventListener("click", (): void => onOpen(item.view));
+    row.append(button);
+    return row;
+  });
+  element("ov-attention", HTMLElement).replaceChildren(...nodes);
+  element("ov-attention-empty", HTMLElement).classList.toggle("hidden", items.length > 0);
 }
 
 /** Bildirimin kim/ne zaman satırı. Saf fonksiyondur. */
@@ -404,16 +512,19 @@ function mountDashboard(): void {
   document.title = dataValue(root, "title");
 }
 
-/** Görünümü gösterir (menü düğmesinin basılı durumu, panelin görünürlüğü ve üst çubuktaki başlık). */
+/** Görünümü gösterir: menü düğmesinin basılı durumu, panelin görünürlüğü, üst çubuktaki başlık ve açıklama. */
 function showView(view: AdminView): void {
   for (const other of adminViews) {
     element(`view-${other}`, HTMLButtonElement).setAttribute("aria-pressed", String(other === view));
     element(`panel-${other}`, HTMLElement).classList.toggle("hidden", other !== view);
   }
-  element("admin-view-title", HTMLElement).textContent = dataValue(element(`view-${view}`, HTMLButtonElement), "title");
+  const button: HTMLButtonElement = element(`view-${view}`, HTMLButtonElement);
+  element("admin-view-title", HTMLElement).textContent = dataValue(button, "title");
+  element("admin-view-description", HTMLElement).textContent = dataValue(button, "description");
+  element("console-main", HTMLElement).scrollTop = 0;
 }
 
-/** Adres çubuğundaki `#users` gibi görünüm adı; yoksa genel bakış. Saf fonksiyondur. */
+/** Adres çubuğundaki `#revenue` gibi görünüm adı; yoksa genel bakış. Saf fonksiyondur. */
 function viewFromHash(hash: string): AdminView {
   return adminViews.find((view: AdminView): boolean => `#${view}` === hash) ?? "overview";
 }
@@ -431,6 +542,7 @@ async function main(): Promise<void> {
   const notice: HTMLElement = element("admin-error", HTMLElement);
   const state: InboxState = { kind: "feedback", status: "open", items: [], nextBefore: null, selectedId: null, listRequest: 0 };
   const view: { current: AdminView } = { current: "overview" };
+  const attention: AttentionSources = { stats: firstStats, insights: null, operations: null };
 
   // Yanıtlar sırasız gelebilir: yalnızca hâlâ seçili olan bildirimin ayrıntısı çizilir.
   const select = (id: string): void => {
@@ -475,32 +587,21 @@ async function main(): Promise<void> {
     clearDetail();
   };
 
+  // Kaynaklar görünümlerden önce kurulur; görünüm değişince yalnızca kaynakları yüklenir.
+  const sources: { value: Readonly<Record<DataSource, Loadable>> | null } = { value: null };
   const switchView = (next: AdminView): void => {
     view.current = next;
     showView(next);
     history.replaceState(null, "", next === "overview" ? location.pathname : `#${next}`);
-    if (next === "users") {
-      users.ensureLoaded().catch(showFailure);
+    const loaded: Readonly<Record<DataSource, Loadable>> | null = sources.value;
+    if (loaded === null) {
+      return;
     }
-    if (next === "insights") {
-      insights.ensureLoaded().catch(showFailure);
-    }
-    if (next === "product") {
-      product.ensureLoaded().catch(showFailure);
-    }
-    if (next === "trends") {
-      trends.ensureLoaded().catch(showFailure);
-    }
-    if (next === "telemetry") {
-      telemetry.ensureLoaded().catch(showFailure);
-    }
-    if (next === "operations") {
-      operations.ensureLoaded().catch(showFailure);
-    }
-    if (next === "blog") {
-      blog.ensureLoaded().catch(showFailure);
+    for (const source of viewSources[next]) {
+      loaded[source].ensureLoaded().catch(showFailure);
     }
   };
+  const redrawAttention = (): void => renderAttention(attention, switchView);
 
   // Kullanıcı ayrıntısındaki ya da işletimdeki rapor bildirim kutusunda, kendi türü ve durumuyla açılır.
   const openReport = (id: string, kind: ReportKind, status: ReportStatus): void => {
@@ -515,28 +616,32 @@ async function main(): Promise<void> {
     switchView("users");
     users.openUser(id).catch(showFailure);
   };
-  const operations: OperationsView = createOperationsView(openUser, openReport);
-  const insights: InsightsView = createInsightsView(openUser);
+  const operations: OperationsView = createOperationsView(openUser, openReport, (ops: Operations): void => {
+    attention.operations = ops;
+    redrawAttention();
+  });
+  const insights: InsightsView = createInsightsView(openUser, (loaded: Insights): void => {
+    attention.insights = loaded;
+    redrawAttention();
+  });
   const product: ProductView = createProductView();
-  const trends: TrendsView = createTrendsView();
+  const trends: TrendsView = createTrendsView(renderOverviewTrends);
   const telemetry: TelemetryView = createTelemetryView();
   const blog: BlogView = createBlogView(showFailure);
+  sources.value = { insights, product, trends, telemetry, operations, users, blog };
 
   const refresh = async (): Promise<void> => {
     hideNotice(notice);
     const current: AdminView = view.current;
+    const loaded: Readonly<Record<DataSource, Loadable>> | null = sources.value;
     const [stats] = await Promise.all([
       fetchStats(),
       current === "inbox" ? loadList(false) : Promise.resolve(),
-      current === "users" ? users.refresh() : Promise.resolve(),
-      current === "operations" ? operations.refresh() : Promise.resolve(),
-      current === "insights" ? insights.refresh() : Promise.resolve(),
-      current === "product" ? product.refresh() : Promise.resolve(),
-      current === "trends" ? trends.refresh() : Promise.resolve(),
-      current === "telemetry" ? telemetry.refresh() : Promise.resolve(),
-      current === "blog" ? blog.refresh() : Promise.resolve(),
+      ...(loaded === null ? [] : viewSources[current].map((source: DataSource): Promise<void> => loaded[source].refresh())),
     ]);
+    attention.stats = stats;
     renderStats(stats);
+    redrawAttention();
   };
 
   for (const kind of kinds) {
@@ -582,14 +687,17 @@ async function main(): Promise<void> {
   const refreshButton: HTMLButtonElement = element("admin-refresh", HTMLButtonElement);
   refreshButton.addEventListener("click", (): void => {
     refreshButton.disabled = true;
+    refreshButton.classList.add("is-spinning");
     refresh()
       .catch(showFailure)
       .finally((): void => {
         refreshButton.disabled = false;
+        refreshButton.classList.remove("is-spinning");
       });
   });
 
   renderStats(firstStats);
+  redrawAttention();
   await loadList(false);
   switchView(viewFromHash(location.hash));
 }
