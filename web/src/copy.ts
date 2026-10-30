@@ -249,8 +249,10 @@ export interface DownloadCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly lead: string;
-  /** Sürüm etiketi ("Version" + sunucudan okunan numara). */
+  /** Sürüm satırının etiketi (değeri sunucudan okunan numara). */
   readonly versionLabel: string;
+  /** Gereksinim satırının etiketi (değeri `CommonCopy.requirementsShort`). */
+  readonly requirementsLabel: string;
   readonly installTitle: string;
   readonly installSteps: readonly TitledText[];
   /** Sayfanın sonundaki tek satır: güncellemeler ve yardım bağlantısı. */
@@ -306,6 +308,8 @@ export interface AccountCopy {
   readonly meta: PageMeta;
   readonly title: string;
   readonly loading: string;
+  /** Hesap yüklenemeyince hata bildiriminin altındaki düğme: hesabı yeniden yükler. */
+  readonly retry: string;
   readonly paymentDone: string;
   /** Ödeme uygulamadan açıldıysa tarayıcıda oturum yoktur: giriş sayfası yerine bu not görünür. */
   readonly paymentDoneSignedOut: { readonly title: string; readonly text: string; readonly signIn: string };
@@ -1014,6 +1018,7 @@ export const copy: Copy = {
     title: `Download ${productName}`,
     lead: "For Mac. Free for 3 meetings or 7 days, no card needed.",
     versionLabel: "Version",
+    requirementsLabel: "Requires",
     installTitle: "Three steps to your first meeting",
     installSteps: [
       { title: "Install", text: `Open the disk image and drag ${productName} into Applications.` },
@@ -1322,6 +1327,7 @@ export const copy: Copy = {
     meta: { title: `Account — ${productName}`, description: `Your ${productName} account: plan, trial, monthly usage and subscription.` },
     title: "Your account",
     loading: "Loading your account…",
+    retry: "Try again",
     paymentDone: "Payment received, thank you. Your subscription will show up here within a few seconds.",
     paymentDoneSignedOut: {
       title: "Payment received, thank you",
@@ -1347,7 +1353,7 @@ export const copy: Copy = {
     signOut: "Sign out",
     referral: {
       title: "Give a month, get a month",
-      text: "Friends who subscribe with your code get their first month free on the monthly plan, or $5.99 off their first year on the yearly plan. For each one who stays, you get a free month: $5.99 off your next payment, up to 12 times a year.",
+      text: "Friends save a month with your code, and you earn a free month for each one who stays.",
       codeLabel: "Your invite code",
       copyLink: "Copy invite link",
       copied: "Link copied",

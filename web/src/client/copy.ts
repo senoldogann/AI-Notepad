@@ -38,14 +38,20 @@ export interface ClientCopy {
   /** Davet kodu durum satırı: denetleniyor, plan başına uygulanan indirim. */
   readonly inviteChecking: string;
   readonly inviteApplied: { readonly monthly: string; readonly yearly: string };
-  /** Abonenin davet kartındaki sayılar: `{joined}`, `{rewarded}`, `{pending}`, `{left}`, `{cap}`. */
-  readonly referralStats: string;
+  /** Abonenin davet kartındaki sayıların etiketleri; `ofCap` bu yıl kalan ödülün yanında yıllık sınırdır (`{cap}`). */
+  readonly referralStats: {
+    readonly joined: string;
+    readonly rewarded: string;
+    readonly pending: string;
+    readonly left: string;
+    readonly ofCap: string;
+  };
   /** Davetin ücretsiz ilk ayındaki hesap: kod ilk ücretli faturadan sonra açılır. */
   readonly referralCodeAfterFirstPayment: string;
   /** Bekleyen ödülün tahmini tarihi: `{date}`. */
   readonly referralNextReward: string;
-  /** Ücretsiz erişimli hesapta davet kartı: `{joined}`. */
-  readonly referralStatsComplimentary: string;
+  /** Ücretsiz erişimli hesapta davet kartının notu: arkadaşlar indirimi alır, ödül uygulanmaz. */
+  readonly referralComplimentaryNote: string;
   /**
    * Planın adı: `subscription` abonelik planı bilinmiyorsa (eski fiyat); `complimentary` yöneticinin verdiği ücretsiz
    * erişim; `none` aboneliği (ya da ücretsiz erişimi) bitmiş ve denemesi kalmamış hesap.
@@ -58,19 +64,31 @@ export interface ClientCopy {
     readonly complimentary: string;
     readonly none: string;
   };
-  /** Deneme sürüyor: `{left}`, `{total}` toplantı ve `{date}` bitiş tarihi. */
-  readonly trialLeft: string;
-  /** Deneme başlamadı: `{total}` toplantı, `{days}` gün. */
-  readonly trialNotStarted: string;
+  /** Plan kartının etiket/değer satırları (deneme ve abonelik). */
+  readonly facts: {
+    readonly trialIncludes: string;
+    /** `{total}` toplantı, `{days}` gün. */
+    readonly trialIncludesValue: string;
+    readonly trialStarts: string;
+    readonly trialStartsValue: string;
+    readonly trialEnds: string;
+    readonly renews: string;
+    readonly renewal: string;
+    readonly renewalCancelled: string;
+    readonly accessUntil: string;
+  };
+  /** Deneme ölçerinin değeri: `{left}` / `{total}` toplantı. */
+  readonly trialMeetings: string;
   /** Deneme bitti (toplantılar harcandı ya da süre doldu). */
   readonly trialEnded: string;
   /** `{used}` ve `{cap}` saatlerle değişir. */
   readonly hours: string;
-  /** `{date}` tarihle değişir. */
-  readonly subscriptionActive: string;
-  /** İptal edilmiş, dönem sonuna dek süren abonelik. */
-  readonly subscriptionCanceling: string;
-  readonly subscriptionGrace: string;
+  /** Ölçerin altındaki ikincil değer: `{left}` saat kaldı. */
+  readonly hoursLeft: string;
+  /** Aylık sınır doldu: `{date}` sınırın sıfırlandığı gün (UTC). */
+  readonly hoursLimitReached: string;
+  /** Ek sürede (ödeme alınamadı, erişim sürüyor) Aboneliği yönet düğmesinin yanındaki uyarı. */
+  readonly subscriptionGraceAlert: string;
   readonly subscriptionEnded: string;
   /** Yenileme ödemesi alınamadı ve ek süre bitti: abonelik Stripe'ta sürer, kart güncellenince erişim döner. */
   readonly subscriptionPaymentOverdue: string;
@@ -224,10 +242,16 @@ export const clientCopy: ClientCopy = {
     monthly: "Invite applied: your first month is free.",
     yearly: "Invite applied: $5.99 off your first year.",
   },
-  referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
-  referralNextReward: "next reward around {date}",
+  referralStats: {
+    joined: "Joined",
+    rewarded: "Rewarded",
+    pending: "Pending",
+    left: "Left this year",
+    ofCap: "of {cap}",
+  },
+  referralNextReward: "Next reward around {date}",
   referralCodeAfterFirstPayment: "Your invite code appears after your first paid month.",
-  referralStatsComplimentary: "{joined} joined. Your friends still get their invite discount; your account is already free, so the $5.99 rewards don't apply.",
+  referralComplimentaryNote: "Your friends still get their invite discount. Your account is already free, so the $5.99 rewards don't apply.",
   plan: {
     trial: "Free trial",
     subscription: productName,
@@ -236,13 +260,23 @@ export const clientCopy: ClientCopy = {
     complimentary: "Free access",
     none: "No active plan",
   },
-  trialLeft: "{left} of {total} meetings left · Trial ends {date}",
-  trialNotStarted: "Not started yet: {total} meetings or {days} days from your first meeting, whichever comes first",
+  facts: {
+    trialIncludes: "Includes",
+    trialIncludesValue: "{total} meetings or {days} days, whichever comes first",
+    trialStarts: "Starts",
+    trialStartsValue: "With your first meeting",
+    trialEnds: "Trial ends",
+    renews: "Renews",
+    renewal: "Renewal",
+    renewalCancelled: "Cancelled",
+    accessUntil: "Access until",
+  },
+  trialMeetings: "{left} of {total}",
   trialEnded: "Your free trial has ended. Subscribe to start new meetings.",
   hours: "{used} / {cap} hours",
-  subscriptionActive: "Renews on {date}",
-  subscriptionCanceling: "Cancelled; you can use it until {date}. It won't renew.",
-  subscriptionGrace: "Payment failed. Update your card by {date}; you keep access until then.",
+  hoursLeft: "{left} hours left",
+  hoursLimitReached: "Monthly limit reached. You can start new meetings again on {date} (UTC).",
+  subscriptionGraceAlert: "Payment failed. Update your card to keep access.",
   subscriptionEnded: "Your subscription has ended.",
   subscriptionPaymentOverdue: "Payment failed. Update your card in Manage subscription to keep recording.",
   subscriptionComplimentary: "Full access, free of charge. Nothing to pay or manage.",

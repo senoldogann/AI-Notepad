@@ -1,6 +1,7 @@
 ---
 // Karşılaştırma tablosu: satırlar konular, sütunlar ürünler (ilk sütun bizim). Doğrulanmamış değer (`null`) tire olarak
-// görünür; ekran okuyucu "Not checked" okur. Telefonda her satır başlıklı bir karta dönüşür (sütun adı hücrenin üstünde).
+// görünür; ekran okuyucu "Not checked" okur. Dar masaüstünde tablo sıkışmaz, kutunun içinde yatay kayar (klavyeyle de
+// odaklanıp kaydırılabilir); telefonda her satır başlıklı bir karta dönüşür (sütun adı hücrenin üstünde).
 import { copy, type CompareCopy, type ComparisonTopic } from "../copy";
 
 /** Tablonun bir sütunu: ürün adı ve konulara göre değerleri. */
@@ -18,7 +19,7 @@ const { caption, topics, columns } = Astro.props;
 const text: CompareCopy = copy.compare;
 ---
 
-<div class="comparison">
+<div class="comparison" role="region" aria-label={caption} tabindex="0">
   <table class="comparison__table">
     <caption class="visually-hidden">{caption}</caption>
     <thead>
@@ -59,14 +60,28 @@ const text: CompareCopy = copy.compare;
     border: 1px solid var(--line);
     border-radius: var(--radius-m);
     background: var(--card);
-    overflow: hidden;
+    overflow-x: auto;
   }
 
+  .comparison:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /* Sütunlar okunur genişlikte kalır; kutu daralınca tablo kayar. */
   .comparison__table {
     width: 100%;
+    min-width: 46rem;
     border-collapse: collapse;
     font-size: 0.9375rem;
     line-height: 1.5;
+  }
+
+  /* Üzerine gelinen satır hafifçe belirir (bizim sütunun yarı saydam vurgusu üstünde kalır). */
+  @media (hover: hover) {
+    .comparison__table tbody tr:hover {
+      background: color-mix(in srgb, var(--ink) 4%, transparent);
+    }
   }
 
   .comparison__table th,
@@ -111,6 +126,10 @@ const text: CompareCopy = copy.compare;
   }
 
   @media (max-width: 640px) {
+    .comparison__table {
+      min-width: 0;
+    }
+
     .comparison__table thead {
       display: none;
     }

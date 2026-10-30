@@ -660,8 +660,9 @@ async function checkAccount(context: BrowserContext, siteOrigin: string, apiBase
       renewed.refreshToken !== session.refreshToken &&
       (await isShown(page, "#subscribe-button")) &&
       !(await isShown(page, "#manage-button")) &&
-      (await page.locator("#plan-status").textContent()) !== "",
-    JSON.stringify({ errors, status: await page.locator("#plan-status").textContent() }),
+      (await isShown(page, "#plan-facts")) &&
+      (await page.locator("#plan-facts").textContent()) !== "",
+    JSON.stringify({ errors, facts: await page.locator("#plan-facts").textContent() }),
   );
   // Eski (dönmüş) yenileme jetonu artık geçmez (30 sn içindeki kayıp yanıt payı dışında aile düşmez; burada yalnızca
   // dönüşün sunucuda olduğu denetlenir: yeni jeton çalışır).

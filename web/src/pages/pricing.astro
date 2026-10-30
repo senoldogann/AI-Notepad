@@ -53,7 +53,7 @@ const [noteBefore, noteAfter]: readonly [string, string] = ((): readonly [string
               <div class="plan-option__body">
                 <div class="plan-option__head">
                   <h3 class="title-m" id={`plan-${option.plan}`}>{option.name}</h3>
-                  {option.badge === null ? null : <span class="pill pill--ok">{option.badge}</span>}
+                  {option.badge === null ? null : <span class="pill pill--accent">{option.badge}</span>}
                 </div>
                 <p class="plan-option__price">
                   <span class="tabular">{option.price}</span>
