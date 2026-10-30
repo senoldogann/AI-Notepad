@@ -45,6 +45,70 @@ private func archive() -> [MeetingRecord] {
     }
 }
 
+@Suite struct ArchiveScopeTests {
+    // Kapsam: etiket yoksa boş (tüm arşiv), varsa etiket sırasıyla o toplantılar; olmayan toplantı hatadır (genişlemez).
+    @Test func scopeFollowsSelectedMeetings() throws {
+        let records: [MeetingRecord] = archive()
+        #expect(try archiveScope(records: records, meetingIDs: []).isEmpty)
+        #expect(try archiveScope(records: records, meetingIDs: ["a", "b"]).map(\.id) == ["a", "b"])
+        #expect(throws: ArchiveScopeError.meetingsNotFound(ids: ["silinmis"])) {
+            try archiveScope(records: records, meetingIDs: ["a", "silinmis"])
+        }
+    }
+
+    // Etiketli soruda okunan parçalar (ve bu yüzden kaynaklar) yalnız o toplantılardan: önceki turun başka toplantıdan
+    // gelen kaynağı devam sorusunda okunmaz; tüm arşive sorulunca okunur.
+    @Test func scopedQuestionReadsOnlySelectedMeetings() throws {
+        let all: [MeetingRecord] = archive()
+        let budget: ArchivePassage = try #require(archivePassages(records: all).first { $0.meetingID == "b" && $0.kind == .note })
+        let history: [ArchiveTurn] = [ArchiveTurn(question: "Bütçe ne olacak?", answer: "Yüzde 10 artacak [1].", sources: [budget])]
+        let scoped: [MeetingRecord] = try archiveScope(records: all, meetingIDs: ["a"])
+        let read: [ArchivePassage] = questionPassages(question: "Peki bunu kim üstlendi?", terms: ["budjetti", "kahvikone"], history: history, records: scoped, maxChars: 60_000)
+        #expect(!read.isEmpty && read.allSatisfy { $0.meetingID == "a" }, "\(read.map(\.id))")
+        let sources: [ArchivePassage] = citedAnswer(text: "Mikko [1][2][3][4].", passages: read).sources
+        #expect(sources.allSatisfy { $0.meetingID == "a" })
+        let unscoped: [ArchivePassage] = questionPassages(question: "Peki bunu kim üstlendi?", terms: ["kahvikone"], history: history, records: all, maxChars: 60_000)
+        #expect(unscoped.contains(budget))
+    }
+
+    // Kopyalanan cevap: kalın işaretleri atılır, [n] kalır, altında numaralı kaynak başlıkları (not ya da zaman).
+    @Test func copiedAnswerHasPlainTextAndSourceTitles() throws {
+        let passages: [ArchivePassage] = archivePassages(records: archive())
+        let note: ArchivePassage = try #require(passages.first { $0.meetingID == "b" && $0.kind == .note })
+        let transcript: ArchivePassage = try #require(passages.first { $0.meetingID == "a" && $0.kind == .transcript })
+        let answer: ArchiveAnswer = ArchiveAnswer(text: "**Bütçe** %10 artacak [1].\n- Mikko kahve makinesini alacak [2].", sources: [note, transcript])
+        let locale: Locale = Locale(identifier: "tr_TR")
+        let date: (Date) -> String = { (value: Date) -> String in value.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted).locale(locale)) }
+        #expect(archiveAnswerPlainText(answer: answer, sourcesHeading: "Kaynaklar", noteLabel: "not", locale: locale) == """
+        Bütçe %10 artacak [1].
+        - Mikko kahve makinesini alacak [2].
+
+        Kaynaklar
+        [1] Bütçe planlaması · \(date(note.meetingDate)) · not
+        [2] Haftalık ekip toplantısı · \(date(transcript.meetingDate)) · \(timestamp(seconds: transcript.startSec))
+        """)
+        #expect(archiveAnswerPlainText(answer: ArchiveAnswer(text: "Bilgi yok.", sources: []), sourcesHeading: "Kaynaklar", noteLabel: "not", locale: locale) == "Bilgi yok.")
+    }
+
+    // Etiketli soru geçmişe kapsamıyla yazılır ve aynen geri okunur (sohbet yeniden açılınca etiketler görünür).
+    @Test func askHistoryKeepsMentionScope() throws {
+        let directory: URL = try temporaryDirectory()
+        let source: ArchivePassage = try #require(archivePassages(records: archive()).first { $0.meetingID == "a" })
+        let turn: AskConversationTurn = AskConversationTurn(
+            id: UUID(), question: "Kim ne üstlendi?", scopeMeetingIDs: ["a", "b"], scopeTitles: ["Haftalık ekip toplantısı", "Bütçe planlaması"],
+            recipeTitle: nil, startedAt: Date(timeIntervalSince1970: 1_792_000_000), finishedAt: Date(timeIntervalSince1970: 1_792_000_006),
+            terms: [], readPassages: [], answer: "Mikko [1].", sources: [source], modelName: "Claude"
+        )
+        let conversation: AskConversation = askConversation(existing: nil, id: UUID(), turns: [turn], now: Date(timeIntervalSince1970: 1_792_000_006))
+        try saveAskConversation(conversation: conversation, directory: directory)
+        let loaded: AskHistoryLoadResult = try loadAskConversations(directory: directory)
+        #expect(loaded.failures.isEmpty)
+        #expect(loaded.conversations == [conversation])
+        #expect(loaded.conversations.first?.turns.first?.scopeMeetingIDs == ["a", "b"])
+        #expect(loaded.conversations.first?.turns.first?.scopeTitles == ["Haftalık ekip toplantısı", "Bütçe planlaması"])
+    }
+}
+
 extension CloudTests {
 @Suite struct ArchiveQuestionCloudTests {
     // Gerçek model: Türkçe soru, cevabı yalnızca Fince transkriptte olan bilgi; doğru kişi ve toplantı kaynak gösterilir.

@@ -140,17 +140,37 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
 }
 
 @Suite struct MentionTests {
-    // "@" bahsi: kelime başında başlar, e-postadaki "@" bahis değildir; seçilince yazılan kısım silinir.
-    @Test func mentionQueryAndRemoval() {
-        #expect(mentionQuery(text: "Bu toplantıda @perus") == "perus")
-        #expect(mentionQuery(text: "@") == "")
-        #expect(mentionQuery(text: "senol@example.com") == nil)
-        #expect(mentionQuery(text: "Merhaba") == nil)
-        #expect(removingMentionQuery(text: "Kararlar neler @peru") == "Kararlar neler ")
-        #expect(removingMentionQuery(text: "Kararlar neler") == "Kararlar neler")
+    // "@" bahsi imlecin önünde aranır: kelime başında başlar, e-postadaki "@" bahis değildir, araya satır sonu girmez.
+    @Test func mentionQueryAtCursor() {
+        let text: String = "Bu toplantıda @perus"
+        #expect(mentionQuery(text: text, cursor: text.utf16.count) == MentionQuery(start: 14, end: 20, query: "perus"))
+        #expect(mentionQuery(text: "@", cursor: 1) == MentionQuery(start: 0, end: 1, query: ""))
+        // İmleç ortadaki bahsin sonunda: sağdaki metin aramaya girmez.
+        let middle: String = "Kararlar @bütçe ve görevler"
+        #expect(mentionQuery(text: middle, cursor: 15)?.query == "bütçe")
+        // İmleç bahsin önünde ya da bahis yok.
+        #expect(mentionQuery(text: middle, cursor: 5) == nil)
+        #expect(mentionQuery(text: "senol@example.com", cursor: 17) == nil)
+        #expect(mentionQuery(text: "Merhaba", cursor: 7) == nil)
+        #expect(mentionQuery(text: "@bütçe\nnedir", cursor: 12) == nil)
+        // Metnin dışındaki ya da bir harfin ortasındaki (UTF-16) imleç bahis değildir.
+        #expect(mentionQuery(text: "@a", cursor: 3) == nil)
+        #expect(mentionQuery(text: "@a", cursor: -1) == nil)
+        let emoji: String = "👋 @ürün"
+        #expect(mentionQuery(text: emoji, cursor: 1) == nil)
+        #expect(mentionQuery(text: emoji, cursor: emoji.utf16.count) == MentionQuery(start: 3, end: 8, query: "ürün"))
     }
 
-    // Öneriler: başlıkta geçen (büyük/küçük ve aksan duyarsız), bitmiş, seçilmemiş toplantılar; en yeni önce.
+    // Seçilince yazılan "@…" silinir, imleç onun yerine gelir; iki yanda kalan çift boşluk teke iner.
+    @Test func removingMentionAtCursor() {
+        #expect(removingMention(text: "Kararlar neler @peru", cursor: 20) == MentionTextEdit(text: "Kararlar neler ", cursor: 15))
+        #expect(removingMention(text: "Kararlar @pro neler", cursor: 13) == MentionTextEdit(text: "Kararlar neler", cursor: 9))
+        #expect(removingMention(text: "@pro", cursor: 4) == MentionTextEdit(text: "", cursor: 0))
+        #expect(removingMention(text: "👋 @ürün nedir", cursor: 8) == MentionTextEdit(text: "👋 nedir", cursor: 3))
+        #expect(removingMention(text: "Kararlar neler", cursor: 14) == nil)
+    }
+
+    // Öneriler: başlıkta geçen (büyük/küçük, aksan ve ı/i duyarsız), bitmiş, seçilmemiş toplantılar; en yeni önce.
     @Test func mentionCandidatesFilterAndOrder() {
         let old: MeetingRecord = record(id: "a", startedAt: Date(timeIntervalSince1970: 1_000), status: .done, audioDeleted: false).with(folder: nil)
         let new: MeetingRecord = record(id: "b", startedAt: Date(timeIntervalSince1970: 2_000), status: .done, audioDeleted: false)
@@ -158,6 +178,29 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
         #expect(mentionCandidates(records: [old, new, processing], query: "PALA", excluding: [], limit: 5).map(\.id) == ["b", "a"])
         #expect(mentionCandidates(records: [old, new], query: "", excluding: ["b"], limit: 5).map(\.id) == ["a"])
         #expect(mentionCandidates(records: [old, new], query: "budjetti", excluding: [], limit: 5).isEmpty)
+    }
+
+    // Sıra: başlığı aramayla başlayan, sonra bir kelimesi aramayla başlayan, sonra içinde geçen; grup içinde en yeni önce.
+    // Notun başlığı da aranır.
+    @Test func mentionCandidatesRanking() {
+        func titled(_ id: String, _ title: String, _ seconds: Double) -> MeetingRecord {
+            MeetingRecord(
+                id: id, title: "Palaveri", startedAt: Date(timeIntervalSince1970: seconds), endedAt: nil, language: .finnish, status: .done,
+                failureMessage: nil, liveSegments: [], finalSegments: [], translations: [:], speakerNames: [:],
+                note: MeetingNote(title: title, summary: "", decisions: [], tasks: [], glossary: []),
+                audioDeleted: false, engine: .cloud, notice: nil, meNeedsFinalPass: nil
+            )
+        }
+        let records: [MeetingRecord] = [
+            titled("inside", "Yıllık planlama", 4_000), titled("word", "Haftalık Plan gözden geçirme", 3_000),
+            titled("prefix-old", "Planlama atölyesi", 1_000), titled("prefix-new", "PLAN onayı", 2_000), titled("other", "Bütçe", 5_000),
+        ]
+        // "Yıllık planlama" ve "Haftalık Plan…": bir kelimesi "plan" ile başlar (aynı grup, en yeni önce).
+        #expect(mentionCandidates(records: records, query: "plan", excluding: [], limit: 10).map(\.id) == ["prefix-new", "prefix-old", "inside", "word"])
+        #expect(mentionCandidates(records: records, query: "plan", excluding: [], limit: 2).map(\.id) == ["prefix-new", "prefix-old"])
+        #expect(mentionCandidates(records: records, query: "yillik", excluding: [], limit: 10).map(\.id) == ["inside"])
+        // Kelimenin ortasında geçenler son grupta.
+        #expect(mentionCandidates(records: records, query: "anla", excluding: [], limit: 10).map(\.id) == ["inside", "prefix-old"])
     }
 }
 

@@ -72,7 +72,18 @@ final class PhoneAsk {
         }
         let history: [ArchiveTurn] = archiveHistory(exchanges: exchanges)
         let id: UUID = UUID()
-        let scoped: [MeetingRecord] = store.meetings.filter { meetingIDs.contains($0.id) }
+        let scoped: [MeetingRecord]
+        do {
+            scoped = try archiveScope(records: store.meetings, meetingIDs: meetingIDs)
+        } catch {
+            // Etiketli toplantı silinmişse soru tüm arşive genişletilmez; soru ve neden sohbette görünür.
+            exchanges.append(ArchiveExchange(
+                id: id, question: trimmed, scopeMeetingIDs: meetingIDs, scopeTitles: [], recipeTitle: recipeTitle, startedAt: Date(),
+                phase: .failed(userFacingMessage(error: error)), terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: Date(),
+                modelName: nil
+            ))
+            return
+        }
         exchanges.append(ArchiveExchange(
             id: id, question: trimmed, scopeMeetingIDs: scoped.map(\.id), scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
             terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
@@ -233,6 +244,8 @@ struct AskTab: View {
     let store: PhoneStore
     let router: PhoneRouter
     @State private var question: String = ""
+    /// Soru alanındaki seçim: `@` bahsi imlecin önünde aranır; alan odakta değilken nil.
+    @State private var selection: TextSelection?
     /// `@` ile etiketlenen toplantılar: soru yalnız onlara sorulur; soru gönderilince alandan kalkar.
     @State private var mentioned: [MeetingRecord] = []
     @FocusState private var isFocused: Bool
@@ -278,13 +291,13 @@ struct AskTab: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
-                    if isMentioning {
+                    if isMentioning, let cursor {
+                        // İmleç çizim anındaki haliyle alınır: dokunuş sırasında odak kaybolsa da doğru bahis silinir.
                         MentionSuggestions(
                             candidates: mentionMatches,
                             highlighted: -1
                         ) { (record: MeetingRecord) -> Void in
-                            withAnimation(.smooth(duration: 0.2)) { mentioned.append(record) }
-                            question = removingMentionQuery(text: question)
+                            pick(record: record, cursor: cursor)
                         }
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                     } else if isPickingRecipe {
@@ -405,13 +418,12 @@ struct AskTab: View {
                 mentioned.isEmpty
                     ? (ask.exchanges.isEmpty ? "Sor… (@ toplantı, / tarif)" : "Devam sorusu sor…")
                     : "Etiketlenen toplantılara sor…",
-                text: $question, axis: .vertical
+                text: $question, selection: $selection, axis: .vertical
             )
                 .appFont(size: 16, weight: .regular)
+                // Return yeni satır ekler (çok satırlı soru); gönderme sağdaki düğmeyle.
                 .lineLimit(1...5)
                 .focused($isFocused)
-                .submitLabel(.send)
-                .onSubmit(send)
                 .padding(.vertical, 8)
             Button {
                 if ask.isAnswering {
@@ -445,22 +457,53 @@ struct AskTab: View {
         .shadow(color: .black.opacity(0.08), radius: 14, y: 4)
     }
 
-    private var mentionMatches: [MeetingRecord] {
-        mentionCandidates(records: store.meetings, query: mentionQuery(text: question) ?? "", excluding: mentioned.map(\.id), limit: 5)
+    /// İmlecin konumu (UTF-16); alan odakta değilse ya da birden çok seçim varsa nil.
+    private var cursor: Int? {
+        guard let selection, case .selection(let range) = selection.indices else {
+            return nil
+        }
+        return range.upperBound.utf16Offset(in: question)
     }
 
+    /// İmlecin önündeki `@` bahsi.
+    private var mention: MentionQuery? {
+        cursor.flatMap { (cursor: Int) -> MentionQuery? in mentionQuery(text: question, cursor: cursor) }
+    }
+
+    /// `@` önerileri (en fazla 5); bahis yoksa boş.
+    private var mentionMatches: [MeetingRecord] {
+        guard let mention else {
+            return []
+        }
+        return mentionCandidates(records: store.meetings, query: mention.query, excluding: mentioned.map(\.id), limit: 5)
+    }
+
+    /// "/" ile eşleşen tarifler; "/" yoksa boş.
     private var recipeMatches: [Recipe] {
-        recipeCandidates(recipes: ask.recipes, query: recipeQuery(text: question) ?? "")
+        guard let query = recipeQuery(text: question) else {
+            return []
+        }
+        return recipeCandidates(recipes: ask.recipes, query: query)
     }
 
     /// `@` önerileri açık: eşleşen toplantı var.
     private var isMentioning: Bool {
-        mentionQuery(text: question) != nil && !mentionMatches.isEmpty
+        !mentionMatches.isEmpty
     }
 
     /// "/" önerileri açık: eşleşen tarif var.
     private var isPickingRecipe: Bool {
-        recipeQuery(text: question) != nil && !recipeMatches.isEmpty
+        !recipeMatches.isEmpty
+    }
+
+    /// Toplantıyı etikete ekler; yazılan "@…" silinir, imleç onun yerine gelir.
+    private func pick(record: MeetingRecord, cursor: Int) {
+        guard let edit = removingMention(text: question, cursor: cursor) else {
+            preconditionFailure("Toplantı önerisi seçildi ama imlecin önünde @ bahsi yok")
+        }
+        withAnimation(.smooth(duration: 0.2)) { mentioned.append(record) }
+        question = edit.text
+        selection = TextSelection(insertionPoint: String.Index(utf16Offset: edit.cursor, in: edit.text))
     }
 
     private func send() {
