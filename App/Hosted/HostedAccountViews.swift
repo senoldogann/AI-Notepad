@@ -184,6 +184,8 @@ struct HostedAccountSettings: View {
                 NoticeText("Ödeme alınamadı; erişimin \(hostedDayText(date: endsAt)) tarihine kadar sürer. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
             case .expired(let endedAt):
                 Text("Aboneliğin \(hostedDayText(date: endedAt)) tarihinde sona erdi; toplantıların ve notların bu Mac'te.")
+            case .paymentOverdue:
+                NoticeText("Ödeme alınamadı; kartını güncelleyene dek yeni toplantı başlatılamaz. \"Hesabı yönet\"ten kartını güncelle.", severity: .attention)
             }
         } control: {
             HStack(spacing: 8) {
@@ -198,7 +200,7 @@ struct HostedAccountSettings: View {
         switch status {
         case .subscribed, .complimentary, .ending, .grace:
             HostedReferralRow(account: account)
-        case .trial, .expired:
+        case .trial, .expired, .paymentOverdue:
             EmptyView()
         }
         HostedSignOutRow(account: account, isMeetingInFlight: isMeetingInFlight)
@@ -276,6 +278,10 @@ struct HostedSignInStep: View {
                         .foregroundStyle(Theme.muted)
                 case .expired:
                     Text("Aboneliğin sona erdi; yeni kayıt için yeniden abone ol.")
+                        .appFont(size: 13, weight: .regular)
+                        .foregroundStyle(Theme.muted)
+                case .paymentOverdue:
+                    Text("Ödeme alınamadı; kartını güncelleyene dek yeni toplantı başlatılamaz.")
                         .appFont(size: 13, weight: .regular)
                         .foregroundStyle(Theme.muted)
                 }

@@ -104,6 +104,9 @@ private struct CrashReportsList: View {
                     if let problem = center.problem {
                         Text(problem).foregroundStyle(.orange)
                     }
+                    if !center.unreadableFiles.isEmpty {
+                        Button("Okunamayanları sil", role: .destructive) { center.deleteUnreadable() }
+                    }
                 }
             }
         }

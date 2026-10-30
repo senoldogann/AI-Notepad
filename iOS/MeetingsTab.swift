@@ -144,7 +144,7 @@ struct MeetingReadView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     hero(paragraphs: paragraphs)
                     // Çalma hatası (dosya açılamadı, ses oturumu) da burada görünür.
-                    let messages: [String] = [errorMessage, player.errorMessage].compactMap { $0 }
+                    let messages: [String] = [errorMessage, player.errorMeetingID == record.id ? player.errorMessage : nil].compactMap { $0 }
                     if !messages.isEmpty {
                         PhoneErrorList(messages: messages)
                     }

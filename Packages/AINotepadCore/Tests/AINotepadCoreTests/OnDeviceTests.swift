@@ -95,6 +95,24 @@ import Testing
         #expect(onDeviceDefaultMeetingLanguage(preferredLanguages: ["et-EE"], languageCodes: codes) == .english)
         #expect(onDeviceDefaultMeetingLanguage(preferredLanguages: ["az-AZ"], languageCodes: codes) == .english)
         #expect(onDeviceDefaultMeetingLanguage(preferredLanguages: [], languageCodes: codes) == .english)
+        // Abonelik sürümünde model sınırı yok: cihazın dili toplantı dillerindeyse o, yoksa İngilizce.
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["fi-FI"]) == .finnish)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["et-EE"]) == .estonian)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["nb-NO"]) == .norwegian)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: ["xx-YY"]) == .english)
+        #expect(deviceDefaultMeetingLanguage(preferredLanguages: []) == .english)
+    }
+
+    // LLM yoksa notu olan toplantı "Hata"ya dönmez (eski not kalır); notu olmayan toplantı "Hata"da kalır.
+    @Test func missingLLMKeepsExistingNote() async throws {
+        let note: MeetingNote = MeetingNote(title: "T", summary: "Ö", decisions: [], tasks: [], glossary: [])
+        let kept: MeetingRecord = await regenerateNote(
+            record: meeting(id: "n", language: .english).with(note: note), directory: try temporaryDirectory(), llm: nil, userName: "Ada", language: .turkish
+        )
+        #expect(kept.status == .done)
+        #expect(kept.note == note)
+        let fresh: MeetingRecord = await regenerateNote(record: meeting(id: "m", language: .english), directory: try temporaryDirectory(), llm: nil, userName: "Ada", language: .turkish)
+        #expect(fresh.status == .failed)
     }
 
     // Arşiv sorusu: Fince toplantılar okunmaz ve model satırında yazılır; okunacak toplantı kalmazsa ya da cevap dili

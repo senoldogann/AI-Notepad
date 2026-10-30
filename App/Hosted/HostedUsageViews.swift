@@ -133,6 +133,8 @@ struct HostedUsageCard: View {
                 subscriber
             case .expired(let endedAt):
                 expired(endedAt: endedAt)
+            case .paymentOverdue:
+                paymentOverdue
             }
         }
         .padding(18)
@@ -224,6 +226,23 @@ struct HostedUsageCard: View {
 }
 
 extension HostedUsageCard {
+    /// Yenileme ödemesi alınamadı ve ek süre bitti: abonelik Stripe'ta sürer, kart "Hesabı yönet"ten güncellenir (yeni
+    /// abonelik açılamaz).
+    fileprivate var paymentOverdue: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ödeme alınamadı")
+                .appFont(size: 17, weight: .medium)
+                .foregroundStyle(Theme.ink)
+            Text("Yenileme ödemesi alınamadı ve ek süre bitti. Toplantıların ve notların bu Mac'te; yeni kayıt için kartını güncelle.")
+                .appFont(size: 12, weight: .regular)
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Hesabı yönet") { Task { await account.manageSubscription() } }
+                .buttonStyle(.pillPrimary)
+                .disabled(account.isWorking)
+        }
+    }
+
     /// Abonelik sona erdi: toplantılar ve notlar yerinde; yeni kayıt için yeniden abone ol.
     @ViewBuilder
     fileprivate func expired(endedAt: Date) -> some View {
@@ -260,6 +279,10 @@ struct HostedSidebarUsage: View {
                         HostedTrialSegments(left: left, total: total, height: 4)
                     case .expired:
                         Text("Abonelik sona erdi")
+                            .appFont(size: 12, weight: .regular)
+                            .foregroundStyle(meterFull)
+                    case .paymentOverdue:
+                        Text("Ödeme alınamadı")
                             .appFont(size: 12, weight: .regular)
                             .foregroundStyle(meterFull)
                     case .subscribed, .complimentary, .ending, .grace:

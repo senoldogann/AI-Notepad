@@ -546,7 +546,8 @@ final class HostedAccount {
         switch block {
         case .trialEnded, .subscriptionEnded:
             return true
-        case .monthlyCapReached:
+        case .monthlyCapReached, .paymentOverdue:
+            // Ödeme alınamadıysa yeni abonelik açılamaz (sunucu `subscription_exists` der): kart "Hesabı yönet"ten güncellenir.
             return false
         }
     }
@@ -614,7 +615,7 @@ final class HostedAccount {
             switch hostedPlanStatus(entitlements: entitlements) {
             case .subscribed, .complimentary, .ending, .grace:
                 return true
-            case .trial, .expired:
+            case .trial, .expired, .paymentOverdue:
                 break
             }
             do {
@@ -872,6 +873,10 @@ final class HostedAccount {
             } catch let error as HostedAPIError where error.code == .subscriptionExists {
                 NSWorkspace.shared.open(try await client.portalURL())
                 await self.markAwaitingBillingReturn()
+            } catch let error as HostedAPIError where error.code == .complimentarySubscription {
+                // Hesaba bu arada ücretsiz erişim verildi: ödenecek bir şey yok; `perform` hak durumunu yeniler ve
+                // arayüz "Ücretsiz tam erişim" gösterir.
+                accountLogger.info("Abone olma gereksiz, hesapta ücretsiz erişim var, kod: \(error.rawCode, privacy: .public)")
             }
         }
         return errorMessage == nil
@@ -1159,6 +1164,8 @@ final class HostedAccount {
             String(localized: "Bu ayki kullanım sınırın dolduğu için bu toplantı işlenemedi. Ses bu Mac'te kalır; sınır sıfırlanınca kendiliğinden işlenir.")
         case .subscriptionEnded:
             String(localized: "Aboneliğin sona erdiği için bu toplantı işlenemedi. Ses bu Mac'te kalır; yeniden abone olunca kendiliğinden işlenir.")
+        case .paymentOverdue:
+            String(localized: "Ödeme alınamadığı için bu toplantı işlenemedi. Ses bu Mac'te kalır; kartını \"Hesabı yönet\"ten güncelleyince kendiliğinden işlenir.")
         case .none:
             String(localized: "Bu toplantı şimdilik işlenemedi; kendiliğinden yeniden denenecek.")
         }

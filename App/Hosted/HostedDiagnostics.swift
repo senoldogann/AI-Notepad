@@ -57,6 +57,8 @@ private func hostedPlanDiagnostics(entitlements: HostedEntitlements) -> [Diagnos
         return [DiagnosticsItem(label: planLabel, value: String(localized: "Ödeme bekleniyor, ek süre bitişi \(endsAt.formatted(.iso8601))")), usage]
     case .expired(let endedAt):
         return [DiagnosticsItem(label: planLabel, value: String(localized: "Abonelik sona erdi: \(endedAt.formatted(.iso8601))")), usage]
+    case .paymentOverdue:
+        return [DiagnosticsItem(label: planLabel, value: String(localized: "Ödeme alınamadı, ek süre bitti")), usage]
     }
 }
 

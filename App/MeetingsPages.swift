@@ -9,7 +9,7 @@ private let meetingsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad
 // MARK: Liste
 
 /// Toplantı listesi (ana pencerenin Toplantılar bölümünde solda): arama, süzgeç ve tarihe göre gruplu (Bugün, Dün,
-/// Bu hafta, aylar) yeniden eskiye liste.
+/// Önceki 7 gün, aylar) yeniden eskiye liste.
 struct MeetingsListPage: View {
     let model: AppModel
     /// Açık toplantı (satırı vurgulanır).
@@ -2571,7 +2571,7 @@ private struct TranscriptSection: View {
     var body: some View {
         let markedIDs: Set<String> = highlightedParagraphIDs(paragraphs: paragraphs, highlights: record.highlights ?? [])
         LazyVStack(alignment: .leading, spacing: 2) {
-            if let error = player.errorMessage {
+            if player.errorMeetingID == record.id, let error = player.errorMessage {
                 NoticeText(error, severity: .error).appFont(size: 11, weight: .regular)
             }
             ForEach(Array(paragraphs.enumerated()), id: \.element.id) { (item: (offset: Int, element: TranscriptParagraph)) in

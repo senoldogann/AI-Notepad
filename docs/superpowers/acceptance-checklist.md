@@ -156,5 +156,5 @@ Otomatik testler (`swift test`, `AINOTEPAD_CLOUD_TESTS=1`, `AINOTEPAD_MODEL_TEST
 ## Dağıtım: DMG ve Gatekeeper
 - [ ] `scripts/release.sh` `AI-Notepad-0.1.3.dmg` üretiyor (adda tek sürüm), noter onayı ekli.
 - [ ] Temiz bir kullanıcı hesabında DMG'yi aç, uygulamayı Uygulamalar'a sürükle, aç: Gatekeeper uyarısız açıyor (`spctl --assess` geçiyor).
-- [ ] Uygulamanın içinde lisanslar var: `Contents/Resources/NOTICE`, `WhisperKit-LICENSE.txt`, `WhisperKit-NOTICES.txt`, `Inter-OFL.txt`.
+- [ ] Uygulamanın içinde lisanslar var: `Contents/Resources/NOTICE`, `WhisperKit-LICENSE.txt`, `WhisperKit-NOTICES.txt`, `Sparkle-LICENSE.txt` (yalnız Mac), `Inter-OFL.txt`.
 - [ ] Güncelleme kurulumunda izinler (mikrofon, sistem sesi) korunuyor; `scripts/install-app.sh` kayıt ya da işleme sürerken kurmayı reddediyor.

@@ -92,7 +92,7 @@ func resolvedErrorMessages() -> [String] {
     switch hostedPlanStatus(entitlements: entitlements) {
     case .subscribed, .complimentary, .ending, .grace:
         return session + hostedMessagesResolvedBySubscription()
-    case .trial, .expired:
+    case .trial, .expired, .paymentOverdue:
         return session
     }
     #else

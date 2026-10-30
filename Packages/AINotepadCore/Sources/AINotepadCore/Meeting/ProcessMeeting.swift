@@ -294,6 +294,10 @@ public func regenerateNote(record: MeetingRecord, directory: URL, llm: LLMProvid
         return record.status == .failed ? record : record.with(status: .done, failureMessage: nil)
     }
     guard let llm else {
+        // Notu olan toplantı (yenileme) "Hata"ya dönmez: eski not kalır (hata yolundaki kuralla aynı).
+        if record.note != nil {
+            return record.with(status: .done, failureMessage: String(localized: "Not yenilenemedi: LLM anahtarı ya da ayarı yok. Önceki not gösteriliyor."))
+        }
         return record.with(status: .failed, failureMessage: String(localized: "Not oluşturulamadı: LLM anahtarı ya da ayarı yok. Ayarlar'dan ekleyip \"Notu yenile\"ye bas."))
     }
     do {

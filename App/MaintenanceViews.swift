@@ -226,7 +226,12 @@ struct CrashReportsSettings: View {
                 NoticeText(problem, severity: .error)
             }
         } control: {
-            Button(isExpanded ? "Çökme raporlarını gizle" : "Çökme raporlarını göster") { isExpanded.toggle() }
+            HStack(spacing: 8) {
+                if !center.unreadableFiles.isEmpty {
+                    Button("Okunamayanları sil") { center.deleteUnreadable() }
+                }
+                Button(isExpanded ? "Çökme raporlarını gizle" : "Çökme raporlarını göster") { isExpanded.toggle() }
+            }
         }
         if isExpanded {
             if center.reports.isEmpty {

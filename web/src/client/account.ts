@@ -146,7 +146,18 @@ function subscriptionText(subscription: SubscriptionInfo, text: ClientCopy, loca
   if (subscription.access === "grace") {
     return fill(text.subscriptionGrace, { date: formatDate(subscription.graceEndsAt, locale) });
   }
+  if (isPaymentOverdue(subscription)) {
+    return text.subscriptionPaymentOverdue;
+  }
   return text.subscriptionEnded;
+}
+
+/**
+ * Yenileme ödemesi alınamadı ve ek süre bitti mi: Stripe'ta abonelik sürer (`past_due`/`unpaid`), erişim yok; kart
+ * "Manage subscription"dan güncellenince erişim döner. Saf fonksiyondur.
+ */
+function isPaymentOverdue(subscription: SubscriptionInfo): boolean {
+  return subscription.access === "none" && !subscription.complimentary && (subscription.status === "past_due" || subscription.status === "unpaid");
 }
 
 /** Plan kartının durum satırı: abonelik anlatılıyorsa abonelik, değilse deneme. Saf fonksiyondur. */
@@ -171,6 +182,9 @@ function planPill(me: Entitlements, text: ClientCopy, now: Date): Pill {
       return { text: text.pillCanceling, tone: "warn" };
     }
     return { text: text.pillActive, tone: "ok" };
+  }
+  if (subscription !== null && isPaymentOverdue(subscription)) {
+    return { text: text.pillGrace, tone: "warn" };
   }
   return trialPhase(me, now) === "ended" ? { text: text.pillEnded, tone: "plain" } : { text: text.pillTrial, tone: "plain" };
 }
@@ -278,7 +292,7 @@ function inviteErrorCode(error: unknown): keyof ClientCopy["inviteErrors"] | nul
   if (!(error instanceof ApiRequestError)) {
     return null;
   }
-  const codes: readonly (keyof ClientCopy["inviteErrors"])[] = ["referral_invalid", "referral_self", "referral_not_eligible", "referral_unavailable"];
+  const codes: readonly (keyof ClientCopy["inviteErrors"])[] = ["referral_invalid", "referral_self", "referral_not_eligible", "referral_unavailable", "referral_limit_reached"];
   return codes.find((code: keyof ClientCopy["inviteErrors"]): boolean => code === error.code) ?? null;
 }
 
@@ -348,8 +362,8 @@ async function applyInvite(form: CheckoutForm, text: ClientCopy): Promise<boolea
       showInviteStatus(null, "plain");
       throw error;
     }
-    if (reason !== "referral_unavailable") {
-      // Bu hesapta kullanılamayan kod saklanmaz: sonraki ziyarette yeniden denenmez.
+    if (reason !== "referral_unavailable" && reason !== "referral_limit_reached") {
+      // Bu hesapta kullanılamayan kod saklanmaz: sonraki ziyarette yeniden denenmez (geçici redler saklanır).
       forgetInviteCode();
     }
     showInviteStatus(text.inviteErrors[reason], "error");
@@ -473,14 +487,25 @@ function complimentaryReferralStatsText(referral: ReferralInfo, text: ClientCopy
   return fill(text.referralStatsComplimentary, { joined: String(referral.joined) });
 }
 
-/** Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) görünür. `stats` kartın sayı satırıdır. */
+/**
+ * Davet kartını çizer: program açık ve kod varsa (abonelik erişimi) görünür. Davetin ücretsiz ilk ayındaki hesapta sunucu
+ * kod vermez: kart kodsuz görünür ve kodun ilk ücretli aydan sonra açılacağını söyler. `stats` kartın sayı satırıdır.
+ */
 function renderReferral(referral: ReferralInfo, stats: string, text: ClientCopy, notice: HTMLElement): void {
   const card: HTMLElement = element("referral-card", HTMLElement);
+  const share: HTMLElement = element("referral-share", HTMLElement);
   const inviteUrl: string | null = referral.inviteUrl;
-  if (!referral.enabled || referral.code === null || inviteUrl === null) {
+  if (!referral.enabled) {
     card.classList.add("hidden");
     return;
   }
+  if (referral.code === null || inviteUrl === null) {
+    share.classList.add("hidden");
+    element("referral-stats", HTMLElement).textContent = text.referralCodeAfterFirstPayment;
+    card.classList.remove("hidden");
+    return;
+  }
+  share.classList.remove("hidden");
   element("referral-code", HTMLElement).textContent = referral.code;
   element("referral-stats", HTMLElement).textContent = stats;
   const copied: HTMLElement = element("referral-copied", HTMLElement);

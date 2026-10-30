@@ -465,7 +465,8 @@ export async function createCheckout(db: D1Database, platform: Platform, config:
 /**
  * Hesap yönetimi adresi. Süren ücretsiz erişimde (`complimentary.ts`) Stripe'ta yönetilecek bir şey yoktur: Stripe
  * çağrılmaz, sitedeki hesap sayfası döner (orada "Free access" yazar). Yayındaki uygulama portal adresini yalnızca
- * açar; hata kodu dönülseydi genel bir hata gösterirdi. Müşteri yoksa `subscription_required`.
+ * açar; hata kodu dönülseydi genel bir hata gösterirdi. Bitmiş ücretsiz erişimde Stripe müşterisi yoksa yine hesap
+ * sayfası döner. Başka hesapta müşteri yoksa `subscription_required`.
  */
 export async function createPortal(db: D1Database, platform: Platform, config: Config, userId: string): Promise<string> {
   const current: SubscriptionState | null = await subscriptionState(db, userId);
@@ -474,6 +475,11 @@ export async function createPortal(db: D1Database, platform: Platform, config: C
     return `${config.siteOrigin}/account`;
   }
   const customer: string | null = await storedCustomerId(db, userId);
+  if (customer === null && current !== null && current.complimentary) {
+    // Bitmiş ücretsiz erişim, Stripe müşterisi yok: eski uygulama sürümleri de genel hata yerine hesap sayfasını açar.
+    log("info", "portal_complimentary_account_page", { userId });
+    return `${config.siteOrigin}/account`;
+  }
   if (customer === null) {
     throw new ApiError("subscription_required", "Henüz bir aboneliğin yok.");
   }

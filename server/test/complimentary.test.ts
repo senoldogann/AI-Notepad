@@ -250,6 +250,9 @@ describe("ücretsiz tam erişim", () => {
     const stripe: FakeStripe = stubStripeApi(harness);
     const session: Session = await refreshed(harness, user);
     expect((await me(harness, session)).plan).toBe("trial");
+    // Bitmiş ücretsiz erişimde Stripe müşterisi yoksa Portal yine hesap sayfasıdır (eski uygulamalar genel hata göstermez).
+    const ended: Response = await harness.call(req("POST", "/v1/billing/portal", { token: session.accessToken }));
+    expect((await ended.json<{ url: string }>()).url).toBe("http://localhost:8788/account");
     expect((await harness.call(req("POST", "/v1/billing/checkout", { token: session.accessToken, json: { plan: "monthly" } }))).status).toBe(200);
     expect(stripe.checkoutForms).toHaveLength(1);
   });

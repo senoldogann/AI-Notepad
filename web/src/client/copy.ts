@@ -32,12 +32,16 @@ export interface ClientCopy {
     readonly referral_self: string;
     readonly referral_not_eligible: string;
     readonly referral_unavailable: string;
+    /** Kodun sahibinin ödül bekleyen davetleri sınırda (`referral_limit_reached`). */
+    readonly referral_limit_reached: string;
   };
   /** Davet kodu durum satırı: denetleniyor, plan başına uygulanan indirim. */
   readonly inviteChecking: string;
   readonly inviteApplied: { readonly monthly: string; readonly yearly: string };
   /** Abonenin davet kartındaki sayılar: `{joined}`, `{rewarded}`, `{pending}`, `{left}`, `{cap}`. */
   readonly referralStats: string;
+  /** Davetin ücretsiz ilk ayındaki hesap: kod ilk ücretli faturadan sonra açılır. */
+  readonly referralCodeAfterFirstPayment: string;
   /** Bekleyen ödülün tahmini tarihi: `{date}`. */
   readonly referralNextReward: string;
   /** Ücretsiz erişimli hesapta davet kartı: `{joined}`. */
@@ -68,6 +72,8 @@ export interface ClientCopy {
   readonly subscriptionCanceling: string;
   readonly subscriptionGrace: string;
   readonly subscriptionEnded: string;
+  /** Yenileme ödemesi alınamadı ve ek süre bitti: abonelik Stripe'ta sürer, kart güncellenince erişim döner. */
+  readonly subscriptionPaymentOverdue: string;
   /** Ücretsiz erişim: ödeme ve yönetilecek bir şey yok. */
   readonly subscriptionComplimentary: string;
   /** Bitiş tarihli ücretsiz erişim: `{date}`. */
@@ -253,6 +259,7 @@ export const clientCopy: ClientCopy = {
     referral_self: "That's your own invite code; share it with a friend instead.",
     referral_not_eligible: "Invite codes are for new subscribers, so this account can't use one. You can still subscribe without it.",
     referral_unavailable: "Invite codes can't be used right now. You can still subscribe without one.",
+    referral_limit_reached: "This invite code can't take new friends right now. Try again later, or subscribe without it.",
   },
   inviteChecking: "Checking the code…",
   inviteApplied: {
@@ -261,6 +268,7 @@ export const clientCopy: ClientCopy = {
   },
   referralStats: "{joined} joined · {rewarded} rewarded · {pending} pending · {left} of {cap} rewards left this year",
   referralNextReward: "next reward around {date}",
+  referralCodeAfterFirstPayment: "Your invite code appears after your first paid month.",
   referralStatsComplimentary: "{joined} joined. Your friends still get their invite discount; your account is already free, so the $5.99 rewards don't apply.",
   plan: {
     trial: "Free trial",
@@ -278,6 +286,7 @@ export const clientCopy: ClientCopy = {
   subscriptionCanceling: "Cancelled; you can use it until {date}. It won't renew.",
   subscriptionGrace: "Payment failed. Update your card by {date}; you keep access until then.",
   subscriptionEnded: "Your subscription has ended.",
+  subscriptionPaymentOverdue: "Payment failed. Update your card in Manage subscription to keep recording.",
   subscriptionComplimentary: "Full access, free of charge. Nothing to pay or manage.",
   subscriptionComplimentaryUntil: "Full access, free of charge until {date}. Nothing to pay.",
   subscriptionComplimentaryEnded: "Your free access has ended. Subscribe to start new meetings.",

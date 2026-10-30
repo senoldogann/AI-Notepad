@@ -494,7 +494,11 @@ private struct GeneralSettings: View {
                     .labelsHidden()
             }
             SettingsRow(title: Text("Sesleri sakla")) {
+                #if HOSTED_EDITION
                 Text("Süre dolunca ses dosyaları silinir; metin ve not kalır.")
+                #else
+                Text("Süre dolunca ses dosyaları silinir; metin ve not kalır. iCloud eşitlemesi açıksa iPhone'da kaydedilen toplantıların sesi de bu süreye göre silinir.")
+                #endif
             } control: {
                 SettingsMenu(selection: $retentionDays, options: [7, 14, 30, 60, 90, 180, 365].map { (days: Int) -> (Int, Text) in
                     (days, Text("\(days) gün"))
@@ -876,7 +880,7 @@ private struct LLMSettings: View {
     @AppStorage(SettingsKey.llmFastEffort) private var openAIFastEffort: String = ""
     @AppStorage(SettingsKey.llmSmartEffort) private var openAISmartEffort: String = ""
     @AppStorage(SettingsKey.claudeFastModel) private var claudeFastModel: String = ClaudeModel.haiku.rawValue
-    @AppStorage(SettingsKey.claudeSmartModel) private var claudeSmartModel: String = ClaudeModel.opus.rawValue
+    @AppStorage(SettingsKey.claudeSmartModel) private var claudeSmartModel: String = ClaudeModel.haiku.rawValue
     @AppStorage(SettingsKey.claudeFastEffort) private var claudeFastEffort: String = LLMEffort.low.rawValue
     @AppStorage(SettingsKey.claudeSmartEffort) private var claudeSmartEffort: String = LLMEffort.medium.rawValue
     @State private var testResult: ConnectionTest = .idle

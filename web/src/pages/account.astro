@@ -135,7 +135,7 @@ const helpLinks: readonly { readonly href: string; readonly label: string }[] = 
           <a class="text-link" href={routes.invite}>{text.referral.howItWorks} <Icon name="arrow-right" size={16} class="" /></a>
         </div>
         <Film palette="rose" layout="clouds-right" class="referral__cover">
-          <div class="glass referral__share">
+          <div id="referral-share" class="glass referral__share">
             <span class="referral__code-label">{text.referral.codeLabel}</span>
             <span id="referral-code" class="referral__code tabular"></span>
             <button id="referral-copy" class="button button--primary button--small referral__copy" type="button">{text.referral.copyLink}</button>
