@@ -33,7 +33,9 @@ sırrından farklı), `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `STRIPE_SECRET_
 `DEVICECHECK_POLICY=required` iken: Apple Developer → Keys'te DeviceCheck yetkili anahtarın `.p8` dosyasının içeriği,
 olduğu gibi: `npx wrangler secret put DEVICECHECK_PRIVATE_KEY --env production < AuthKey_XXXXXXXXXX.p8`),
 `DEEPGRAM_API_KEY` (yalnızca `DEEPGRAM_POLICY=on` iken: Deepgram konsolunda Member ya da üstü yetkili anahtar; yalnızca
-kısa ömürlü jeton vermek için kullanılır).
+kısa ömürlü jeton vermek için kullanılır), `GITHUB_BLOG_TOKEN` (isteğe bağlı; yönetim panelinden blog yayını, aşağıda
+"Blog yayını"; girilmemişse blog uçları `503 blog_unavailable`; girilmişse boşluksuz ve en az 20 karakter olmalı, değilse
+her istek `500`).
 `TRIAL_HASH_SECRET` kimlik deneme defterinin, deneme IP özetlerinin ve davet edilenin kart parmak izi özetinin HMAC
 sırrıdır (webhook da okur); değiştirilirse defterdeki eski satırlar yeni girişlerle eşleşmez (silinmiş hesabın kimliği
 denemeyi yeniden alabilir, eski davetlerin kartları yeniden kullanılabilir). `ACCESS_TOKEN_SECRET`
@@ -62,6 +64,7 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `DEVICECHECK_ENVIRONMENT` | `production` (`api.devicecheck.apple.com`) ya da `development` (`api.development.devicecheck.apple.com`); üretimde `required` iken `production` olmalı. |
 | `DEEPGRAM_POLICY` | Deepgram canlı metni için tek anahtar: `on` (üretim) ya da `off` (yerel, testler, acil kapatma: jeton verilmez, `/v1/me` → `liveEngine: "whisperkit"`, uygulama canlı metni Mac'te üretir). Ayrıntı: aşağıda "Deepgram canlı metni". |
 | `DEEPGRAM_BUDGET_USD`, `DEEPGRAM_USD_PER_MINUTE` | Ücretsiz Deepgram kredisinin canlı metne ayrılan ömür boyu bütçesi (üretim 185; kredinin kalanı payı) ve akış dakikası fiyatı (Nova-3 çok dilli liste fiyatı 0,0092; temkinli). `GET /v1/admin/stats` → `deepgram: {policy, budgetUsd, estimatedUsd, percent, streamMinutes, meetings, openMeetings, usdPerMinute}`. |
+| `GITHUB_BLOG_REPO`, `GITHUB_BLOG_BRANCH` | Blog yazılarının deposu (`sahip/ad`, `senoldogann/AI-Notepad`) ve yazıların commit'lendiği dal (`main`); yazılar `web/src/content/blog/*.md`. Ayrıntı: aşağıda "Blog yayını". |
 | `DEVICECHECK_TEAM_ID`, `DEVICECHECK_KEY_ID` | Yetki JWT'sinin `iss`'i (Apple ekip kimliği) ve `kid`'i (DeviceCheck anahtar kimliği); `required` iken 10 karakterlik Apple biçiminde olmalı (yer tutucu `DEVICECHECK_KEY_ID_PENDING` geçmez). |
 
 Hız sınırları `ratelimits`'tedir (süre 10 ya da 60 sn): `AUTH_IP_LIMITER` (giriş, IP başına 10/dk), `API_IP_LIMITER`
@@ -120,6 +123,35 @@ Cron'da) ilk jetondan bitişe geçen gerçek süreye indirilir. Tahmin `DEEPGRAM
 alamaz (`503 deepgram_unavailable`, `deepgram_budget_exhausted` uyarısı) ve `/v1/me` `liveEngine: "whisperkit"` der;
 jeton almış toplantının yeniden bağlanmaları sürer. Bütçeyi en çok bir toplantının penceresi kadar (4 saat × 2 akış ≈
 4,4 $) aşabilir. %80 ve %95 aşılınca `deepgram_budget_threshold` alarmı. `DEEPGRAM_POLICY=off` iken de jeton verilmez.
+
+## Blog yayını
+
+Yönetim panelinin Blog görünümü sitenin blog yazılarını (`web/src/content/blog/<kısa ad>.md`) GitHub üzerinden yönetir
+(`src/blog.ts`): okuma ve yazma GitHub REST contents API'siyle, liste tek GraphQL isteğiyle (yazı başına istek Worker'ın
+alt istek sınırına takılırdı). Her kayıt `GITHUB_BLOG_BRANCH` dalına bir commit'tir (`blog: <başlık>`, silmede
+`blog: remove <kısa ad>`); commit sitenin yayın iş akışını tetikler (`.github/workflows/deploy-web.yml`; ayrıca her gün
+06:00 UTC'de derlenir, zamanlanmış yazılar tarihlerinde yayımlanır). Haftalık akış: yaz → zamanla (gelecek tarihli kaydet)
+→ günlük derleme yayımlar → paylaş (panelde X, LinkedIn, Bluesky); ayrıntı `web/README.md` "Haftalık blog".
+
+- **Kurallar** içerik şemasıyla (`web/src/content.config.ts`) aynıdır: başlık 10–90, açıklama 50–170 karakter, yazar boş
+  değil, `published` gerçek bir `YYYY-MM-DD` günü, `draft` mantıksal, gövde boş değil ve en çok 60 000 karakter, kısa ad
+  `^[a-z0-9]+(-[a-z0-9]+)*$` ve en çok 80 karakter. Başlık, açıklama ve yazarda denetim karakteri (satır sonu dahil)
+  olamaz; gövdede `\r` ve sekme/satır sonu dışı denetim karakteri olamaz.
+- **Dosya biçimi** sabittir: `title`, `description`, `author` JSON kaçışlı çift tırnakta (YAML 1.2'de geçerli), ardından
+  `published: YYYY-MM-DD`, `draft: true|false`, boş satır, gövde (baştaki boş satırlar ve sondaki boşluk atılır) ve tek
+  satır sonu. Okurken yalnızca bu beş alan kabul edilir (bilinmeyen alan kayıtta kaybolmasın diye reddedilir); okunamayan
+  dosya `500 blog_post_invalid` (dosya adıyla; site de derlenemez).
+- **Sürüm:** güncelleme ve silme panelin açtığı sürümü (`sha`) ister; arada değişmişse hiçbir şey yazılmaz
+  (`409 blog_conflict`). Kısa ad yazı varken değişmez (adres sabit kalır).
+- **GitHub hataları:** 408, 429, 5xx, ağ hatası ve zaman aşımı `upstream_retry` uyarısıyla 3 kez denenir (10 sn zaman
+  aşımı), sonra `502 upstream_unavailable`; ret (401, 403, 422…) `502 upstream_rejected`. GitHub'ın hata gövdesi
+  `github_request_failed` uyarısında loglanır, jeton loglanmaz. Kayıt ve silme kullanıcı başına dakikada 10'dur
+  (`START_USER_LIMITER`, doğrulamadan sonra). Başarılı yazımlar `blog_post_saved` / `blog_post_deleted` loglanır.
+- **Jeton:** GitHub → Settings → Developer settings → Fine-grained personal access tokens → yalnızca
+  `senoldogann/AI-Notepad` deposu, "Repository permissions › Contents: Read and write" (Metadata: Read kendiliğinden gelir);
+  başka yetki gerekmez. `npx wrangler secret put GITHUB_BLOG_TOKEN --env production`. Jetonun süresi dolunca blog uçları
+  `502 upstream_rejected` döner; yenisi aynı komutla girilir. `main` dalı koruma kuralıyla doğrudan gönderime kapatılırsa
+  jetonun sahibi kuralı atlayabilmeli, yoksa kayıt `upstream_rejected` alır.
 
 ## Ayırma ve kesinleştirme
 
@@ -279,6 +311,10 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 | `GET /v1/admin/reports` | Bearer + yönetici | `?kind=&status=&before=<ms>` → `{items: [{id, kind, status, createdAt, userId, email, appVersion, os, summary}], nextBefore}`; sayfa 50, yeniden eskiye, `createdAt` ISO 8601, `nextBefore` ms ya da son sayfada `null` |
 | `GET /v1/admin/reports/{id}` | Bearer + yönetici | `{id, kind, status, createdAt, userId, email, appVersion, os, message, payload}` |
 | `POST /v1/admin/reports/{id}` | Bearer + yönetici | `{status: "open" \| "done"}` → `204` |
+| `GET /v1/admin/blog/posts` | Bearer + yönetici | `{today, posts: [{slug, title, description, author, published, draft, status, sha}]}`: depodaki tüm yazılar, yeniden eskiye (aynı gün başlığa göre); `status` `draft` / `scheduled` (`published` > `today`, UTC) / `live`; `sha` dosyanın GitHub sürümü. Bkz. "Blog yayını" |
+| `GET /v1/admin/blog/posts/{slug}` | Bearer + yönetici | listedeki alanlar + `body` (Markdown); yoksa `404` |
+| `PUT /v1/admin/blog/posts/{slug}` | Bearer + yönetici | `{title, description, author, published, draft, body, sha}` (katı) → yeni yazıda `201`, güncellemede `200` ve yazının kayıttan sonraki hâli. Yeni yazıda `sha: null` (dosya varsa `409 blog_post_exists`); güncellemede açılan sürüm (dosya değişmiş ya da silinmişse `409 blog_conflict`). Kurallar ve dosya biçimi: "Blog yayını"; ihlal `400 invalid_body`, geçersiz kısa ad `400 bad_request` |
+| `DELETE /v1/admin/blog/posts/{slug}?sha=` | Bearer + yönetici | `204`; yoksa `404`, sürüm uyuşmazsa `409 blog_conflict`, `sha` yoksa `400` |
 
 Hatalar her zaman `{"error": {"code", "message"}}` biçimindedir; yönetici olmayan kullanıcının yönetici isteği düz
 `403 forbidden` döner (gövdede kimlik yok).

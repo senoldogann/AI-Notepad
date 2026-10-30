@@ -9,3 +9,7 @@ STRIPE_WEBHOOK_SECRET=
 TURNSTILE_SECRET_KEY=
 # Yalnızca DEEPGRAM_POLICY=on iken gerekir.
 DEEPGRAM_API_KEY=
+# İsteğe bağlı: yönetim panelinden blog yayını. Yalnızca GITHUB_BLOG_REPO deposunda Contents okuma/yazma yetkili ince
+# ayarlı GitHub jetonu. Satır yorumdayken blog uçları `503 blog_unavailable` döner; boş değer geçersizdir. Yerelde bir
+# kayıt gerçek depoya (GITHUB_BLOG_BRANCH dalına) commit atar.
+# GITHUB_BLOG_TOKEN=

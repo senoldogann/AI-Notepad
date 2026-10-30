@@ -30,6 +30,11 @@ export function formatDay(day: string): string {
   return new Intl.DateTimeFormat(siteLocale, { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
 }
 
+/** `YYYY-MM-DD` gününü yılıyla yazar ("5 Nov 2026"; UTC). Saf fonksiyondur. */
+export function formatDayLong(day: string): string {
+  return new Intl.DateTimeFormat(siteLocale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
+}
+
 /** Zamanı tarih ve saatle yazar. Saf fonksiyondur. */
 export function formatTime(ms: number): string {
   return new Intl.DateTimeFormat(siteLocale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(ms));

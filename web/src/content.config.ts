@@ -1,5 +1,6 @@
 // İçerik koleksiyonları: blog yazıları `src/content/blog/<kısa ad>.md` (kısa ad dosya adından gelir). Ön bilgi alanları
-// derlemede doğrulanır; eksik ya da yanlış biçimli alan derlemeyi durdurur.
+// derlemede doğrulanır; eksik ya da yanlış biçimli alan derlemeyi durdurur. Yönetim panelinin blog düzenleyicisi
+// (server/src/blog.ts) aynı kuralları uygular ve dosyayı aynı alanlarla yazar; buradaki kural değişirse orada da değişmeli.
 import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
 import { z } from "astro/zod";
@@ -12,8 +13,10 @@ const blog = defineCollection({
     /** Meta açıklama ve dizindeki özet; arama sonuçlarında kesilmesin diye kısa. */
     description: z.string().min(50).max(170),
     author: z.string().min(1),
-    /** Yayın tarihi (YYYY-AA-GG). */
+    /** Yayın tarihi (YYYY-AA-GG); derleme gününden (UTC) sonraysa yazı o güne dek yayımlanmaz (`isBlogPostPublic`). */
     published: z.coerce.date(),
+    /** Taslak: derlemede hiçbir yerde (dizin, yazı sayfası, RSS, site haritası) yayımlanmaz. Her yazıda açıkça yazılır. */
+    draft: z.boolean(),
   }),
 });
 

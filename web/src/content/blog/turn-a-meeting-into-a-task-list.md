@@ -3,6 +3,7 @@ title: "Turn a meeting into a task list: a simple method"
 description: A five-step method for leaving every meeting with a clear list of who does what, by when. It works with a notebook, a shared doc or an app.
 author: Senol Dogan
 published: 2026-10-29
+draft: false
 ---
 
 Most meeting notes describe what people said. That's useful for a week or so. What you actually need afterwards is shorter: what has to happen next, who is doing it, and by when.

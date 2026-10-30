@@ -7,6 +7,19 @@ import { adminStats, requireAdmin } from "./admin";
 import { adminInsights } from "./adminInsights";
 import { adminOperations } from "./adminOps";
 import { adminUserDetail, listAdminUsers, parseAdminUserFilter } from "./adminUsers";
+import {
+  type ActiveBlog,
+  type SavedBlogPost,
+  blogPostInputSchema,
+  blogRequestMaxBytes,
+  deleteBlogPost,
+  getBlogPost,
+  listBlogPosts,
+  parseBlogSha,
+  parseBlogSlug,
+  requireBlog,
+  saveBlogPost,
+} from "./blog";
 import { requireCloudflareAccess } from "./auth/access";
 import {
   type AuthedUser,
@@ -49,7 +62,7 @@ import {
   setReportStatus,
 } from "./reports";
 import { failureEvents, meetingFailureCode, recordMeetingFailure, recordOpsEvents } from "./opsEvents";
-import { requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
+import { dayKey, requireSpendHeadroom, requireTrialSpendHeadroom } from "./usage";
 import type { RequestContext } from "./platform";
 import { cachedTranscriptionResponse, parseTranscribeParams, proxyTranscription } from "./transcribe";
 
@@ -121,7 +134,7 @@ function preflight(request: Request, path: string, siteOrigin: string): Response
   const response: Response = new Response(null, {
     status: 204,
     headers: {
-      "access-control-allow-methods": "GET, POST, DELETE",
+      "access-control-allow-methods": "GET, POST, PUT, DELETE",
       "access-control-allow-headers": "authorization, content-type",
       "access-control-max-age": "600",
     },
@@ -485,7 +498,7 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 
   if (path.startsWith(adminPrefix)) {
     await requireCloudflareAccess(context.platform, config.access, request);
-    return routeAdmin(request, db, config, path, await authed(), now);
+    return routeAdmin(request, env, config, context, path, await authed(), now);
   }
 
   throw new ApiError("not_found", "Böyle bir uç yok.");
@@ -494,14 +507,44 @@ async function route(request: Request, env: Env, config: Config, context: Reques
 const adminReportPath: RegExp = /^\/v1\/admin\/reports\/([0-9a-f-]{36})$/;
 const adminUserPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})$/;
 const adminComplimentaryPath: RegExp = /^\/v1\/admin\/users\/([0-9a-f-]{36})\/complimentary$/;
+const adminBlogPostPath: RegExp = /^\/v1\/admin\/blog\/posts\/([^/]+)$/;
 
 /**
  * Yönetici uçları: istek Cloudflare Access'ten geçmiş (`requireCloudflareAccess`) ve kimliği doğrulanmış çağıran
  * `ADMIN_IDENTITIES` listesinde olmalı (değilse düz 403; gövdede kimlik yok, bkz. `requireAdmin`).
  */
-async function routeAdmin(request: Request, db: D1Database, config: Config, path: string, user: AuthedUser, now: Date): Promise<Response> {
+async function routeAdmin(request: Request, env: Env, config: Config, context: RequestContext, path: string, user: AuthedUser, now: Date): Promise<Response> {
+  const db: D1Database = env.DB;
   await requireAdmin(db, config, user.userId);
   const method: string = request.method;
+  if (path === "/v1/admin/blog/posts" && method === "GET") {
+    const blog: ActiveBlog = requireBlog(config.blog);
+    const today: string = dayKey(now);
+    return jsonResponse(200, { today, posts: await listBlogPosts(context.platform, blog, today) });
+  }
+  // Blog yazısı: `GET` okur, `PUT` yaratır ya da günceller, `DELETE ?sha=` siler (bkz. `blog.ts`). Her yazım GitHub'da
+  // bir commit olduğu için doğrulanmış yazımlar GitHub'a gitmeden önce kullanıcı başına dakikada 10 ile sınırlıdır.
+  const blogMatch: RegExpExecArray | null = adminBlogPostPath.exec(path);
+  if (blogMatch !== null && blogMatch[1] !== undefined && (method === "GET" || method === "PUT" || method === "DELETE")) {
+    const blog: ActiveBlog = requireBlog(config.blog);
+    const slug: string = parseBlogSlug(blogMatch[1]);
+    const today: string = dayKey(now);
+    if (method === "GET") {
+      return jsonResponse(200, await getBlogPost(context.platform, blog, slug, today));
+    }
+    if (method === "PUT") {
+      const body = await readJsonBody(request, blogPostInputSchema, blogRequestMaxBytes);
+      await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+      const saved: SavedBlogPost = await saveBlogPost(context.platform, blog, slug, body, today);
+      log("info", "blog_post_saved", { slug, created: saved.created, status: saved.post.status, userId: user.userId });
+      return jsonResponse(saved.created ? 201 : 200, saved.post);
+    }
+    const sha: string = parseBlogSha(new URL(request.url));
+    await enforceLimit(env.START_USER_LIMITER, `user:${user.userId}`);
+    await deleteBlogPost(context.platform, blog, slug, sha);
+    log("info", "blog_post_deleted", { slug, userId: user.userId });
+    return new Response(null, { status: 204 });
+  }
   if (path === "/v1/admin/stats" && method === "GET") {
     return jsonResponse(200, await adminStats(db, config, now));
   }

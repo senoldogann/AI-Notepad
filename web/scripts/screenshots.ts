@@ -7,6 +7,8 @@
 // kartı, denemede plan seçimi ve davet bağlantısıyla gelen kodun doğrulanması da çekilir. Sayfa sonundaki
 // çekme katmanı (açık/koyu, masaüstü/telefon) ve gösterimin üç turdan sonra durup düğmesinin "baştan oynat"a döndüğü de
 // denetlenir.
+// Yönetim panelinin blog görünümü listeyle (haftalık düzen uyarısı dahil), kaydedilmiş yayındaki yazının düzenleyicisiyle
+// (sonuç bildirimi ve paylaşım bağlantıları) ve Markdown önizlemesiyle çekilir.
 // Kullanım: node scripts/screenshots.ts <site adresi> <çıktı klasörü> <Chrome yolu>
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -87,7 +89,12 @@ const targets: readonly Target[] = [
   { name: "admin-user-grant", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-operations", path: "/admin#operations", ready: "#ops-open-rows tr", signedIn: true, account: null },
   { name: "admin-inbox", path: "/admin#inbox", ready: "#inbox-list .inbox__item", signedIn: true, account: null },
+  { name: "admin-blog", path: "/admin#blog", ready: "#blog-rows tr", signedIn: true, account: null },
+  { name: "admin-blog-editor", path: "/admin#blog", ready: "#blog-rows tr", signedIn: true, account: null },
 ];
+
+/** Örnek blog yazısının kısa adı (listede yayında; düzenleyici bunu açar ve kaydeder). */
+const exampleBlogSlug: string = "turn-a-meeting-into-a-task-list";
 
 /** Örnek kullanıcıların kimlikleri (liste, ayrıntı ve açık toplantılar aynı kimlikleri kullanır). */
 const exampleUserIds: readonly string[] = [
@@ -171,6 +178,57 @@ function meFixture(state: AccountState, now: Date): object {
     },
   };
   return states[state];
+}
+
+/** Örnek blog yazıları: yayında, taslak ve 7 günden sonraya zamanlanmış (haftalık düzen uyarısı görünür). Saf fonksiyondur. */
+function blogFixtures(now: Date): Readonly<Record<string, object>> {
+  const day = (offset: number): string => new Date(now.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  const post = (slug: string, title: string, published: number, draft: boolean, status: string): object => ({
+    slug,
+    title,
+    description: "A five-step method for leaving every meeting with a clear list of who does what, by when. Works anywhere.",
+    author: "Senol Dogan",
+    published: day(published),
+    draft,
+    status,
+    sha: `${slug.length.toString(16).padStart(2, "0")}${"a1b2c3d4e5".repeat(4)}`.slice(0, 40),
+  });
+  const live: object = post(exampleBlogSlug, "Turn a meeting into a task list: a simple method", -2, false, "live");
+  return {
+    "/v1/admin/blog/posts": {
+      today: day(0),
+      posts: [
+        post("what-to-ask-before-recording-a-call", "What to ask before you record a call with a client", 12, false, "scheduled"),
+        post("weekly-notes-template", "A weekly notes template that people actually read", 3, true, "draft"),
+        live,
+        post("meeting-notes-on-mac-without-a-bot", "How to take meeting notes on a Mac without a bot joining the call", -9, false, "live"),
+      ],
+    },
+    [`/v1/admin/blog/posts/${exampleBlogSlug}`]: {
+      ...live,
+      body: [
+        "Most meeting notes describe what people said. What you need afterwards is shorter: **who** does *what*, by when.",
+        "",
+        "## The format: one line per task",
+        "",
+        "1. Write the owner first.",
+        "2. Then the outcome, as a verb.",
+        "3. Then a date — see [the guide](/blog/meeting-notes-on-mac-without-a-bot) or [Gistsmith](https://gistsmith.com).",
+        "",
+        "> Nobody rereads the paragraph, so the task quietly disappears.",
+        "",
+        "Raw HTML stays text: <script>alert(1)</script> and a [bad link](javascript:alert(1)).",
+        "",
+        "```",
+        "Mia: send the pricing draft, by Friday",
+        "```",
+        "",
+        "| Owner | Task | Due |",
+        "| --- | --- | --- |",
+        "| Mia | Pricing draft | Fri |",
+      ].join("\n"),
+    },
+  };
 }
 
 /** Örnek yanıtlar: yol (sorgusuz) → gövde. */
@@ -513,6 +571,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
       message: "Would love a keyboard shortcut to start recording.\nOtherwise the notes are spot on — thank you!",
       payload: null,
     },
+    ...blogFixtures(now),
   };
 }
 
@@ -549,7 +608,7 @@ async function routeApi(context: BrowserContext, findings: Finding[]): Promise<v
   const bodies: Readonly<Record<string, object>> = fixtures(new Date());
   await context.route(`${apiBase}/**`, async (route: Route): Promise<void> => {
     const url: URL = new URL(route.request().url());
-    const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+    const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, PUT, DELETE" };
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ status: 204, headers: cors });
       return;
@@ -573,7 +632,7 @@ async function routeAccount(page: Page, state: AccountState): Promise<void> {
   const bodies: Readonly<Record<string, object>> = { "/v1/me": meFixture(state, now), "/v1/referral": referralFixture(state, now) };
   for (const [path, body] of Object.entries(bodies)) {
     await page.route(`${apiBase}${path}`, async (route: Route): Promise<void> => {
-      const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+      const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, PUT, DELETE" };
       if (route.request().method() === "OPTIONS") {
         await route.fulfill({ status: 204, headers: cors });
         return;
@@ -661,6 +720,13 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
         await page.click("#inbox-list .inbox__item");
         await page.waitForSelector("#detail-body:not(.hidden)");
       }
+      // Yayındaki yazı açılır ve kaydedilir (örnek `PUT` yanıtı aynı yazıdır): sonuç bildirimi ve paylaşım bağlantıları.
+      if (target.name === "admin-blog-editor") {
+        await page.click(`#blog-rows .blog-row__title >> text="Turn a meeting into a task list: a simple method"`);
+        await page.waitForSelector("#blog-editor-view:not(.hidden)");
+        await page.click("#blog-save");
+        await page.waitForSelector("#blog-share:not(.hidden)");
+      }
       const userDetail: { readonly row: number; readonly grant: boolean } | undefined = userDetailTargets[target.name];
       if (userDetail !== undefined) {
         await page.click(`#users-rows tr:nth-child(${userDetail.row}) .id-button`);
@@ -675,6 +741,13 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
         await page.waitForSelector('#user-complimentary[data-next="remove"]:enabled');
         await page.evaluate((): void => window.scrollTo(0, 0));
         await capture(page, outDir, `${shot}-granted`, findings);
+      }
+      // Düzenleyicinin önizleme sekmesi: Markdown öğeleri, kaçışlı HTML ve düz metne dönen güvensiz bağlantı.
+      if (target.name === "admin-blog-editor") {
+        await page.click("#blog-tab-preview");
+        await page.waitForSelector("#blog-preview:not(.hidden) h2");
+        await page.evaluate((): void => document.getElementById("blog-tab-preview")?.scrollIntoView({ block: "start" }));
+        await capture(page, outDir, `${shot}-preview`, findings);
       }
       // İçgörüler görünümü kabuğun içinde kayar: alt kartlar (indirme kaynakları, iptal nedenleri) ayrı bir görüntüde.
       if (target.name === "admin-insights") {
@@ -820,7 +893,7 @@ async function checkAdminHidden(browser: Browser, base: string, outDir: string, 
       const shot: string = `${item.name}-${variant.name}`;
       const context: BrowserContext = await newContext(browser, variant, "reduce");
       await context.route(`${apiBase}/**`, async (route: Route): Promise<void> => {
-        const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, DELETE" };
+        const cors: Record<string, string> = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type", "access-control-allow-methods": "GET, POST, PUT, DELETE" };
         if (route.request().method() === "OPTIONS") {
           await route.fulfill({ status: 204, headers: cors });
           return;

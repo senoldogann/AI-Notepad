@@ -19,7 +19,7 @@ yalnızca toplu sayfa görüntüleme, yönlendiren site, ülke ve cihaz türü s
 | `/pricing` | Fiyat (Stripe Checkout iptali buraya döner) |
 | `/download` | İndirme ve kurulum |
 | `/compare`, `/vs/granola`, `/vs/otter` | Karşılaştırma (rakip değerleri yalnızca kendi fiyat sayfalarından; `copy.ts` `compare`) |
-| `/blog`, `/blog/<kısa ad>`, `/blog/rss.xml` | Blog: yazılar `src/content/blog/*.md` (içerik koleksiyonu, `src/content.config.ts`) |
+| `/blog`, `/blog/<kısa ad>`, `/blog/rss.xml` | Blog: yazılar `src/content/blog/*.md` (içerik koleksiyonu, `src/content.config.ts`); taslaklar ve tarihi derleme gününden sonra olan yazılar yayımlanmaz (aşağıda "Haftalık blog") |
 | `/mcp` | Uygulamanın yerel MCP sunucusu: araçlar, bağlama, yapılandırma |
 | `/sign-in` | Apple ve Google ile giriş; Apple dönüş adresi; Mac uygulaması `?app=1&nonce=<64 hex>` ile açar |
 | `/invite` | Davet bağlantısı (`?code=`; sunucu `inviteUrl` üretir): kod `localStorage`'da (`gistsmith.invite`) saklanır, hesap sayfası abone olurken doğrulayıp ödemeye taşır |
@@ -103,14 +103,48 @@ Cloudflare Web Analytics işaretçisi bu yüzden iki katmanın da tüm politikal
 `script-src https://static.cloudflareinsights.com`, `connect-src https://cloudflareinsights.com`. `npm run serve`
 başlıkları aynı biçimde birleştirir.
 
-## Cloudflare Pages
+## Yayın (Cloudflare Pages, doğrudan yükleme)
 
-| Ayar | Değer |
-|---|---|
-| Kök klasör | `web` |
-| Derleme komutu | `npm ci && npm run build` |
-| Çıktı klasörü | `dist` |
-| Ortam değişkeni | `NODE_VERSION=26` |
+Pages projesi `ainotepad` doğrudan yüklemeyle beslenir (Git bağlantısı yok). Yayını `.github/workflows/deploy-web.yml`
+yapar:
 
-Derleme `../App` altındaki yazı tipi lisansını ve uygulama simgesini kopyalar; Pages tüm depoyu çektiği için ek ayar
-gerekmez. `_headers` (CSP, HSTS, Referrer-Policy, Permissions-Policy, önbellek) derlemede yapılandırmadan yazılır.
+- `main`'e `web/` (ya da iş akışının kendisi) değişince; yönetim panelinden kaydedilen blog yazıları da `main`'e
+  commit'tir;
+- her gün 06:00 UTC'de (zamanlanmış blog yazıları tarihlerinde yayımlansın);
+- elle: GitHub → Actions → "Deploy web" → Run workflow.
+
+İş `npm ci && npm run build` (üretim yapılandırması) sonra
+`npx wrangler pages deploy dist --project-name ainotepad --branch main` çalıştırır; yayınlar üst üste binmez
+(`concurrency`). Depo gizli değerleri (GitHub → Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN`
+(Cloudflare → My Profile → API Tokens → yalnızca "Account › Cloudflare Pages › Edit" yetkili jeton) ve
+`CLOUDFLARE_ACCOUNT_ID`. GitHub, 60 gün değişiklik görmeyen herkese açık depoda zamanlanmış iş akışlarını kapatır;
+kapanırsa Actions sekmesinden yeniden açılır.
+
+Elle yayın aynı komutlardır (`npx wrangler login` sonrası):
+
+```bash
+cd web && npm ci && npm run build && npx wrangler pages deploy dist --project-name ainotepad --branch main
+```
+
+Derleme `../App` altındaki yazı tipi lisansını ve uygulama simgesini kopyalar (depo bütün olarak çekilir).
+`_headers` (CSP, HSTS, Referrer-Policy, Permissions-Policy, önbellek) derlemede yapılandırmadan yazılır.
+
+## Haftalık blog
+
+Her yazı `src/content/blog/<kısa ad>.md`'dir; ön bilgi alanları `title` (10–90), `description` (50–170), `author`,
+`published` (`YYYY-MM-DD`) ve `draft`'tır (her yazıda açıkça). Derleme taslakları ve `published` günü derleme gününden
+(UTC) sonra olan yazıları dizinden, yazı sayfalarından, RSS'ten ve site haritasından çıkarır
+(`src/lib/blog.ts` → `isBlogPostPublic`; tüm sayfalar `blogEntries`'i kullanır).
+
+Akış:
+
+1. **Yaz:** yönetim paneli → Blog → New post (ya da dosyayı elle ekle). Düzenleyici başlıktan kısa ad türetir, açıklama
+   için karakter sayar, Markdown'ı güvenli önizler; önerilen tarih bugün ile son yayında ya da zamanlanmış yazının 7 gün
+   sonrasının büyüğüdür, yazar son yazınınkidir.
+2. **Zamanla:** gelecek tarihli kaydet (ya da taslak bırak). Kayıt sunucu üzerinden `main`'e bir commit'tir
+   (`blog: <başlık>`; bkz. `server/README.md` "Blog yayını"). Liste, son yazının tarihini ve önümüzdeki 7 günde
+   zamanlanmış yazı yoksa uyarıyı gösterir.
+3. **Yayımla:** commit yayını tetikler (taslak ve gelecek tarihli yazı görünmez); zamanlanmış yazı tarihindeki 06:00 UTC
+   derlemesinde yayımlanır.
+4. **Paylaş:** yayında olan yazının düzenleyicisinde X, LinkedIn ve Bluesky paylaşım düğmeleri hazır metinle yeni
+   sekmede açılır (yazının adresi `siteOrigin` + `/blog/<kısa ad>`).

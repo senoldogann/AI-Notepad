@@ -44,6 +44,10 @@ export type ErrorCode =
   | "referral_not_eligible"
   | "referral_unavailable"
   | "referral_limit_reached"
+  | "blog_unavailable"
+  | "blog_post_exists"
+  | "blog_conflict"
+  | "blog_post_invalid"
   | "webhook_invalid"
   | "internal_error";
 
@@ -92,6 +96,10 @@ const statusByCode: Readonly<Record<ErrorCode, number>> = {
   referral_not_eligible: 409,
   referral_unavailable: 503,
   referral_limit_reached: 409,
+  blog_unavailable: 503,
+  blog_post_exists: 409,
+  blog_conflict: 409,
+  blog_post_invalid: 500,
   webhook_invalid: 400,
   internal_error: 500,
 };
@@ -127,7 +135,7 @@ export class ProviderApiError extends ApiError {
   }
 }
 
-/** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck) hatası; gövde değil yalnızca durum taşır. */
+/** Üst servis (Anthropic, ElevenLabs, Deepgram, Apple, Google, Stripe, Turnstile, DeviceCheck, GitHub) hatası; gövde değil yalnızca durum taşır. */
 export class UpstreamError extends Error {
   override readonly name: string = "UpstreamError";
   readonly service: string;
