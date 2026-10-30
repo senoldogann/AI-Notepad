@@ -2097,9 +2097,26 @@ html.admin-app .admin > .notice {
 
 /* Telefonda menü yalnızca simgelerdir; süzgeçler tam genişlikte; şerit tek sütun. */
 @media (max-width: 560px) {
+  .console__sidebar {
+    padding-inline: 8px;
+  }
+
+  .console__brand {
+    display: none;
+  }
+
   .console__nav {
     flex: 1;
-    justify-content: space-around;
+    justify-content: space-between;
+  }
+
+  .console__nav,
+  .console__group {
+    gap: 0;
+  }
+
+  .console__nav-item {
+    padding: 0 8px;
   }
 
   .console__nav-label {
