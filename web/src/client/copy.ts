@@ -96,55 +96,12 @@ export interface ClientCopy {
 export interface AdminClientCopy {
   /** `{time}` saatle değişir. */
   readonly updated: string;
-  /** `{count}` sayıyla değişir. */
-  readonly downloadsSub: string;
-  /** `{count}`, `{apple}`, `{google}`. */
-  readonly usersSub: string;
-  /** `{count}`. */
-  readonly trialsSub: string;
-  /**
-   * `{monthly}`, `{yearly}`, `{invite}` (davetle ücretsiz ilk ay; MRR'a girmez), `{grace}`, `{ending}`, `{canceled}`,
-   * `{free}` (ücretsiz erişim; sayıya ve gelire girmez).
-   */
-  readonly subscribersSub: string;
-  /** Davet programı: `{joined}`, `{pending}`, `{granted}`, `{voided}`. */
-  readonly referralsSub: string;
-  readonly mrrSub: string;
-  /** MRR alt satırına eklenir: Stripe'ın modu. */
+  /** MRR alt satırı: Stripe'ın modu. */
   readonly stripeTest: string;
   readonly stripeLive: string;
-  readonly elevenLabsSub: string;
-  readonly deepgramSub: string;
-  /** `{ceiling}`. */
-  readonly spendSub: string;
-  readonly hoursSub: string;
-  /** Grafik özeti: `{total}`, `{peak}`, `{day}`. */
-  readonly chartSummary: string;
-  /** Hiç değer olmayan grafik. */
-  readonly chartEmpty: string;
-  /** Çubuk ipucu: `{day}`, `{value}`. */
-  readonly barTitle: string;
-  /** Toplantı çubuğu ipucu: `{day}`, `{trial}`, `{subscription}`. */
-  readonly meetingBarTitle: string;
   readonly anonymous: string;
   readonly noSummary: string;
   readonly noMessage: string;
-  /** Kullanıcılar kutusu alt satırına eklenir: `{today}`, `{week}`. */
-  readonly usersRecent: string;
-  /** `{converted}`, `{started}`, `{recentRate}`, `{direct}`. */
-  readonly conversionSub: string;
-  /** `{pastDue}`, `{unpaid}`, `{ending}`. */
-  readonly churnSub: string;
-  /** `{refunds}`, `{disputes}`, `{failed}`, `{duplicates}`. */
-  readonly paymentsSub: string;
-  /** `{open}`, `{deferred}`, `{reprocessed}`. */
-  readonly meetingsSub: string;
-  /** `{minutes}` Deepgram akış dakikası. */
-  readonly audioSub: string;
-  /** `{account}`, `{near}`, `{cap}`. */
-  readonly tokensUsageSub: string;
-  /** `{device}`, `{ip}`, `{exhausted}`, `{expired}`, `{today}`. */
-  readonly refusalsSub: string;
   /** Değer yok. */
   readonly none: string;
   readonly plans: { readonly subscription: string; readonly trial: string; readonly free: string };
@@ -184,8 +141,9 @@ export interface AdminClientCopy {
   readonly userTitle: string;
   /** `{count}` gösterilen satır. */
   readonly shown: string;
-  readonly opsOpenSub: string;
-  readonly opsUnendedSub: string;
+  /** İşletim ölçülerinin tanım ipuçları. */
+  readonly opsOpenHint: string;
+  readonly opsUnendedHint: string;
   /** `{expired}`, `{oldest}`. */
   readonly opsReservationsSub: string;
   readonly opsReservationsOk: string;
@@ -300,33 +258,11 @@ export const clientCopy: ClientCopy = {
   characters: "{count} / {max}",
   admin: {
     updated: "Updated {time}",
-    downloadsSub: "{count} in the last 30 days",
-    usersSub: "{count} new in 30 days · Apple {apple} · Google {google}",
-    trialsSub: "{count} used up",
-    subscribersSub: "{monthly} monthly · {yearly} yearly · {invite} in free invite month · {grace} in grace · {ending} ending · {canceled} cancelled in total · {free} with free access, not counted",
-    referralsSub: "Invites: {joined} joined · {pending} waiting · {granted} rewarded · {voided} voided",
-    mrrSub: "Renewing subscriptions, yearly counted as 1/12 a month, free invite months excluded, taxes included",
     stripeTest: "Stripe test mode",
     stripeLive: "Stripe live",
-    elevenLabsSub: "{used} of {cap} audio hours this ElevenLabs plan cycle",
-    deepgramSub: "{used} of {budget} Deepgram credit (estimate); then live text runs on the Mac",
-    spendSub: "of {ceiling} daily ceiling",
-    hoursSub: "Recorded across all users",
-    chartSummary: "{total} in total over 30 days; highest {peak} on {day}.",
-    chartEmpty: "Nothing in the last 30 days.",
-    barTitle: "{day}: {value}",
-    meetingBarTitle: "{day}: {trial} trial, {subscription} subscription",
     anonymous: "Not signed in",
     noSummary: "(no summary)",
     noMessage: "(no message)",
-    usersRecent: "{today} today · {week} in 7 days",
-    conversionSub: "{converted} of {started} trials converted · last 30 days {recentRate} · {direct} paid without a trial",
-    churnSub: "{ending} set to end · {pastDue} payment due · {unpaid} unpaid",
-    paymentsSub: "{refunds} refunds · {disputes} disputes · {failed} failed payments in 30 days · {duplicates} duplicate subscriptions refunded",
-    meetingsSub: "{open} live now · {deferred} processed later · {reprocessed} reprocessed",
-    audioSub: "Cloud transcription; Deepgram live text used {minutes} stream minutes in total",
-    tokensUsageSub: "{account} outside meetings · {near} accounts above 80% of the {cap} monthly cap",
-    refusalsSub: "Mac already used {device} · same network {ip} · used up {exhausted} · expired {expired} · {today} today",
     none: "—",
     plans: { subscription: "Subscribed", trial: "Trial", free: "No plan" },
     billingPlans: { monthly: "Monthly", yearly: "Yearly" },
@@ -359,8 +295,8 @@ export const clientCopy: ClientCopy = {
     ofCap: "{used} of {cap}",
     userTitle: "Account {id}",
     shown: "{count} shown",
-    opsOpenSub: "Started and not yet ended or timed out",
-    opsUnendedSub: "The app didn't report the end (crash, network or a closed Mac)",
+    opsOpenHint: "Started and not yet ended or timed out.",
+    opsUnendedHint: "Meetings whose end the app never reported (crash, network or a closed Mac).",
     opsReservationsSub: "{expired} expired, waiting for the daily cleanup · oldest {oldest}",
     opsReservationsOk: "No expired reservations waiting",
     opsDeepgramSub: "{stale} older than the longest meeting (should have settled)",

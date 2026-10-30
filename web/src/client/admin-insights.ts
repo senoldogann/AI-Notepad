@@ -1,4 +1,5 @@
-// Yönetim panelinin içgörüler görünümü (`/v1/admin/insights`): sorunlar (son 7 ve 30 gün: tavan retleri, koda göre
+// Yönetim panelinin içgörüler verisi (`/v1/admin/insights`; öğeleri gelir, büyüme ve güvenilirlik görünümlerinde, sorunlar
+// genel bakışın "dikkat" listesinde de): sorunlar (son 7 ve 30 gün: tavan retleri, koda göre
 // retler, servis hataları, 5xx), son 30 günün hunisi (her adımın sayısı, temel adıma oranı ve kayıp), indirmelerin
 // düğmeye ve yönlendiren siteye göre dağılımı, Stripe iptal nedenleri ve davet programının özeti (son 30 gün, nedene
 // göre düşen davetler, en çok davet edenler). Kimlik olarak yalnızca hesap UUID'si gelir.
@@ -230,11 +231,16 @@ function renderInsights(insights: Insights, onOpenUser: (id: string) => void): v
   element("insights-referrers-top-empty", HTMLElement).classList.toggle("hidden", insights.invites.topReferrers.length > 0);
 }
 
-/** İçgörüler görünümünü bağlar; hesaba tıklanınca kullanıcı ayrıntısı açılır. */
-export function createInsightsView(onOpenUser: (id: string) => void): InsightsView {
+/**
+ * İçgörüler verisini bağlar; hesaba tıklanınca kullanıcı ayrıntısı açılır. `onLoaded` her yüklemeden sonra yanıtı alır
+ * (genel bakıştaki "dikkat" listesi).
+ */
+export function createInsightsView(onOpenUser: (id: string) => void, onLoaded: (insights: Insights) => void): InsightsView {
   const state: { loaded: boolean } = { loaded: false };
   const refresh = async (): Promise<void> => {
-    renderInsights(await fetchInsights(), onOpenUser);
+    const insights: Insights = await fetchInsights();
+    renderInsights(insights, onOpenUser);
+    onLoaded(insights);
     state.loaded = true;
   };
   return {

@@ -1,11 +1,9 @@
-// Yönetim panelinin "Product" görünümü metinleri (İngilizce; yalnızca yönetici görür): menü, bölüm başlıkları, özet
-// kutuları, tablo sütunları ve notları, grafik başlıkları ve değerlere bağlı satırlar. Sayfa (admin.astro) ve betik
+// Yönetim panelinin ürün verisinin metinleri (İngilizce; yalnızca yönetici görür): özet ölçüleri ve tanım ipuçları,
+// tablo sütunları ve notları, grafik başlıkları ve değerlere bağlı satırlar. Sayfa (admin.astro) ve betik
 // (admin-product.ts) aynı nesneyi kullanır; DOM'a dokunmaz.
 
 /** Ürün görünümünün metinleri. `{ad}` yer tutucuları değerlerle doldurulur. */
 export interface AdminProductCopy {
-  readonly view: string;
-  readonly sections: { readonly engagement: string; readonly reliability: string; readonly economics: string; readonly crashes: string };
   readonly kpis: {
     readonly wau: string;
     readonly d7: string;
@@ -16,11 +14,22 @@ export interface AdminProductCopy {
     readonly noteTime: string;
     readonly onDevice: string;
   };
-  /** Özet kutularının alt satırları. */
+  /** Özet ölçülerinin tanım ipuçları. */
+  readonly kpiHints: {
+    readonly wau: string;
+    readonly d7: string;
+    readonly d30: string;
+    readonly checkout: string;
+    readonly failed: string;
+    readonly notes: string;
+    readonly noteTime: string;
+    readonly onDevice: string;
+  };
+  /** Özet ölçülerinin kısa alt satırları. */
   readonly kpiSubs: {
     /** `{mau}`, `{ratio}`. */
     readonly wau: string;
-    /** `{retained}`, `{eligible}`, `{from}`, `{to}`. */
+    /** `{retained}`, `{eligible}`. */
     readonly retention: string;
     /** `{abandoned}`, `{started}`, `{recent}`, `{recentStarted}`. */
     readonly checkout: string;
@@ -30,7 +39,7 @@ export interface AdminProductCopy {
     readonly notes: string;
     /** `{noted}`. */
     readonly noteTime: string;
-    /** `{onDevice}`, `{meetings}`, `{deepgram}`. */
+    /** `{onDevice}`, `{meetings}`. */
     readonly onDevice: string;
   };
   readonly tables: {
@@ -108,8 +117,6 @@ export interface AdminProductCopy {
   readonly charts: { readonly refusals: string; readonly providerErrors: string; readonly serverErrors: string; readonly spend: string };
   readonly legendTrial: string;
   readonly legendPaid: string;
-  /** `{day}`, `{trial}`, `{paid}`. */
-  readonly spendBarTitle: string;
   /** `{month}`: bu ayın kısmi satırı. */
   readonly partialMonth: string;
   readonly unknownVersion: string;
@@ -119,13 +126,6 @@ export interface AdminProductCopy {
 
 /** Ürün görünümünün metinleri. */
 export const adminProductCopy: AdminProductCopy = {
-  view: "Product",
-  sections: {
-    engagement: "Engagement",
-    reliability: "Reliability · meetings started in the last 30 days",
-    economics: "Unit economics · approximate, list price",
-    crashes: "Crashes by app version",
-  },
   kpis: {
     wau: "Weekly active",
     d7: "D7 retention",
@@ -136,14 +136,24 @@ export const adminProductCopy: AdminProductCopy = {
     noteTime: "Median time to note",
     onDevice: "Live text on the Mac",
   },
+  kpiHints: {
+    wau: "Accounts that started a meeting in the last 7 days. WAU/MAU compares them with the last 30 days.",
+    d7: "Share of sign-ups that started a meeting on days 7–13 after signing up.",
+    d30: "Share of sign-ups that started a meeting on days 30–36 after signing up.",
+    checkout: "Accounts that opened Stripe Checkout and never paid.",
+    failed: "Meetings started in the last 30 days with at least one failed request.",
+    notes: "Ended meetings in the last 30 days that got a finished note.",
+    noteTime: "Median time from a meeting's end to its first finished note.",
+    onDevice: "Meetings that got no Deepgram token, so live text ran on the Mac.",
+  },
   kpiSubs: {
-    wau: "Accounts that started a meeting in the last 7 days · {mau} in 30 days · WAU/MAU {ratio}",
-    retention: "{retained} of {eligible} sign-ups started a meeting on days {from}–{to}",
-    checkout: "{abandoned} of {started} accounts opened Checkout and never paid · {recent} of {recentStarted} in the last 30 days",
-    failed: "{failed} of {meetings} meetings had at least one failed request",
-    notes: "{noted} of {ended} ended meetings got a finished note",
-    noteTime: "From the meeting's end to its first note · {noted} notes",
-    onDevice: "{onDevice} of {meetings} meetings got no Deepgram token · {deepgram} used Deepgram",
+    wau: "{mau} in 30 days · WAU/MAU {ratio}",
+    retention: "{retained} of {eligible} sign-ups",
+    checkout: "{abandoned} of {started} · 30 days {recent} of {recentStarted}",
+    failed: "{failed} of {meetings} meetings",
+    notes: "{noted} of {ended} ended meetings",
+    noteTime: "{noted} notes",
+    onDevice: "{onDevice} of {meetings} meetings",
   },
   tables: {
     cohorts: "Sign-up cohorts",
@@ -223,7 +233,6 @@ export const adminProductCopy: AdminProductCopy = {
   charts: { refusals: "Refused requests", providerErrors: "Service failures", serverErrors: "Server errors (5xx)", spend: "Daily spend estimate" },
   legendTrial: "Trial",
   legendPaid: "Everything else",
-  spendBarTitle: "{day}: {trial} trial, {paid} everything else",
   partialMonth: "{month} (so far)",
   unknownVersion: "Unknown version",
   durations: { seconds: "{value} s", minutes: "{value} min", hours: "{value} h", days: "{value} days" },

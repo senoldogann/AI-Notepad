@@ -1,0 +1,21 @@
+---
+// Bağlantı listesi kartı (son iptaller, en çok davet edenler, son çökmeler): betik `<id>` listesini doldurur, boşsa
+// `<id>-empty` bildirimini açar.
+import type { PanelSpan } from "../../lib/admin-table";
+
+interface Props {
+  readonly id: string;
+  readonly title: string;
+  readonly span: PanelSpan;
+  readonly empty: string;
+}
+const { id, title, span, empty } = Astro.props;
+---
+
+<section class:list={["panel", "panel--flush", `span-${span}`]} aria-labelledby={`${id}-title`}>
+  <header class="panel__head">
+    <h3 class="panel__title" id={`${id}-title`}>{title}</h3>
+  </header>
+  <ul id={id} class="link-list"></ul>
+  <p id={`${id}-empty`} class="table-empty hidden">{empty}</p>
+</section>

@@ -1,4 +1,4 @@
-// Yönetim panelinin telemetri görünümünün metinleri (İngilizce; yalnızca yönetici görür) ve sunucunun telemetri
+// Yönetim panelinin telemetri verisinin metinleri (İngilizce; yalnızca yönetici görür) ve sunucunun telemetri
 // listeleri (yapay zekâ çağrısının amacı, istemci olay türleri, özellik adları, entegrasyon türleri, dışa aktarma
 // biçimleri). Listeler sunucuyla birebir aynıdır (`server/src/llm/purpose.ts`, `server/src/telemetry.ts`). Sayfa
 // (admin.astro) ve betik (admin-telemetry.ts) aynı nesneyi kullanır; DOM'a dokunmaz.
@@ -40,7 +40,6 @@ export type FlagFeature = (typeof flagFeatures)[number];
 
 /** Telemetri görünümünün metinleri. `{ad}` yer tutucuları değerlerle doldurulur. */
 export interface AdminTelemetryCopy {
-  readonly view: string;
   /** `{days}`. */
   readonly windowNote: string;
   readonly versionsTitle: string;
@@ -94,10 +93,9 @@ export interface AdminTelemetryCopy {
 
 /** Telemetri görünümünün metinleri. */
 export const adminTelemetryCopy: AdminTelemetryCopy = {
-  view: "Telemetry",
   windowNote: "Last {days} days. Counts are daily totals that are not linked to accounts, except app and macOS versions, which are the latest values per account.",
   versionsTitle: "Version adoption",
-  activeUsers: "{users} accounts checked in from the Mac app in the last {days} days.",
+  activeUsers: "Accounts that checked in from the Mac app in the last {days} days: {users}",
   appVersionsTitle: "App versions (active accounts)",
   osVersionsTitle: "macOS versions (active accounts)",
   versionColumns: { version: "Version", users: "Accounts", share: "Share" },

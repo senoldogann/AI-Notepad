@@ -1,9 +1,10 @@
-// Yönetim panelinin "Trends" görünümü: `/v1/admin/trends` (son 90 günün günlük anlık görüntüleri, gerçek gelir, son 30
+// Yönetim panelinin eğilim verisi (öğeleri gelir, büyüme, kullanım, güvenilirlik ve maliyet görünümlerinde, gelir
+// eğrileri genel bakışta): `/v1/admin/trends` (son 90 günün günlük anlık görüntüleri, gerçek gelir, son 30
 // günün token kovaları, konuşma tanıma dilleri, hesap silmeleri, yeniden denemeler ve indirme kampanyaları) ve
 // `/v1/admin/site-analytics` (Cloudflare Web Analytics). Site istatistikleri ayrı yüklenir: sunucuda ayarlı değilse
 // (`503 analytics_unavailable`) ya da Cloudflare'e ulaşılamazsa yalnızca o bölüm hatayı gösterir. Yanıtlar katı
-// biçimde doğrulanır. Grafikler satır içi SVG çubuklardır (genel bakışınkiyle aynı sınıflar; her çubuğun başlığı
-// değeridir, her grafiğin metin özeti var).
+// biçimde doğrulanır. Grafikler ortak grafik modülüyle çizilir (admin-chart.ts): anlık görüntü serilerinin başlığında
+// son değer, günlük serilerin başlığında dönemin toplamı.
 import {
   ApiRequestError,
   ApiResponseError,
@@ -16,8 +17,9 @@ import {
   parseObject,
   stringField,
 } from "./api";
-import { fillTable, formatCompact, formatCount, formatDay, formatUsd, node, tableRow } from "./admin-format";
-import { type AdminTrendsCopy, type TrendChartId, type TrendTokenBucket, adminTrendsCopy } from "./admin-trends-copy";
+import { type ChartPart, type ChartPoint, renderDailyBars, renderSnapshots } from "./admin-chart";
+import { fillTable, formatCompact, formatCount, formatUsd, node, tableRow } from "./admin-format";
+import { type AdminTrendsCopy, type TrendTokenBucket, adminTrendsCopy } from "./admin-trends-copy";
 import { type ClientCopy, clientCopy, fill } from "./copy";
 import { element, errorText, hideNotice, showNotice } from "./dom";
 import { siteLocale } from "../config";
@@ -26,11 +28,6 @@ import { authorizedSend } from "./session";
 const text: AdminTrendsCopy = adminTrendsCopy;
 const siteText: ClientCopy = clientCopy;
 
-const svgNamespace: string = "http://www.w3.org/2000/svg";
-const chartWidth: number = 300;
-const chartHeight: number = 60;
-/** 90 çubukta okunur aralık (genel bakışın 30 günlük grafiğinden dar). */
-const barGap: number = 1;
 
 const tokenBuckets: readonly TrendTokenBucket[] = ["meeting_note", "meeting_live_structured", "meeting_live_text", "account_note", "account_quick"];
 
@@ -42,7 +39,7 @@ interface CurrencyMrr {
 }
 
 /** Günün anlık görüntüsünün panelde kullanılan alanları. */
-interface TrendSnapshot {
+export interface TrendSnapshot {
   readonly subscriptionsMonthly: number;
   readonly subscriptionsYearly: number;
   readonly activeUsers7d: number;
@@ -53,7 +50,7 @@ interface TrendSnapshot {
   readonly invoicedMrr: readonly CurrencyMrr[];
 }
 
-interface TrendDay {
+export interface TrendDay {
   readonly day: string;
   readonly snapshot: TrendSnapshot | null;
 }
@@ -256,103 +253,48 @@ export function formatCents(cents: number, currency: string): string {
   return new Intl.NumberFormat(siteLocale, { style: "currency", currency: currency.toUpperCase(), currencyDisplay: "narrowSymbol", maximumFractionDigits: 2 }).format(cents / 100);
 }
 
-/** Grafikteki gün: yığılmış parçalar (alttan üste) ya da anlık görüntü yoksa null. */
-interface TrendBar {
-  readonly day: string;
-  readonly parts: readonly { readonly value: number; readonly tone: "main" | "accent" }[] | null;
-  readonly title: string;
-}
-
-function svgElement(name: string, attributes: Readonly<Record<string, string>>): SVGElement {
-  const created: SVGElement = document.createElementNS(svgNamespace, name) as SVGElement;
-  for (const [key, value] of Object.entries(attributes)) {
-    created.setAttribute(key, value);
-  }
-  return created;
-}
-
-/** Çubuk grafiği çizer (verisiz gün yalnızca taban çizgisi) ve özeti yazar. */
-function renderBars(id: TrendChartId, bars: readonly TrendBar[], summary: string): void {
-  const totals: number[] = bars.map((bar: TrendBar): number => (bar.parts ?? []).reduce((sum: number, part): number => sum + part.value, 0));
-  const max: number = Math.max(0, ...totals);
-  const barWidth: number = bars.length === 0 ? 0 : (chartWidth - barGap * (bars.length - 1)) / bars.length;
-  const svg: SVGElement = svgElement("svg", { viewBox: `0 0 ${chartWidth} ${chartHeight}`, class: "chart__svg", role: "img", "aria-labelledby": `chart-trend-${id}-summary` });
-  bars.forEach((bar: TrendBar, index: number): void => {
-    const x: number = index * (barWidth + barGap);
-    const group: SVGElement = svgElement("g", {});
-    const title: SVGElement = svgElement("title", {});
-    title.textContent = bar.title;
-    group.append(title, svgElement("rect", { x: x.toFixed(2), y: String(chartHeight - 1.5), width: barWidth.toFixed(2), height: "1.5", class: "chart__base" }));
-    let top: number = chartHeight;
-    for (const part of bar.parts ?? []) {
-      if (part.value <= 0 || max === 0) {
-        continue;
-      }
-      const height: number = Math.max(2, (part.value / max) * (chartHeight - 4));
-      top -= height;
-      group.append(svgElement("rect", { x: x.toFixed(2), y: top.toFixed(2), width: barWidth.toFixed(2), height: height.toFixed(2), rx: "0.5", class: `chart__bar chart__bar--${part.tone}` }));
-    }
-    svg.append(group);
-  });
-  const axis: HTMLElement = node("div", "chart__axis", "");
-  axis.setAttribute("aria-hidden", "true");
-  axis.append(node("span", "", bars[0] === undefined ? "" : formatDay(bars[0].day)), node("span", "", bars.at(-1) === undefined ? "" : formatDay(bars.at(-1)?.day ?? "")));
-  element(`chart-trend-${id}`, HTMLElement).replaceChildren(svg, axis);
-  element(`chart-trend-${id}-summary`, HTMLElement).textContent = summary;
-}
-
-/** Anlık görüntü serisinden grafik günleri. Saf fonksiyondur. */
-function snapshotBars(daily: readonly TrendDay[], parts: (snapshot: TrendSnapshot) => readonly { readonly value: number; readonly tone: "main" | "accent" }[], format: (value: number) => string): TrendBar[] {
-  return daily.map((item: TrendDay): TrendBar => {
-    if (item.snapshot === null) {
-      return { day: item.day, parts: null, title: fill(text.noSnapshot, { day: formatDay(item.day) }) };
-    }
-    const values = parts(item.snapshot);
-    const total: number = values.reduce((sum: number, part): number => sum + part.value, 0);
-    return { day: item.day, parts: values, title: fill(text.barTitle, { day: formatDay(item.day), value: format(total) }) };
-  });
-}
-
-/** Grafiklerin özeti: anlık görüntü sayısı ve son değer. Saf fonksiyondur. */
-function snapshotSummary(daily: readonly TrendDay[], latest: (snapshot: TrendSnapshot) => string): string {
-  const present: TrendDay[] = daily.filter((item: TrendDay): boolean => item.snapshot !== null);
-  const last: TrendDay | undefined = present.at(-1);
-  if (last === undefined || last.snapshot === null) {
-    return text.noSnapshots;
-  }
-  return fill(text.snapshotSummary, { days: formatCount(present.length), latest: `${latest(last.snapshot)} (${formatDay(last.day)})` });
+/** Anlık görüntü serisinden grafik günleri (görüntü yoksa veri yok). Saf fonksiyondur. */
+function snapshotPoints(daily: readonly TrendDay[], parts: (snapshot: TrendSnapshot) => readonly ChartPart[]): ChartPoint[] {
+  return daily.map((item: TrendDay): ChartPoint => ({ day: item.day, parts: item.snapshot === null ? null : parts(item.snapshot) }));
 }
 
 /** Görünümün grafikleri. */
 function renderCharts(trends: AdminTrends): void {
   const daily: readonly TrendDay[] = trends.daily;
-  renderBars("mrr", snapshotBars(daily, (s) => [{ value: s.mrrListUsd, tone: "main" }], formatUsd), snapshotSummary(daily, (s) => formatUsd(s.mrrListUsd)));
-  renderBars(
-    "subscribers",
-    snapshotBars(daily, (s) => [{ value: s.subscriptionsMonthly, tone: "main" }, { value: s.subscriptionsYearly, tone: "accent" }], formatCount),
-    snapshotSummary(daily, (s) => formatCount(s.subscriptionsMonthly + s.subscriptionsYearly)),
+  const charts: AdminTrendsCopy["charts"] = text.charts;
+  renderSnapshots("trend-mrr", "line", snapshotPoints(daily, (s: TrendSnapshot): ChartPart[] => [{ value: s.mrrListUsd, tone: "main", label: charts.mrr.main }]), formatUsd);
+  renderSnapshots(
+    "trend-subscribers",
+    "bars",
+    snapshotPoints(daily, (s: TrendSnapshot): ChartPart[] => [
+      { value: s.subscriptionsMonthly, tone: "main", label: charts.subscribers.main },
+      { value: s.subscriptionsYearly, tone: "accent", label: charts.subscribers.accent ?? "" },
+    ]),
+    formatCount,
   );
-  renderBars("active", snapshotBars(daily, (s) => [{ value: s.activeUsers7d, tone: "main" }], formatCount), snapshotSummary(daily, (s) => formatCount(s.activeUsers7d)));
-  renderBars(
-    "spend",
-    snapshotBars(daily, (s) => [{ value: s.spendAnthropicUsd, tone: "main" }, { value: s.spendElevenLabsUsd + s.spendDeepgramUsd, tone: "accent" }], formatUsd),
-    snapshotSummary(daily, (s) => formatUsd(s.spendAnthropicUsd + s.spendElevenLabsUsd + s.spendDeepgramUsd)),
+  renderSnapshots("trend-active", "line", snapshotPoints(daily, (s: TrendSnapshot): ChartPart[] => [{ value: s.activeUsers7d, tone: "main", label: charts.active.main }]), formatCount);
+  renderDailyBars(
+    "trend-spend",
+    snapshotPoints(daily, (s: TrendSnapshot): ChartPart[] => [
+      { value: s.spendAnthropicUsd, tone: "main", label: charts.spend.main },
+      { value: s.spendElevenLabsUsd + s.spendDeepgramUsd, tone: "accent", label: charts.spend.accent ?? "" },
+    ]),
+    formatUsd,
   );
   // Gelir grafiği tüm zamanların en çok tahsilat yapılan para birimidir; diğerleri tabloda.
   const top: CurrencyRevenue | undefined = trends.revenue.currencies[0];
-  if (top === undefined) {
-    renderBars("revenue", [], text.noRevenue);
-    return;
-  }
-  const format = (cents: number): string => formatCents(cents, top.currency);
-  const bars: TrendBar[] = top.daily.map((day: RevenueDay): TrendBar => ({
-    day: day.day,
-    parts: [{ value: day.paidCents, tone: "main" }, { value: day.refundedCents, tone: "accent" }],
-    title: fill(text.barTitle, { day: formatDay(day.day), value: `${format(day.paidCents)} / −${format(day.refundedCents)}` }),
-  }));
-  const paid: number = top.daily.reduce((sum: number, day: RevenueDay): number => sum + day.paidCents, 0);
-  const refunded: number = top.daily.reduce((sum: number, day: RevenueDay): number => sum + day.refundedCents, 0);
-  renderBars("revenue", bars, fill(text.revenueSummary, { currency: top.currency.toUpperCase(), paid: format(paid), refunded: format(refunded) }));
+  const format = (cents: number): string => (top === undefined ? formatUsd(cents / 100) : formatCents(cents, top.currency));
+  renderDailyBars(
+    "trend-revenue",
+    (top?.daily ?? []).map((day: RevenueDay): ChartPoint => ({
+      day: day.day,
+      parts: [
+        { value: day.paidCents, tone: "main", label: charts.revenue.main },
+        { value: day.refundedCents, tone: "accent", label: charts.revenue.accent ?? "" },
+      ],
+    })),
+    format,
+  );
 }
 
 /** Tabloyu doldurur ve boş bildirimini açar ya da kapatır. */
@@ -420,6 +362,11 @@ function renderSite(site: SiteAnalytics): void {
     views: formatCount(site.pageViews),
     visits: formatCount(site.visits),
   });
+  renderDailyBars(
+    "trend-site",
+    site.daily.map((day): ChartPoint => ({ day: day.day, parts: [{ value: day.pageViews, tone: "main", label: text.siteChart.pageViews }] })),
+    formatCount,
+  );
   const entryRow = (entry: SiteEntry, label: string): HTMLTableRowElement => tableRow([node("span", "mono", label), formatCount(entry.pageViews), formatCount(entry.visits)]);
   fillTrendTable("paths", site.topPaths.map((entry: SiteEntry): HTMLTableRowElement => entryRow(entry, entry.key)));
   fillTrendTable("referrers", site.topReferrers.map((entry: SiteEntry): HTMLTableRowElement => entryRow(entry, entry.key === "" ? text.direct : entry.key)));
@@ -430,6 +377,7 @@ function renderSiteFailure(error: unknown): void {
   const message: string = error instanceof ApiRequestError && error.code === "analytics_unavailable" ? text.siteUnavailable : errorText(error, siteText);
   showNotice(element("trend-site-error", HTMLElement), message);
   element("trend-site-summary", HTMLElement).textContent = "";
+  renderDailyBars("trend-site", [], formatCount);
   fillTrendTable("paths", []);
   fillTrendTable("referrers", []);
 }
@@ -440,8 +388,11 @@ export interface TrendsView {
   readonly ensureLoaded: () => Promise<void>;
 }
 
-/** Eğilimler görünümünü bağlar. Site istatistiklerinin hatası görünümü düşürmez, yalnızca kendi bölümünde görünür. */
-export function createTrendsView(): TrendsView {
+/**
+ * Eğilimler verisini bağlar. Site istatistiklerinin hatası görünümü düşürmez, yalnızca kendi bölümünde görünür.
+ * `onLoaded` her yüklemeden sonra yanıtı alır (genel bakışın küçük eğrileri).
+ */
+export function createTrendsView(onLoaded: (trends: AdminTrends) => void): TrendsView {
   const state: { loaded: boolean } = { loaded: false };
   const refresh = async (): Promise<void> => {
     const [trends] = await Promise.all([
@@ -450,6 +401,7 @@ export function createTrendsView(): TrendsView {
     ]);
     renderCharts(trends);
     renderTables(trends);
+    onLoaded(trends);
     state.loaded = true;
   };
   return {

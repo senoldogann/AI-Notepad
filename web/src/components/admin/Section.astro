@@ -1,0 +1,32 @@
+---
+// Yönetim panelinde bir bölüm: başlık ve kısa açıklama (başlık yoksa görünümün ilk bloğu) ve altında 12 sütunlu ızgara;
+// kartlar ızgaraya `span` ile yerleşir (Panel, TablePanel, ChartPanel...).
+interface Props {
+  readonly id: string;
+  readonly title: string | null;
+  readonly description: string | null;
+}
+const { id, title, description } = Astro.props;
+---
+
+{
+  title === null ? (
+    <div class="view-section" id={id}>
+      <div class="view-grid">
+        <slot />
+      </div>
+    </div>
+  ) : (
+    <section class="view-section" id={id} aria-labelledby={`${id}-title`}>
+      <header class="view-section__head">
+        <h2 class="view-section__title" id={`${id}-title`}>
+          {title}
+        </h2>
+        {description === null ? null : <p class="view-section__description">{description}</p>}
+      </header>
+      <div class="view-grid">
+        <slot />
+      </div>
+    </section>
+  )
+}

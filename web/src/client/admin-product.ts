@@ -1,4 +1,5 @@
-// Yönetim panelinin ürün görünümü (`/v1/admin/product`): etkinlik (WAU/MAU, haftalık etkin hesaplar), kayıt haftası
+// Yönetim panelinin ürün verisi (`/v1/admin/product`; öğeleri gelir, büyüme, kullanım, güvenilirlik ve maliyet
+// görünümlerindedir): etkinlik (WAU/MAU, haftalık etkin hesaplar), kayıt haftası
 // kohortları, D7/D30 tutunma, ilk adımlara geçen süre, deneme sonuçları, yarım kalan Checkout; güvenilirlik (toplantı
 // hataları, not tamamlanması, Deepgram yeniden bağlanmaları, günlük "Sorunlar" grafikleri); yaklaşık birim ekonomisi
 // (liste fiyatı) ve sürüme göre çökmeler. Yanıt burada katı biçimde doğrulanır; yanıtta hesap kimliği yoktur.
@@ -14,7 +15,8 @@ import {
   parseObject,
   stringField,
 } from "./api";
-import { fillCounts, fillTable, formatCount, formatDay, formatDayLong, formatRate, formatTime, node, tableRow } from "./admin-format";
+import { type ChartPoint, renderDailyBars } from "./admin-chart";
+import { fillCounts, fillTable, formatCount, formatDayLong, formatRate, formatTime, node, tableRow } from "./admin-format";
 import { type AdminProductCopy, adminProductCopy } from "./admin-product-copy";
 import { type AdminClientCopy, clientCopy, fill } from "./copy";
 import { element } from "./dom";
@@ -23,12 +25,6 @@ import { siteLocale } from "../config";
 
 const productText: AdminProductCopy = adminProductCopy;
 const adminText: AdminClientCopy = clientCopy.admin;
-const svgNamespace: string = "http://www.w3.org/2000/svg";
-
-/** Grafik çizim alanı (SVG birimi; genel bakıştaki grafiklerle aynı). */
-const chartWidth: number = 300;
-const chartHeight: number = 60;
-const barGap: number = 3;
 
 /** Ayrıntı başına sayı. */
 interface DetailCount {
@@ -167,13 +163,6 @@ export interface ProductView {
   readonly refresh: () => Promise<void>;
   /** İlk açılışta yükler (sonrakilerde bir şey yapmaz). */
   readonly ensureLoaded: () => Promise<void>;
-}
-
-/** Grafikteki bir günün yığılmış çubuk parçaları (alttan üste). */
-interface ChartDay {
-  readonly day: string;
-  readonly parts: readonly { readonly value: number; readonly tone: "main" | "accent" }[];
-  readonly title: string;
 }
 
 /** Sayı ya da null alanı. */
@@ -431,66 +420,9 @@ function fillProductTable(id: string, rows: readonly HTMLTableRowElement[], hasE
   }
 }
 
-/** SVG öğesi oluşturur. */
-function svgElement(name: string, attributes: Readonly<Record<string, string>>): SVGElement {
-  const created: SVGElement = document.createElementNS(svgNamespace, name) as SVGElement;
-  for (const [key, value] of Object.entries(attributes)) {
-    created.setAttribute(key, value);
-  }
-  return created;
-}
-
-/** Grafiğin metin özeti: toplam ve en yüksek gün. Saf fonksiyondur. */
-function chartSummary(days: readonly ChartDay[], format: (value: number) => string): string {
-  const totals: number[] = days.map((day: ChartDay): number => day.parts.reduce((sum: number, part): number => sum + part.value, 0));
-  const total: number = totals.reduce((sum: number, value: number): number => sum + value, 0);
-  if (total === 0) {
-    return adminText.chartEmpty;
-  }
-  const peak: number = Math.max(...totals);
-  const peakDay: ChartDay | undefined = days[totals.indexOf(peak)];
-  return fill(adminText.chartSummary, { total: format(total), peak: format(peak), day: peakDay === undefined ? "" : formatDay(peakDay.day) });
-}
-
-/** Günlük yığılmış çubuk grafiğini çizer (genel bakış grafikleriyle aynı biçim); özeti `figcaption`'a yazar. */
-function renderChart(id: string, days: readonly ChartDay[], format: (value: number) => string): void {
-  const totals: number[] = days.map((day: ChartDay): number => day.parts.reduce((sum: number, part): number => sum + part.value, 0));
-  const max: number = Math.max(0, ...totals);
-  const barWidth: number = days.length === 0 ? 0 : (chartWidth - barGap * (days.length - 1)) / days.length;
-  const svg: SVGElement = svgElement("svg", { viewBox: `0 0 ${chartWidth} ${chartHeight}`, class: "chart__svg", role: "img", "aria-labelledby": `chart-${id}-summary` });
-  days.forEach((day: ChartDay, index: number): void => {
-    const x: number = index * (barWidth + barGap);
-    const group: SVGElement = svgElement("g", {});
-    const title: SVGElement = svgElement("title", {});
-    title.textContent = day.title;
-    group.append(title, svgElement("rect", { x: x.toFixed(2), y: String(chartHeight - 1.5), width: barWidth.toFixed(2), height: "1.5", rx: "0.75", class: "chart__base" }));
-    let top: number = chartHeight;
-    for (const part of day.parts) {
-      if (part.value <= 0 || max === 0) {
-        continue;
-      }
-      const height: number = Math.max(2, (part.value / max) * (chartHeight - 4));
-      top -= height;
-      group.append(svgElement("rect", { x: x.toFixed(2), y: top.toFixed(2), width: barWidth.toFixed(2), height: height.toFixed(2), rx: "1", class: `chart__bar chart__bar--${part.tone}` }));
-    }
-    svg.append(group);
-  });
-  const axis: HTMLElement = node("div", "chart__axis", "");
-  axis.setAttribute("aria-hidden", "true");
-  const first: ChartDay | undefined = days[0];
-  const last: ChartDay | undefined = days.at(-1);
-  axis.append(node("span", "", first === undefined ? "" : formatDay(first.day)), node("span", "", last === undefined ? "" : formatDay(last.day)));
-  element(`chart-${id}`, HTMLElement).replaceChildren(svg, axis);
-  element(`chart-${id}-summary`, HTMLElement).textContent = chartSummary(days, format);
-}
-
 /** Bir sayaç türünün günlük grafiği. Saf fonksiyondur. */
-function opsChartDays(days: readonly OpsDay[], value: (day: OpsDay) => number): ChartDay[] {
-  return days.map((day: OpsDay): ChartDay => ({
-    day: day.day,
-    parts: [{ value: value(day), tone: "main" }],
-    title: fill(adminText.barTitle, { day: formatDay(day.day), value: formatCount(value(day)) }),
-  }));
+function opsChartDays(days: readonly OpsDay[], value: (day: OpsDay) => number): ChartPoint[] {
+  return days.map((day: OpsDay): ChartPoint => ({ day: day.day, parts: [{ value: value(day), tone: "main", label: "" }] }));
 }
 
 /** Kohort tablosunun satırları. */
@@ -517,7 +449,7 @@ function renderEngagement(product: Product): void {
     setProductKpi(
       `d${retention.day}`,
       formatRate(retention.retained, retention.eligible),
-      fillCounts(productText.kpiSubs.retention, { retained: retention.retained, eligible: retention.eligible, from: retention.day, to: retention.day + 6 }),
+      fillCounts(productText.kpiSubs.retention, { retained: retention.retained, eligible: retention.eligible }),
       false,
     );
   }
@@ -589,7 +521,7 @@ function renderReliability(reliability: Product["reliability"]): void {
   setProductKpi(
     "on-device",
     formatRate(reliability.onDevice, meetings),
-    fillCounts(productText.kpiSubs.onDevice, { onDevice: reliability.onDevice, meetings, deepgram: reliability.deepgram.meetings }),
+    fillCounts(productText.kpiSubs.onDevice, { onDevice: reliability.onDevice, meetings }),
     false,
   );
   fillProductTable(
@@ -620,9 +552,9 @@ function renderReliability(reliability: Product["reliability"]): void {
     false,
   );
   element("product-outcomes-note", HTMLElement).textContent = fillCounts(productText.notes.outcomes, { baseline: deepgram.baselineGrants });
-  renderChart("product-refusals", opsChartDays(reliability.opsDays, (day: OpsDay): number => day.refusal), formatCount);
-  renderChart("product-provider", opsChartDays(reliability.opsDays, (day: OpsDay): number => day.providerError), formatCount);
-  renderChart("product-server", opsChartDays(reliability.opsDays, (day: OpsDay): number => day.serverError), formatCount);
+  renderDailyBars("product-refusals", opsChartDays(reliability.opsDays, (day: OpsDay): number => day.refusal), formatCount);
+  renderDailyBars("product-provider", opsChartDays(reliability.opsDays, (day: OpsDay): number => day.providerError), formatCount);
+  renderDailyBars("product-server", opsChartDays(reliability.opsDays, (day: OpsDay): number => day.serverError), formatCount);
 }
 
 /** Ayın etiketi (bu ay kısmi). Saf fonksiyondur. */
@@ -673,15 +605,14 @@ function renderEconomics(economics: Product["economics"]): void {
     monthly: formatSmallUsd(rates.priceUsdMonthly),
     yearly: formatSmallUsd(rates.priceUsdYearly),
   });
-  renderChart(
+  renderDailyBars(
     "product-spend",
-    economics.dailySpend.map((day: DaySpendSplit): ChartDay => ({
+    economics.dailySpend.map((day: DaySpendSplit): ChartPoint => ({
       day: day.day,
       parts: [
-        { value: day.usd - day.trialUsd, tone: "main" },
-        { value: day.trialUsd, tone: "accent" },
+        { value: day.usd - day.trialUsd, tone: "main", label: productText.legendPaid },
+        { value: day.trialUsd, tone: "accent", label: productText.legendTrial },
       ],
-      title: fill(productText.spendBarTitle, { day: formatDay(day.day), trial: formatSmallUsd(day.trialUsd), paid: formatSmallUsd(day.usd - day.trialUsd) }),
     })),
     formatSmallUsd,
   );

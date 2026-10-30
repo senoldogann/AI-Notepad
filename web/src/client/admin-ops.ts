@@ -1,4 +1,4 @@
-// Yönetim panelinin işletim görünümü: şu an açık toplantılar, bitirilmeden süresi dolanlar, takılı kullanım ayırmaları,
+// Yönetim panelinin işletim görünümü (uyarıları genel bakışın "dikkat" listesinde de): şu an açık toplantılar, bitirilmeden süresi dolanlar, takılı kullanım ayırmaları,
 // gerçek süreye indirilmemiş Deepgram tahminleri, Stripe webhook'unun son olayları ve son çökme raporları. Uyarı eşiği
 // aşılan kutu (ör. bir günden eski bekleyen ayırma) uyarı görünümüne geçer.
 import { type OpenMeeting, type Operations, type RecentCrash, fetchOperations } from "./admin-api";
@@ -57,8 +57,8 @@ function crashItem(crash: RecentCrash, onOpenReport: OpenReport): HTMLLIElement 
 /** İşletim görünümünü çizer. */
 function renderOperations(ops: Operations, onOpenUser: (id: string) => void, onOpenReport: OpenReport): void {
   const nowMs: number = ops.generatedAt;
-  setOpsKpi("open", formatCount(ops.meetings.open), adminText.opsOpenSub, false);
-  setOpsKpi("unended", formatCount(ops.meetings.unendedLast7Days), adminText.opsUnendedSub, false);
+  setOpsKpi("open", formatCount(ops.meetings.open), "", false);
+  setOpsKpi("unended", formatCount(ops.meetings.unendedLast7Days), "", false);
   const oldest: number | null = ops.reservations.oldestExpiredAt;
   setOpsKpi(
     "reservations",
@@ -93,11 +93,13 @@ function renderOperations(ops: Operations, onOpenUser: (id: string) => void, onO
   element("ops-crashes-empty", HTMLElement).classList.toggle("hidden", ops.reports.recentCrashes.length > 0);
 }
 
-/** İşletim görünümünü bağlar. */
-export function createOperationsView(onOpenUser: (id: string) => void, onOpenReport: OpenReport): OperationsView {
+/** İşletim verisini bağlar. `onLoaded` her yüklemeden sonra yanıtı alır (genel bakıştaki "dikkat" listesi). */
+export function createOperationsView(onOpenUser: (id: string) => void, onOpenReport: OpenReport, onLoaded: (ops: Operations) => void): OperationsView {
   const state: { loaded: boolean } = { loaded: false };
   const refresh = async (): Promise<void> => {
-    renderOperations(await fetchOperations(), onOpenUser, onOpenReport);
+    const ops: Operations = await fetchOperations();
+    renderOperations(ops, onOpenUser, onOpenReport);
+    onLoaded(ops);
     state.loaded = true;
   };
   return {

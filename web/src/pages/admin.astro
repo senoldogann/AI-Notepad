@@ -1,140 +1,73 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): dokuz görünüm — genel
-// bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
-// davet özeti), ürün (etkinlik, kohortlar, tutunma, güvenilirlik, yaklaşık birim ekonomisi, sürüme göre çökmeler),
-// eğilimler (günlük anlık görüntüler, gerçek gelir, token kovaları, diller, kampanyalar, site istatistikleri),
-// telemetri (sürüm benimsenmesi, amaca göre token, istemci olayları ve süreleri, özellik kullanımı),
-// kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
-// işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, kapak
-// seçici, görsel ekleme, önizleme, sitede açma, paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
-// (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
-// yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
-// nötr bir yükleme satırı görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
-// "sayfa bulunamadı" görünümü. Panel eklenince sitenin üst çubuğu ve alt bilgisi gizlenir; panel solda menü, üstte
-// görünüm başlığı olan tam ekran bir yönetim kabuğudur.
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz). Tam ekran bir yönetim
+// kabuğu: solda gruplu menü (genel bakış; Analytics: gelir, büyüme, kullanım, güvenilirlik, maliyet; Manage:
+// kullanıcılar, bildirim kutusu, işletim, blog), üstte görünümün adı, açıklaması ve yenileme. Her analiz görünümü aynı
+// düzeni izler: üstte en çok dört ölçülük özet şeridi, altında grafikler ve döküm kartları, sonra başlıklı bölümlerde
+// tablolar (12 sütunlu ızgara; bileşenler src/components/admin). Değerler tarayıcıda `/v1/admin/*` uçlarından
+// doldurulur (src/client/admin*.ts); bir görünüm açılınca yalnızca onun veri kaynakları yüklenir. Panelin varlığı belli
+// olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve yalnızca sunucu yönetici erişimini doğrulayınca
+// (`/v1/admin/stats` başarılı) sayfaya eklenir; o zamana dek nötr bir yükleme satırı, erişim yoksa standart "sayfa
+// bulunamadı" görünümü.
 import Base from "../layouts/Base.astro";
+// Sitenin genel stillerinden sonra yüklenir: eşit özgüllükte panelin kuralı geçerlidir.
+import "../styles/admin.css";
 import { websiteCard } from "../lib/social";
 import Icon from "../components/Icon.astro";
 import Logo from "../components/Logo.astro";
 import NotFound from "../components/NotFound.astro";
+import ChartPanel from "../components/admin/ChartPanel.astro";
+import FactsPanel from "../components/admin/FactsPanel.astro";
+import ListPanel from "../components/admin/ListPanel.astro";
+import Section from "../components/admin/Section.astro";
+import Stats from "../components/admin/Stats.astro";
+import TablePanel from "../components/admin/TablePanel.astro";
 import { productName } from "../config";
 import { type AdminCopy, copy } from "../copy";
 import { type FilmPalette, filmPalettes } from "../lib/film";
 import type { IconName } from "../lib/icons";
+import { type Column, numberColumn, textColumn } from "../lib/admin-table";
 import { routes } from "../routes";
+import { clientCopy } from "../client/copy";
 import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-copy";
 import { type AdminBlogCopy, adminBlogCopy } from "../client/admin-blog-copy";
+import { type AdminLayoutCopy, type AdminView, type NavGroup, adminLayoutCopy, navGroups } from "../client/admin-layout-copy";
 import { type AdminProductCopy, adminProductCopy } from "../client/admin-product-copy";
-import { type AdminTrendsCopy, type TrendChartId, type TrendTableId, adminTrendsCopy } from "../client/admin-trends-copy";
+import { type AdminTrendsCopy, type TrendTableId, adminTrendsCopy } from "../client/admin-trends-copy";
 import { type AdminTelemetryCopy, adminTelemetryCopy, countEventKinds, durationEventKinds } from "../client/admin-telemetry-copy";
 
 const text: AdminCopy = copy.admin;
+const layout: AdminLayoutCopy = adminLayoutCopy;
 const inviteText: AdminInviteCopy = adminInviteCopy;
 const blogText: AdminBlogCopy = adminBlogCopy;
 const productText: AdminProductCopy = adminProductCopy;
 const trendsText: AdminTrendsCopy = adminTrendsCopy;
-
-/** Eğilimler görünümünün grafikleri ve tabloları (betik `chart-trend-<id>`, `trend-<id>-rows` doldurur). */
-const trendCharts: readonly TrendChartId[] = ["mrr", "subscribers", "active", "spend", "revenue"];
-const trendTables: readonly TrendTableId[] = ["revenue", "tokens", "languages", "events", "campaigns", "paths", "referrers"];
 const telemetryText: AdminTelemetryCopy = adminTelemetryCopy;
+const productColumns: AdminProductCopy["columns"] = productText.columns;
 
-/** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
-interface KpiSpec {
-  readonly id: string;
-  readonly label: string;
-  readonly icon: IconName;
-  readonly meter: boolean;
+/** Menüdeki simgeler. */
+const viewIcons: Readonly<Record<AdminView, IconName>> = {
+  overview: "grid",
+  revenue: "wallet",
+  growth: "trending",
+  engagement: "activity",
+  reliability: "shield",
+  costs: "chip",
+  users: "users",
+  inbox: "inbox",
+  operations: "laptop",
+  blog: "note",
+};
+
+/** Eğilimler tablosunun sütunları (admin-trends-copy.ts). Saf fonksiyondur. */
+function trendColumns(table: TrendTableId): readonly Column[] {
+  return trendsText.tables[table].columns;
 }
 
-/** Özet kutusu grubu: başlık ve kutular (her grup dört kutu, tam genişlik). */
-interface KpiGroup {
-  readonly id: "growth" | "revenue" | "usage" | "costs";
-  readonly title: string;
-  readonly kpis: readonly KpiSpec[];
-}
+/** Ürün tablolarının başlığı ve sabit notu. */
+const product = productText.tables;
 
-/** Genel bakışın özet kutuları dört grupta: büyüme, gelir, kullanım, maliyet ve kapasite. */
-const groups: readonly KpiGroup[] = [
-  {
-    id: "growth",
-    title: text.groups.growth,
-    kpis: [
-      { id: "downloads", label: text.kpis.downloads, icon: "download", meter: false },
-      { id: "users", label: text.kpis.users, icon: "users", meter: false },
-      { id: "trials", label: text.kpis.trials, icon: "gift", meter: false },
-      { id: "subscribers", label: text.kpis.subscribers, icon: "card", meter: false },
-    ],
-  },
-  {
-    id: "revenue",
-    title: text.groups.revenue,
-    kpis: [
-      { id: "mrr", label: text.kpis.mrr, icon: "chart", meter: false },
-      { id: "conversion", label: text.kpis.conversion, icon: "sparkle", meter: true },
-      { id: "churn", label: text.kpis.churn, icon: "rewind", meter: false },
-      { id: "payments", label: text.kpis.payments, icon: "wallet", meter: false },
-    ],
-  },
-  {
-    id: "usage",
-    title: text.groups.usage,
-    kpis: [
-      { id: "meetings", label: text.kpis.meetings, icon: "calendar", meter: false },
-      { id: "hours", label: text.kpis.hours, icon: "clock", meter: false },
-      { id: "audio", label: text.kpis.audio, icon: "waveform", meter: false },
-      { id: "tokens", label: text.kpis.tokens, icon: "tokens", meter: false },
-    ],
-  },
-  {
-    id: "costs",
-    title: text.groups.costs,
-    kpis: [
-      { id: "spend", label: text.kpis.spend, icon: "chip", meter: true },
-      { id: "elevenlabs", label: text.kpis.elevenLabs, icon: "timer", meter: true },
-      { id: "deepgram", label: text.kpis.deepgram, icon: "translate", meter: true },
-      { id: "refusals", label: text.kpis.refusals, icon: "lock", meter: false },
-    ],
-  },
-];
-
-/** İşletim görünümünün özet kutuları (betik `kpi-ops-<id>` doldurur). */
-const opsKpis: readonly KpiSpec[] = [
-  { id: "ops-open", label: text.operations.kpis.open, icon: "play", meter: false },
-  { id: "ops-unended", label: text.operations.kpis.unended, icon: "pause", meter: false },
-  { id: "ops-reservations", label: text.operations.kpis.reservations, icon: "disk", meter: false },
-  { id: "ops-deepgram", label: text.operations.kpis.deepgram, icon: "translate", meter: false },
-  { id: "ops-webhook", label: text.operations.kpis.webhook, icon: "plug", meter: false },
-  { id: "ops-reports", label: text.operations.kpis.reports, icon: "inbox", meter: false },
-];
-
-/** Grafikler: kimlik (betik `chart-<id>` çizer) ve başlık. */
-const charts: readonly { readonly id: string; readonly title: string; readonly legend: boolean }[] = [
-  { id: "downloads", title: text.charts.downloads, legend: false },
-  { id: "users", title: text.charts.users, legend: false },
-  { id: "meetings", title: text.charts.meetings, legend: true },
-  { id: "spend", title: text.charts.spend, legend: false },
-];
-
-/** Panelin görünümleri (betik `view-<id>` düğmesiyle `panel-<id>` açar). */
-const views: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
-  { id: "overview", label: text.views.overview, icon: "chart" },
-  { id: "insights", label: text.views.insights, icon: "sparkle" },
-  { id: "product", label: productText.view, icon: "waveform" },
-  { id: "trends", label: trendsText.view, icon: "clock" },
-  { id: "telemetry", label: telemetryText.view, icon: "waveform" },
-  { id: "users", label: text.views.users, icon: "users" },
-  { id: "operations", label: text.views.operations, icon: "laptop" },
-  { id: "inbox", label: text.views.inbox, icon: "inbox" },
-  { id: "blog", label: blogText.view, icon: "note" },
-];
-
-/** Bildirim kutusu sekmeleri. */
-const tabs: readonly { readonly kind: string; readonly label: string; readonly icon: IconName }[] = [
-  { kind: "feedback", label: text.tabs.feedback, icon: "message" },
-  { kind: "crash", label: text.tabs.crash, icon: "sparkle" },
-  { kind: "contact", label: text.tabs.contact, icon: "mail" },
-];
+/** Kohort tablosunun hafta sütunları (kayıttan sonraki 0.–4. hafta; sunucu `cohortWeekColumns`). */
+const cohortWeeks: readonly number[] = [0, 1, 2, 3, 4];
 
 /** Kesim seçeneği (değer sunucunun `segment` parametresidir; boş = tümü). */
 interface SegmentOption {
@@ -142,7 +75,6 @@ interface SegmentOption {
   readonly label: string;
 }
 
-/** Plan kesimleri. */
 const planSegments: readonly SegmentOption[] = [
   { value: "subscribed", label: text.users.segments.subscribed },
   { value: "past_due", label: text.users.segments.pastDue },
@@ -152,7 +84,6 @@ const planSegments: readonly SegmentOption[] = [
   { value: "invited", label: inviteText.segment },
 ];
 
-/** Bırakma kesimleri: kullanıcının nerede durduğu ya da neyin ters gittiği. */
 const dropOffSegments: readonly SegmentOption[] = [
   { value: "no_meeting", label: text.users.segments.noMeeting },
   { value: "trial_ended", label: text.users.segments.trialEnded },
@@ -160,26 +91,7 @@ const dropOffSegments: readonly SegmentOption[] = [
   { value: "failed", label: text.users.segments.failed },
 ];
 
-/**
- * Tablo sütunu: başlık ve sayısal mı. Sayısal sütunun başlığı da hücreleri de sağa yaslanır; betik hücreleri başlığa
- * göre hizalar (`fillTable`), sütun hizasının tek kaynağı burasıdır.
- */
-interface Column {
-  readonly label: string;
-  readonly numeric: boolean;
-}
-
-/** Metin sütunu. Saf fonksiyondur. */
-function textColumn(label: string): Column {
-  return { label, numeric: false };
-}
-
-/** Sayı sütunu. Saf fonksiyondur. */
-function numberColumn(label: string): Column {
-  return { label, numeric: true };
-}
-
-const providerOptions: readonly { readonly value: string; readonly label: string }[] = [
+const providerOptions: readonly SegmentOption[] = [
   { value: "", label: text.users.providers.all },
   { value: "apple", label: text.users.providers.apple },
   { value: "google", label: text.users.providers.google },
@@ -209,147 +121,19 @@ const meetingColumns: readonly Column[] = [
   textColumn(text.users.meetingColumns.notes),
 ];
 
-const openColumns: readonly Column[] = [
-  textColumn(text.operations.openColumns.user),
-  textColumn(text.operations.openColumns.kind),
-  textColumn(text.operations.openColumns.started),
-  textColumn(text.operations.openColumns.endsBy),
-  textColumn(text.operations.openColumns.notes),
+const inviteFriendColumns: readonly Column[] = [
+  textColumn(inviteText.friendColumns.friend),
+  textColumn(inviteText.friendColumns.status),
+  textColumn(inviteText.friendColumns.joined),
+  textColumn(inviteText.friendColumns.firstPayment),
+  textColumn(inviteText.friendColumns.reward),
 ];
 
-/** Blog yazı listesi (betik `blog-rows` gövdesini doldurur). */
 const blogColumns: readonly Column[] = [
   textColumn(blogText.columns.title),
   textColumn(blogText.columns.status),
   textColumn(blogText.columns.date),
   textColumn(blogText.columns.author),
-];
-
-const stripeColumns: readonly Column[] = [textColumn(text.operations.stripeColumns.type), numberColumn(text.operations.stripeColumns.count)];
-
-/** İçgörüler görünümünün tabloları (betik `<id>-rows` gövdesini, varsa `<id>-empty` bildirimini doldurur). */
-/**
- * Telemetri görünümünün tabloları (betik `<id>-rows`, `<id>-empty` ve `summary` ise `<id>-summary` doldurur; bkz.
- * admin-telemetry.ts). `wide` tablo iki sütunu kaplar.
- */
-interface TelemetryTable {
-  readonly id: string;
-  readonly title: string;
-  readonly columns: readonly Column[];
-  readonly empty: string;
-  readonly summary: boolean;
-  readonly wide: boolean;
-}
-
-const versionColumns: readonly Column[] = [
-  textColumn(telemetryText.versionColumns.version),
-  numberColumn(telemetryText.versionColumns.users),
-  textColumn(telemetryText.versionColumns.share),
-];
-const featureColumns: readonly Column[] = [
-  textColumn(telemetryText.featureColumns.feature),
-  numberColumn(telemetryText.featureColumns.userDays),
-  textColumn(telemetryText.featureColumns.share),
-  numberColumn(telemetryText.featureColumns.uses),
-];
-const valueFeatureColumns: readonly Column[] = [textColumn(telemetryText.valueColumn), ...featureColumns.slice(1)];
-
-const telemetryTables: readonly TelemetryTable[] = [
-  { id: "telemetry-apps", title: telemetryText.appVersionsTitle, columns: versionColumns, empty: telemetryText.noVersions, summary: false, wide: false },
-  { id: "telemetry-os", title: telemetryText.osVersionsTitle, columns: versionColumns, empty: telemetryText.noVersions, summary: false, wide: false },
-  {
-    id: "telemetry-purposes",
-    title: telemetryText.purposesTitle,
-    columns: [
-      textColumn(telemetryText.purposeColumns.purpose),
-      numberColumn(telemetryText.purposeColumns.calls),
-      numberColumn(telemetryText.purposeColumns.input),
-      numberColumn(telemetryText.purposeColumns.output),
-      textColumn(telemetryText.purposeColumns.share),
-    ],
-    empty: telemetryText.noPurposes,
-    summary: false,
-    wide: true,
-  },
-  {
-    id: "telemetry-tokens-daily",
-    title: telemetryText.purposesDailyTitle,
-    columns: [
-      textColumn(telemetryText.dailyTokenColumns.day),
-      numberColumn(telemetryText.dailyTokenColumns.calls),
-      numberColumn(telemetryText.dailyTokenColumns.tokens),
-      textColumn(telemetryText.dailyTokenColumns.trend),
-    ],
-    empty: telemetryText.noPurposes,
-    summary: false,
-    wide: true,
-  },
-  {
-    id: "telemetry-events",
-    title: telemetryText.reliabilityTitle,
-    columns: [textColumn(telemetryText.reliabilityColumns.event), numberColumn(telemetryText.reliabilityColumns.total), textColumn(telemetryText.reliabilityColumns.versions)],
-    empty: telemetryText.noEvents,
-    summary: false,
-    wide: true,
-  },
-  {
-    id: "telemetry-events-daily",
-    title: telemetryText.reliabilityDailyTitle,
-    columns: [textColumn(telemetryText.dayColumn), ...countEventKinds.map((kind) => numberColumn(telemetryText.countKindsShort[kind]))],
-    empty: telemetryText.noEvents,
-    summary: false,
-    wide: true,
-  },
-  ...durationEventKinds.map(
-    (kind): TelemetryTable => ({
-      id: `telemetry-duration-${kind}`,
-      title: telemetryText.durationKinds[kind],
-      columns: [textColumn(telemetryText.durationColumns.bucket), numberColumn(telemetryText.durationColumns.runs), textColumn(telemetryText.durationColumns.share)],
-      empty: telemetryText.noDurations,
-      summary: true,
-      wide: false,
-    }),
-  ),
-  { id: "telemetry-features", title: telemetryText.featuresTitle, columns: featureColumns, empty: telemetryText.noFeatures, summary: true, wide: true },
-  { id: "telemetry-languages", title: telemetryText.languagesTitle, columns: valueFeatureColumns, empty: telemetryText.noFeatures, summary: false, wide: false },
-  { id: "telemetry-integrations", title: telemetryText.integrationsTitle, columns: valueFeatureColumns, empty: telemetryText.noFeatures, summary: false, wide: false },
-  { id: "telemetry-exports", title: telemetryText.exportsTitle, columns: valueFeatureColumns, empty: telemetryText.noFeatures, summary: false, wide: false },
-];
-
-const problemColumns: readonly Column[] = [
-  textColumn(text.insights.problemsColumns.problem),
-  numberColumn(text.insights.problemsColumns.last7),
-  numberColumn(text.insights.problemsColumns.last30),
-];
-
-const funnelColumns: readonly Column[] = [
-  textColumn(text.insights.funnelColumns.step),
-  numberColumn(text.insights.funnelColumns.count),
-  numberColumn(text.insights.funnelColumns.fromPrevious),
-  numberColumn(text.insights.funnelColumns.lost),
-];
-
-/** Sayı tablosu kartları: indirme düğmeleri ve yönlendiren siteler (iptal nedenleri tablosu neden satırıyla birlikte aşağıda ayrıca çizilir). */
-const countTables: readonly { readonly id: string; readonly title: string; readonly columns: readonly Column[]; readonly empty: string; readonly note: string | null }[] = [
-  {
-    id: "insights-sources",
-    title: text.insights.sourcesTitle,
-    columns: [textColumn(text.insights.sourceColumns.source), numberColumn(text.insights.sourceColumns.count)],
-    empty: text.insights.noDownloads,
-    note: null,
-  },
-  {
-    id: "insights-referrers",
-    title: text.insights.referrersTitle,
-    columns: [textColumn(text.insights.referrerColumns.host), numberColumn(text.insights.referrerColumns.count)],
-    empty: text.insights.noDownloads,
-    note: text.insights.downloadsNote,
-  },
-];
-
-const feedbackColumns: readonly Column[] = [
-  textColumn(text.insights.cancellationColumns.reason),
-  numberColumn(text.insights.cancellationColumns.count),
 ];
 
 /** Kullanıcı ayrıntısının ölçerleri (betik `user-meter-<id>` ve `user-meter-<id>-text` doldurur). */
@@ -359,38 +143,14 @@ const userMeters: readonly { readonly id: string; readonly label: string }[] = [
   { id: "account", label: text.users.usage.accountTokens },
 ];
 
-/** Kullanıcı ayrıntısının alanları (betik `user-field-<id>` doldurur). */
-/** İçgörülerdeki davet özeti tablosu (betik `insights-invites-rows` doldurur). */
-const inviteSummaryColumns: readonly Column[] = [textColumn(inviteText.insightsColumns.measure), numberColumn(inviteText.insightsColumns.count)];
+/** Ayrıntı alanı: kimlik (betik `<önek><id>` doldurur), etiket ve eş aralıklı mı. */
+interface DetailField {
+  readonly id: string;
+  readonly label: string;
+  readonly mono: boolean;
+}
 
-/** Kullanıcı ayrıntısındaki "Invited by" alanları (betik `user-invite-field-<id>` doldurur). */
-const invitedByFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
-  { id: "referrer", label: inviteText.invitedByFields.referrer, mono: false },
-  { id: "code", label: inviteText.invitedByFields.code, mono: true },
-  { id: "status", label: inviteText.invitedByFields.status, mono: false },
-  { id: "free-month", label: inviteText.invitedByFields.freeMonth, mono: false },
-  { id: "card", label: inviteText.invitedByFields.card, mono: false },
-  { id: "dates", label: inviteText.invitedByFields.dates, mono: false },
-];
-
-/** Kullanıcı ayrıntısındaki "Invites" alanları (betik `user-invites-field-<id>` doldurur). */
-const invitesFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
-  { id: "code", label: inviteText.invitesFields.code, mono: true },
-  { id: "counts", label: inviteText.invitesFields.counts, mono: false },
-  { id: "next", label: inviteText.invitesFields.nextReward, mono: false },
-  { id: "left", label: inviteText.invitesFields.rewardsLeft, mono: false },
-];
-
-/** Davet edilen arkadaşlar tablosu (betik `user-invite-friends` doldurur). */
-const inviteFriendColumns: readonly Column[] = [
-  textColumn(inviteText.friendColumns.friend),
-  textColumn(inviteText.friendColumns.status),
-  textColumn(inviteText.friendColumns.joined),
-  textColumn(inviteText.friendColumns.firstPayment),
-  textColumn(inviteText.friendColumns.reward),
-];
-
-const userFields: readonly { readonly id: string; readonly label: string; readonly mono: boolean }[] = [
+const userFields: readonly DetailField[] = [
   { id: "provider", label: text.users.fields.provider, mono: false },
   { id: "created", label: text.users.fields.created, mono: false },
   { id: "last-active", label: text.users.fields.lastActive, mono: false },
@@ -401,183 +161,33 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
   { id: "cancellation", label: text.users.fields.cancellation, mono: false },
 ];
 
-/**
- * Ürün görünümünün tablosu: betik `<id>-rows` gövdesini, `empty` varsa `<id>-empty` bildirimini doldurur; `<id>-note`
- * notu sabittir ya da (boşsa) betik değerlerle yazar. Geniş tablo iki sütunu kaplar.
- */
-interface ProductTable {
-  readonly id: string;
-  readonly title: string;
-  readonly columns: readonly Column[];
-  readonly wide: boolean;
-  readonly empty: string | null;
-  readonly note: string;
-}
-
-/** Ürün görünümünün bölümü: özet kutuları (betik `kpi-<id>` doldurur), grafikler (betik `chart-<id>` çizer) ve tablolar. */
-interface ProductSection {
-  readonly id: string;
-  readonly title: string;
-  readonly kpis: readonly KpiSpec[];
-  readonly charts: readonly { readonly id: string; readonly title: string; readonly legend: boolean }[];
-  readonly tables: readonly ProductTable[];
-}
-
-const productColumns: AdminProductCopy["columns"] = productText.columns;
-
-/** Kohort tablosunun hafta sütunları (kayıttan sonraki 0.–4. hafta; sunucu `cohortWeekColumns`). */
-const cohortWeeks: readonly number[] = [0, 1, 2, 3, 4];
-
-const productSections: readonly ProductSection[] = [
-  {
-    id: "engagement",
-    title: productText.sections.engagement,
-    kpis: [
-      { id: "product-wau", label: productText.kpis.wau, icon: "users", meter: false },
-      { id: "product-d7", label: productText.kpis.d7, icon: "rewind", meter: false },
-      { id: "product-d30", label: productText.kpis.d30, icon: "calendar", meter: false },
-      { id: "product-checkout", label: productText.kpis.checkout, icon: "card", meter: false },
-    ],
-    charts: [],
-    tables: [
-      {
-        id: "product-cohorts",
-        title: productText.tables.cohorts,
-        columns: [
-          textColumn(productColumns.signupWeek),
-          numberColumn(productColumns.signups),
-          ...cohortWeeks.map((week: number): Column => numberColumn(productColumns.week.replace("{week}", String(week)))),
-        ],
-        wide: true,
-        empty: null,
-        note: productText.notes.cohorts,
-      },
-      {
-        id: "product-weeks",
-        title: productText.tables.weeks,
-        columns: [
-          textColumn(productColumns.calendarWeek),
-          numberColumn(productColumns.activeUsers),
-          numberColumn(productColumns.meetings),
-          numberColumn(productColumns.perActiveUser),
-        ],
-        wide: false,
-        empty: null,
-        note: "",
-      },
-      {
-        id: "product-steps",
-        title: productText.tables.steps,
-        columns: [textColumn(productColumns.step), numberColumn(productColumns.accounts), numberColumn(productColumns.median)],
-        wide: false,
-        empty: null,
-        note: "",
-      },
-      {
-        id: "product-trials",
-        title: productText.tables.trials,
-        columns: [textColumn(productColumns.outcome), numberColumn(productColumns.accounts), numberColumn(productColumns.share)],
-        wide: false,
-        empty: null,
-        note: productText.notes.trials,
-      },
-    ],
-  },
-  {
-    id: "reliability",
-    title: productText.sections.reliability,
-    kpis: [
-      { id: "product-failed", label: productText.kpis.failed, icon: "inbox", meter: false },
-      { id: "product-notes", label: productText.kpis.notes, icon: "note", meter: false },
-      { id: "product-note-time", label: productText.kpis.noteTime, icon: "timer", meter: false },
-      { id: "product-on-device", label: productText.kpis.onDevice, icon: "laptop", meter: false },
-    ],
-    charts: [
-      { id: "product-refusals", title: productText.charts.refusals, legend: false },
-      { id: "product-provider", title: productText.charts.providerErrors, legend: false },
-      { id: "product-server", title: productText.charts.serverErrors, legend: false },
-    ],
-    tables: [
-      {
-        id: "product-failures",
-        title: productText.tables.failures,
-        columns: [textColumn(productColumns.lastError), numberColumn(productColumns.meetings), numberColumn(productColumns.share)],
-        wide: false,
-        empty: productText.empty.failures,
-        note: "",
-      },
-      {
-        id: "product-outcomes",
-        title: productText.tables.outcomes,
-        columns: [textColumn(productColumns.measure), numberColumn(productColumns.meetings), numberColumn(productColumns.share)],
-        wide: false,
-        empty: null,
-        note: "",
-      },
-    ],
-  },
-  {
-    id: "economics",
-    title: productText.sections.economics,
-    kpis: [],
-    charts: [{ id: "product-spend", title: productText.charts.spend, legend: true }],
-    tables: [
-      {
-        id: "product-costs",
-        title: productText.tables.costs,
-        columns: [
-          textColumn(productColumns.month),
-          numberColumn(productColumns.meetings),
-          numberColumn(productColumns.hours),
-          numberColumn(productColumns.llm),
-          numberColumn(productColumns.elevenLabs),
-          numberColumn(productColumns.deepgram),
-          numberColumn(productColumns.perMeeting),
-          numberColumn(productColumns.perHour),
-          numberColumn(productColumns.accountLlm),
-        ],
-        wide: true,
-        empty: null,
-        note: "",
-      },
-      {
-        id: "product-payers",
-        title: productText.tables.payers,
-        columns: [
-          textColumn(productColumns.month),
-          numberColumn(productColumns.payers),
-          numberColumn(productColumns.costPerPayer),
-          numberColumn(productColumns.listRevenue),
-          numberColumn(productColumns.grossMargin),
-        ],
-        wide: true,
-        empty: null,
-        note: "",
-      },
-    ],
-  },
-  {
-    id: "crashes",
-    title: productText.sections.crashes,
-    kpis: [],
-    charts: [],
-    tables: [
-      {
-        id: "product-crashes",
-        title: productText.tables.crashes,
-        columns: [
-          textColumn(productColumns.version),
-          numberColumn(productColumns.crashes),
-          numberColumn(productColumns.recent),
-          textColumn(productColumns.latest),
-        ],
-        wide: true,
-        empty: productText.empty.crashes,
-        note: productText.notes.crashes,
-      },
-    ],
-  },
+const invitedByFields: readonly DetailField[] = [
+  { id: "referrer", label: inviteText.invitedByFields.referrer, mono: false },
+  { id: "code", label: inviteText.invitedByFields.code, mono: true },
+  { id: "status", label: inviteText.invitedByFields.status, mono: false },
+  { id: "free-month", label: inviteText.invitedByFields.freeMonth, mono: false },
+  { id: "card", label: inviteText.invitedByFields.card, mono: false },
+  { id: "dates", label: inviteText.invitedByFields.dates, mono: false },
 ];
+
+const invitesFields: readonly DetailField[] = [
+  { id: "code", label: inviteText.invitesFields.code, mono: true },
+  { id: "counts", label: inviteText.invitesFields.counts, mono: false },
+  { id: "next", label: inviteText.invitesFields.nextReward, mono: false },
+  { id: "left", label: inviteText.invitesFields.rewardsLeft, mono: false },
+];
+
+/** Bildirim kutusu sekmeleri. */
+const tabs: readonly { readonly kind: string; readonly label: string; readonly icon: IconName }[] = [
+  { kind: "feedback", label: text.tabs.feedback, icon: "message" },
+  { kind: "crash", label: text.tabs.crash, icon: "sparkle" },
+  { kind: "contact", label: text.tabs.contact, icon: "mail" },
+];
+
+const facts = layout.facts;
+const stats = layout.stats;
+const sections = layout.sections;
+const legendPlans: { readonly main: string; readonly accent: string } = { main: layout.charts.subscription, accent: layout.charts.trial };
 ---
 
 <Base page="admin" meta={text.meta} indexed={false} social={websiteCard}>
@@ -596,303 +206,773 @@ const productSections: readonly ProductSection[] = [
     <div class="console">
       <aside class="console__sidebar">
         <a class="console__brand" href={routes.home} aria-label={text.backToSite}>
-          <Logo size={26} />
+          <Logo size={22} />
           <span class="console__brand-name">{productName}</span>
           <span class="console__badge">{text.title}</span>
         </a>
-        <nav class="console__nav" aria-label={text.views.label}>
+        <nav class="console__nav" aria-label={layout.navLabel}>
           {
-            views.map((view, index: number) => (
-              <button
-                id={`view-${view.id}`}
-                class="console__nav-item"
-                type="button"
-                aria-pressed={index === 0 ? "true" : "false"}
-                aria-controls={`panel-${view.id}`}
-                data-title={view.label}>
-                <Icon name={view.icon} size={18} class="" />
-                <span class="console__nav-label">{view.label}</span>
-                {view.id === "inbox" ? <span id="count-inbox" class="console__count tabular" /> : null}
-              </button>
+            navGroups.map((group: NavGroup) => (
+              <div class="console__group">
+                {group.label === null ? null : <p class="console__group-label">{group.label}</p>}
+                {group.views.map((view: AdminView) => (
+                  <button
+                    id={`view-${view}`}
+                    class="console__nav-item"
+                    type="button"
+                    aria-pressed={view === "overview" ? "true" : "false"}
+                    aria-controls={`panel-${view}`}
+                    data-title={layout.views[view].label}
+                    data-description={layout.views[view].description}>
+                    <Icon name={viewIcons[view]} size={16} class="" />
+                    <span class="console__nav-label">{layout.views[view].label}</span>
+                    {view === "inbox" ? <span id="count-inbox" class="console__count tabular" /> : null}
+                  </button>
+                ))}
+              </div>
             ))
           }
         </nav>
-        <a class="console__site-link small" href={routes.home}>{text.backToSite}</a>
+        <a class="console__site-link" href={routes.home}>
+          <Icon name="arrow-right" size={14} class="console__site-icon" />
+          {text.backToSite}
+        </a>
       </aside>
 
-      <div class="console__main">
+      <div id="console-main" class="console__main">
         <header class="console__topbar">
           <div class="console__heading">
-            <h1 id="admin-view-title" class="console__title">{views[0]?.label}</h1>
-            <p id="admin-updated" class="small muted" aria-live="polite"></p>
+            <h1 id="admin-view-title" class="console__title">{layout.views.overview.label}</h1>
+            <p id="admin-view-description" class="console__description">{layout.views.overview.description}</p>
           </div>
-          <button id="admin-refresh" class="button button--secondary button--small" type="button">
-            <Icon name="refresh" size={16} class="" />
-            {text.refresh}
-          </button>
+          <div class="console__tools">
+            <p id="admin-updated" class="console__updated tabular" aria-live="polite"></p>
+            <button id="admin-refresh" class="icon-button" type="button" aria-label={text.refresh} title={text.refresh}>
+              <Icon name="refresh" size={16} class="" />
+            </button>
+          </div>
         </header>
 
         <div class="console__content">
           {/* ---------- Genel bakış ---------- */}
           <div id="panel-overview" class="admin__panel">
-            <div class="kpi-groups">
-              {
-                groups.map((group: KpiGroup) => (
-                  <section class:list={["kpi-group", `kpi-group--${group.id}`]} aria-labelledby={`group-${group.id}`}>
-                    <h2 class="eyebrow kpi-group__title" id={`group-${group.id}`}>
-                      {group.title}
-                    </h2>
-                    <div class="kpi-group__grid">
-                      {group.kpis.map((kpi: KpiSpec) => (
-                        <div class:list={["card", "kpi", { "kpi--meter": kpi.meter, "kpi--accent": kpi.id === "mrr" }]} id={`kpi-${kpi.id}-card`}>
-                          <p class="kpi__label">
-                            <Icon name={kpi.icon} size={16} class="kpi__icon" />
-                            {kpi.label}
-                          </p>
-                          <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-                          {kpi.meter ? <progress id={`kpi-${kpi.id}-meter`} class="meter kpi__meter" aria-label={kpi.label} max="1" value="0" /> : null}
-                          <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ))
-              }
-            </div>
-
-            <section aria-labelledby="charts-title">
-              <h2 class="title-m section-title" id="charts-title">{text.chartsTitle}</h2>
-              <div class="charts">
-                {
-                  charts.map((chart) => (
-                    <figure class="card chart">
-                      <div class="chart__head">
-                        <h3 class="chart__title">{chart.title}</h3>
-                        {chart.legend ? (
-                          <p class="chart__legend small muted" aria-hidden="true">
-                            <span class="legend legend--main">{text.legendSubscription}</span>
-                            <span class="legend legend--accent">{text.legendTrial}</span>
-                          </p>
-                        ) : null}
-                      </div>
-                      <div id={`chart-${chart.id}`} class="chart__plot" />
-                      <figcaption id={`chart-${chart.id}-summary`} class="small muted" />
-                    </figure>
-                  ))
-                }
+            <Section id="overview-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.overview.label}
+                  stats={[
+                    { id: "ov-mrr", label: stats.mrr.label, hint: stats.mrr.hint, meter: false, spark: true },
+                    { id: "ov-subscribers", label: stats.subscribers.label, hint: stats.subscribers.hint, meter: false, spark: true },
+                    { id: "ov-users", label: stats.newUsers.label, hint: stats.newUsers.hint, meter: false, spark: true },
+                    { id: "ov-meetings", label: stats.meetings30.label, hint: stats.meetings30.hint, meter: false, spark: true },
+                  ]}
+                />
               </div>
-            </section>
-          </div>
-
-          {/* ---------- İçgörüler ---------- */}
-          <div id="panel-insights" class="admin__panel hidden">
-            <div class="insights-grid">
-              <section class="card table-card" aria-labelledby="insights-problems-title">
-                <h2 class="detail__label table-card__title" id="insights-problems-title">{text.insights.problemsTitle}</h2>
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-problems-title">
-                  <table class="data-table">
-                    <thead>
-                      <tr>{problemColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
-                    </thead>
-                    <tbody id="insights-problems-rows"></tbody>
-                  </table>
-                </div>
-                <p id="insights-problems-empty" class="muted table-empty hidden">{text.insights.noProblems}</p>
-              </section>
-
-              <section class="card table-card" aria-labelledby="insights-funnel-title">
-                <h2 class="detail__label table-card__title" id="insights-funnel-title">{text.insights.funnelTitle}</h2>
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-funnel-title">
-                  <table class="data-table">
-                    <thead>
-                      <tr>{funnelColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
-                    </thead>
-                    <tbody id="insights-funnel-rows"></tbody>
-                  </table>
-                </div>
-                <p class="small muted table-note">{text.insights.funnelNote}</p>
-              </section>
-
-              {
-                countTables.map((table) => (
-                  <section class="card table-card" aria-labelledby={`${table.id}-title`}>
-                    <h2 class="detail__label table-card__title" id={`${table.id}-title`}>
-                      {table.title}
-                    </h2>
-                    <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`${table.id}-title`}>
-                      <table class="data-table">
-                        <thead>
-                          <tr>
-                            {table.columns.map((column: Column) => (
-                              <th scope="col" class:list={{ numeric: column.numeric }}>
-                                {column.label}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody id={`${table.id}-rows`} />
-                      </table>
-                    </div>
-                    <p id={`${table.id}-empty`} class="muted table-empty hidden">
-                      {table.empty}
-                    </p>
-                    {table.note === null ? null : <p class="small muted table-note">{table.note}</p>}
-                  </section>
-                ))
-              }
-
-              <section class="card table-card" aria-labelledby="insights-feedback-title">
-                <h2 class="detail__label table-card__title" id="insights-feedback-title">{text.insights.cancellationsTitle}</h2>
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-feedback-title">
-                  <table class="data-table">
-                    <thead>
-                      <tr>{feedbackColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
-                    </thead>
-                    <tbody id="insights-feedback-rows"></tbody>
-                  </table>
-                </div>
-                <p id="insights-feedback-empty" class="muted table-empty hidden">{text.insights.noCancellations}</p>
-                <p id="insights-reasons" class="small muted table-note"></p>
-              </section>
-
-              <section class="card user-card" aria-labelledby="insights-cancellations-title">
-                <h2 class="detail__label" id="insights-cancellations-title">{text.insights.recentCancellationsTitle}</h2>
-                <ul id="insights-cancellations" class="link-list"></ul>
-                <p id="insights-cancellations-empty" class="muted hidden">{text.insights.noCancellations}</p>
-              </section>
-
-              <section class="card table-card" aria-labelledby="insights-invites-title">
-                <h2 class="detail__label table-card__title" id="insights-invites-title">{inviteText.insightsTitle}</h2>
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="insights-invites-title">
-                  <table class="data-table">
-                    <thead>
-                      <tr>{inviteSummaryColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
-                    </thead>
-                    <tbody id="insights-invites-rows"></tbody>
-                  </table>
-                </div>
-                <p id="insights-invites-voided" class="small muted table-note"></p>
-              </section>
-
-              <section class="card user-card" aria-labelledby="insights-referrers-top-title">
-                <h2 class="detail__label" id="insights-referrers-top-title">{inviteText.topReferrersTitle}</h2>
-                <ul id="insights-referrers-top" class="link-list"></ul>
-                <p id="insights-referrers-top-empty" class="muted hidden">{inviteText.noReferrers}</p>
-              </section>
-            </div>
-          </div>
-
-          {/* ---------- Ürün ---------- */}
-          <div id="panel-product" class="admin__panel hidden">
-            {
-              productSections.map((section: ProductSection) => (
-                <section class="kpi-group product-section" aria-labelledby={`product-${section.id}-title`}>
-                  <h2 class="eyebrow kpi-group__title" id={`product-${section.id}-title`}>
-                    {section.title}
-                  </h2>
-                  {section.kpis.length === 0 ? null : (
-                    <div class="kpi-group__grid">
-                      {section.kpis.map((kpi: KpiSpec) => (
-                        <div class="card kpi" id={`kpi-${kpi.id}-card`}>
-                          <p class="kpi__label">
-                            <Icon name={kpi.icon} size={16} class="kpi__icon" />
-                            {kpi.label}
-                          </p>
-                          <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-                          <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {section.charts.length === 0 ? null : (
-                    <div class="charts">
-                      {section.charts.map((chart) => (
-                        <figure class="card chart">
-                          <div class="chart__head">
-                            <h3 class="chart__title">{chart.title}</h3>
-                            {chart.legend ? (
-                              <p class="chart__legend small muted" aria-hidden="true">
-                                <span class="legend legend--main">{productText.legendPaid}</span>
-                                <span class="legend legend--accent">{productText.legendTrial}</span>
-                              </p>
-                            ) : null}
-                          </div>
-                          <div id={`chart-${chart.id}`} class="chart__plot" />
-                          <figcaption id={`chart-${chart.id}-summary`} class="small muted" />
-                        </figure>
-                      ))}
-                    </div>
-                  )}
-                  <div class="insights-grid">
-                    {section.tables.map((table: ProductTable) => (
-                      <section class:list={["card", "table-card", { "ops-grid__wide": table.wide }]} aria-labelledby={`${table.id}-title`}>
-                        <h3 class="detail__label table-card__title" id={`${table.id}-title`}>
-                          {table.title}
-                        </h3>
-                        <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`${table.id}-title`}>
-                          <table class="data-table">
-                            <thead>
-                              <tr>
-                                {table.columns.map((column: Column) => (
-                                  <th scope="col" class:list={{ numeric: column.numeric }}>
-                                    {column.label}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody id={`${table.id}-rows`} />
-                          </table>
-                        </div>
-                        {table.empty === null ? null : (
-                          <p id={`${table.id}-empty`} class="muted table-empty hidden">
-                            {table.empty}
-                          </p>
-                        )}
-                        <p id={`${table.id}-note`} class="small muted table-note">
-                          {table.note}
-                        </p>
-                      </section>
-                    ))}
-                  </div>
+              <ChartPanel id="ov-meetings" title={layout.charts.meetings} hint={null} span={8} legend={legendPlans} size="large" />
+              <div class="span-4 stack">
+                <section class="panel panel--flush attention" aria-labelledby="ov-attention-title">
+                  <header class="panel__head">
+                    <h3 class="panel__title" id="ov-attention-title">{layout.attention.title}</h3>
+                  </header>
+                  <ul id="ov-attention" class="attention__list"></ul>
+                  <p id="ov-attention-empty" class="table-empty hidden">{layout.attention.empty}</p>
                 </section>
-              ))
-            }
+                <FactsPanel
+                  id="ov-capacity"
+                  title={facts.capacity.title}
+                  hint={null}
+                  span={4}
+                  rows={[
+                    { id: "spend", label: facts.capacity.spend },
+                    { id: "elevenlabs", label: facts.capacity.elevenLabs },
+                    { id: "deepgram", label: facts.capacity.deepgram },
+                    { id: "near", label: facts.capacity.nearCap },
+                  ]}
+                />
+              </div>
+              <ChartPanel id="ov-users" title={layout.charts.newUsers} hint={null} span={6} legend={null} size="small" />
+              <ChartPanel id="ov-downloads" title={layout.charts.downloads} hint={null} span={6} legend={null} size="small" />
+            </Section>
           </div>
 
-          {/* ---------- Telemetri ---------- */}
-          <div id="panel-telemetry" class="admin__panel hidden">
-            <p id="telemetry-window" class="small muted telemetry-lead"></p>
-            <p id="telemetry-active" class="telemetry-lead"></p>
-            <div class="insights-grid">
+          {/* ---------- Gelir ---------- */}
+          <div id="panel-revenue" class="admin__panel hidden">
+            <Section id="revenue-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.revenue.label}
+                  stats={[
+                    { id: "mrr", label: stats.mrr.label, hint: stats.mrr.hint, meter: false, spark: false },
+                    { id: "subscribers", label: stats.subscribers.label, hint: stats.subscribers.hint, meter: false, spark: false },
+                    { id: "conversion", label: stats.conversion.label, hint: stats.conversion.hint, meter: false, spark: false },
+                    { id: "product-checkout", label: productText.kpis.checkout, hint: productText.kpiHints.checkout, meter: false, spark: false },
+                    { id: "churn", label: stats.churn.label, hint: stats.churn.hint, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+              <ChartPanel id="trend-mrr" title={trendsText.charts.mrr.title} hint={trendsText.chartsNote} span={8} legend={null} size="large" />
+              <FactsPanel
+                id="rev-subscriptions"
+                title={facts.subscriptions.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "monthly", label: facts.subscriptions.monthly },
+                  { id: "yearly", label: facts.subscriptions.yearly },
+                  { id: "invite", label: facts.subscriptions.invite },
+                  { id: "grace", label: facts.subscriptions.grace },
+                  { id: "ending", label: facts.subscriptions.ending },
+                  { id: "canceled", label: facts.subscriptions.canceled },
+                  { id: "free", label: facts.subscriptions.free },
+                ]}
+              />
+              <ChartPanel
+                id="trend-subscribers"
+                title={trendsText.charts.subscribers.title}
+                hint={trendsText.chartsNote}
+                span={6}
+                legend={{ main: trendsText.charts.subscribers.main, accent: trendsText.charts.subscribers.accent ?? "" }}
+                size="small"
+              />
+              <ChartPanel
+                id="trend-revenue"
+                title={trendsText.charts.revenue.title}
+                hint={null}
+                span={6}
+                legend={{ main: trendsText.charts.revenue.main, accent: trendsText.charts.revenue.accent ?? "" }}
+                size="small"
+              />
+            </Section>
+
+            <Section id="revenue-currencies" title={sections.revenueTrends.title} description={sections.revenueTrends.description}>
+              <TablePanel
+                id="trend-revenue"
+                title={trendsText.tables.revenue.title}
+                hint={null}
+                columns={trendColumns("revenue")}
+                span={12}
+                empty={trendsText.tables.revenue.empty}
+                note={trendsText.tables.revenue.note === "" ? null : trendsText.tables.revenue.note}
+                scroll={false}>
+                <p slot="foot" id="trend-revenue-paid" class="panel__note"></p>
+              </TablePanel>
+            </Section>
+
+            <Section id="revenue-billing" title={sections.billing.title} description={sections.billing.description}>
+              <FactsPanel
+                id="rev-billing"
+                title={facts.billing.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "refunds", label: facts.billing.refunds },
+                  { id: "disputes", label: facts.billing.disputes },
+                  { id: "failed", label: facts.billing.failed },
+                  { id: "duplicates", label: facts.billing.duplicates },
+                  { id: "past-due", label: facts.billing.pastDue },
+                  { id: "unpaid", label: facts.billing.unpaid },
+                ]}
+              />
+              <TablePanel
+                id="insights-feedback"
+                title={text.insights.cancellationsTitle}
+                hint={null}
+                columns={[textColumn(text.insights.cancellationColumns.reason), numberColumn(text.insights.cancellationColumns.count)]}
+                span={4}
+                empty={text.insights.noCancellations}
+                note={null}
+                scroll={false}>
+                <p slot="foot" id="insights-reasons" class="panel__note"></p>
+              </TablePanel>
+              <ListPanel id="insights-cancellations" title={text.insights.recentCancellationsTitle} span={4} empty={layout.empty.recentCancellations} />
+            </Section>
+
+            <Section id="revenue-conversion" title={sections.conversion.title} description={sections.conversion.description}>
+              <TablePanel
+                id="product-trials"
+                title={product.trials}
+                hint={null}
+                columns={[textColumn(productColumns.outcome), numberColumn(productColumns.accounts), numberColumn(productColumns.share)]}
+                span={5}
+                empty={null}
+                note={productText.notes.trials}
+                scroll={false}
+              />
+              <TablePanel
+                id="product-payers"
+                title={product.payers}
+                hint={null}
+                columns={[
+                  textColumn(productColumns.month),
+                  numberColumn(productColumns.payers),
+                  numberColumn(productColumns.costPerPayer),
+                  numberColumn(productColumns.listRevenue),
+                  numberColumn(productColumns.grossMargin),
+                ]}
+                span={7}
+                empty={null}
+                note=""
+                scroll={false}
+              />
+            </Section>
+          </div>
+
+          {/* ---------- Büyüme ---------- */}
+          <div id="panel-growth" class="admin__panel hidden">
+            <Section id="growth-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.growth.label}
+                  stats={[
+                    { id: "downloads", label: stats.downloads.label, hint: stats.downloads.hint, meter: false, spark: false },
+                    { id: "users", label: stats.users.label, hint: stats.users.hint, meter: false, spark: false },
+                    { id: "trials", label: stats.trials.label, hint: stats.trials.hint, meter: false, spark: false },
+                    { id: "refusals", label: stats.refusals.label, hint: stats.refusals.hint, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+              <ChartPanel id="downloads" title={layout.charts.downloads} hint={null} span={6} legend={null} size="small" />
+              <ChartPanel id="users" title={layout.charts.newUsers} hint={null} span={6} legend={null} size="small" />
+            </Section>
+
+            <Section id="growth-funnel" title={sections.funnel.title} description={sections.funnel.description}>
+              <TablePanel
+                id="insights-funnel"
+                title={text.insights.funnelTitle}
+                hint={text.insights.funnelNote}
+                columns={[
+                  textColumn(text.insights.funnelColumns.step),
+                  numberColumn(text.insights.funnelColumns.count),
+                  numberColumn(text.insights.funnelColumns.fromPrevious),
+                  numberColumn(text.insights.funnelColumns.lost),
+                ]}
+                span={8}
+                empty={null}
+                note={null}
+                scroll={false}
+              />
+              <FactsPanel
+                id="growth-signups"
+                title={facts.signups.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "today", label: facts.signups.today },
+                  { id: "week", label: facts.signups.week },
+                  { id: "month", label: facts.signups.month },
+                  { id: "apple", label: facts.signups.apple },
+                  { id: "google", label: facts.signups.google },
+                ]}
+              />
+              <TablePanel
+                id="product-steps"
+                title={product.steps}
+                hint={null}
+                columns={[textColumn(productColumns.step), numberColumn(productColumns.accounts), numberColumn(productColumns.median)]}
+                span={8}
+                empty={null}
+                note=""
+                scroll={false}
+              />
+              <FactsPanel
+                id="growth-refusals"
+                title={facts.refusals.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "device", label: facts.refusals.device },
+                  { id: "ip", label: facts.refusals.ip },
+                  { id: "exhausted", label: facts.refusals.exhausted },
+                  { id: "expired", label: facts.refusals.expired },
+                  { id: "today", label: facts.refusals.today },
+                ]}
+              />
+            </Section>
+
+            <Section id="growth-acquisition" title={sections.acquisition.title} description={sections.acquisition.description}>
+              <TablePanel
+                id="insights-sources"
+                title={text.insights.sourcesTitle}
+                hint={null}
+                columns={[textColumn(text.insights.sourceColumns.source), numberColumn(text.insights.sourceColumns.count)]}
+                span={4}
+                empty={text.insights.noDownloads}
+                note={null}
+                scroll={false}
+              />
+              <TablePanel
+                id="insights-referrers"
+                title={text.insights.referrersTitle}
+                hint={text.insights.downloadsNote}
+                columns={[textColumn(text.insights.referrerColumns.host), numberColumn(text.insights.referrerColumns.count)]}
+                span={4}
+                empty={text.insights.noDownloads}
+                note={null}
+                scroll={false}
+              />
+              <TablePanel
+                id="trend-campaigns"
+                title={trendsText.tables.campaigns.title}
+                hint={null}
+                columns={trendColumns("campaigns")}
+                span={4}
+                empty={trendsText.tables.campaigns.empty}
+                note={trendsText.tables.campaigns.note === "" ? null : trendsText.tables.campaigns.note}
+                scroll={false}
+              />
+            </Section>
+
+            <Section id="growth-website" title={sections.website.title} description={sections.website.description}>
+              <div class="span-12 site-lead">
+                <p id="trend-site-summary" class="site-lead__summary tabular"></p>
+                <p id="trend-site-error" class="notice hidden" role="status"></p>
+              </div>
+              <ChartPanel id="trend-site" title={trendsText.siteChart.title} hint={null} span={12} legend={null} size="small" />
+              <TablePanel
+                id="trend-paths"
+                title={trendsText.tables.paths.title}
+                hint={null}
+                columns={trendColumns("paths")}
+                span={6}
+                empty={trendsText.tables.paths.empty}
+                note={trendsText.tables.paths.note === "" ? null : trendsText.tables.paths.note}
+                scroll={true}
+              />
+              <TablePanel
+                id="trend-referrers"
+                title={trendsText.tables.referrers.title}
+                hint={null}
+                columns={trendColumns("referrers")}
+                span={6}
+                empty={trendsText.tables.referrers.empty}
+                note={trendsText.tables.referrers.note === "" ? null : trendsText.tables.referrers.note}
+                scroll={true}
+              />
+            </Section>
+
+            <Section id="growth-invites" title={sections.invites.title} description={sections.invites.description}>
+              <TablePanel
+                id="insights-invites"
+                title={inviteText.insightsTitle}
+                hint={null}
+                columns={[textColumn(inviteText.insightsColumns.measure), numberColumn(inviteText.insightsColumns.count)]}
+                span={4}
+                empty={null}
+                note={null}
+                scroll={false}>
+                <p slot="foot" id="insights-invites-voided" class="panel__note"></p>
+              </TablePanel>
+              <FactsPanel
+                id="growth-referrals"
+                title={facts.referrals.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "joined", label: facts.referrals.joined },
+                  { id: "pending", label: facts.referrals.pending },
+                  { id: "granted", label: facts.referrals.granted },
+                  { id: "voided", label: facts.referrals.voided },
+                ]}
+              />
+              <ListPanel id="insights-referrers-top" title={inviteText.topReferrersTitle} span={4} empty={inviteText.noReferrers} />
+            </Section>
+          </div>
+
+          {/* ---------- Kullanım ---------- */}
+          <div id="panel-engagement" class="admin__panel hidden">
+            <Section id="engagement-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.engagement.label}
+                  stats={[
+                    { id: "product-wau", label: productText.kpis.wau, hint: productText.kpiHints.wau, meter: false, spark: false },
+                    { id: "product-d7", label: productText.kpis.d7, hint: productText.kpiHints.d7, meter: false, spark: false },
+                    { id: "product-d30", label: productText.kpis.d30, hint: productText.kpiHints.d30, meter: false, spark: false },
+                    { id: "meetings", label: stats.meetings.label, hint: stats.meetings.hint, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+              <ChartPanel id="meetings" title={layout.charts.meetings} hint={null} span={8} legend={legendPlans} size="large" />
+              <FactsPanel
+                id="eng-month"
+                title={facts.month.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "meetings", label: facts.month.meetings },
+                  { id: "open", label: facts.month.open },
+                  { id: "deferred", label: facts.month.deferred },
+                  { id: "reprocessed", label: facts.month.reprocessed },
+                  { id: "hours", label: facts.month.hours },
+                  { id: "audio", label: facts.month.audio },
+                  { id: "stream", label: facts.month.stream },
+                ]}
+              />
+            </Section>
+
+            <Section id="engagement-activity" title={sections.activity.title} description={sections.activity.description}>
+              <ChartPanel id="trend-active" title={trendsText.charts.active.title} hint={trendsText.chartsNote} span={6} legend={null} size="small" />
+              <TablePanel
+                id="product-weeks"
+                title={product.weeks}
+                hint={null}
+                columns={[
+                  textColumn(productColumns.calendarWeek),
+                  numberColumn(productColumns.activeUsers),
+                  numberColumn(productColumns.meetings),
+                  numberColumn(productColumns.perActiveUser),
+                ]}
+                span={6}
+                empty={null}
+                note={null}
+                scroll={false}
+              />
+            </Section>
+
+            <Section id="engagement-retention" title={sections.retention.title} description={sections.retention.description}>
+              <TablePanel
+                id="product-cohorts"
+                title={product.cohorts}
+                hint={null}
+                columns={[
+                  textColumn(productColumns.signupWeek),
+                  numberColumn(productColumns.signups),
+                  ...cohortWeeks.map((week: number): Column => numberColumn(productColumns.week.replace("{week}", String(week)))),
+                ]}
+                span={12}
+                empty={null}
+                note={productText.notes.cohorts}
+                scroll={false}
+              />
+            </Section>
+
+            <Section id="engagement-features" title={sections.features.title} description={sections.features.description}>
+              <div class="span-12 site-lead">
+                <p id="telemetry-active" class="site-lead__summary tabular"></p>
+                <p id="telemetry-window" class="site-lead__note"></p>
+              </div>
+              <TablePanel
+                id="telemetry-features"
+                title={telemetryText.featuresTitle}
+                hint={telemetryText.featuresNote}
+                columns={[
+                  textColumn(telemetryText.featureColumns.feature),
+                  numberColumn(telemetryText.featureColumns.userDays),
+                  textColumn(telemetryText.featureColumns.share),
+                  numberColumn(telemetryText.featureColumns.uses),
+                ]}
+                span={12}
+                empty={telemetryText.noFeatures}
+                note={null}
+                scroll={false}>
+                <p slot="lead" id="telemetry-features-summary" class="panel__lead"></p>
+              </TablePanel>
               {
-                telemetryTables.map((table: TelemetryTable) => (
-                  <section class:list={["card", "table-card", { "ops-grid__wide": table.wide }]} aria-labelledby={`${table.id}-title`}>
-                    <h2 class="detail__label table-card__title" id={`${table.id}-title`}>
-                      {table.title}
-                    </h2>
-                    {table.summary ? <p id={`${table.id}-summary`} class="small muted table-note" /> : null}
-                    <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`${table.id}-title`}>
-                      <table class="data-table">
-                        <thead>
-                          <tr>
-                            {table.columns.map((column: Column) => (
-                              <th scope="col" class:list={{ numeric: column.numeric }}>
-                                {column.label}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody id={`${table.id}-rows`} />
-                      </table>
-                    </div>
-                    <p id={`${table.id}-empty`} class="muted table-empty hidden">
-                      {table.empty}
-                    </p>
-                  </section>
+                (
+                  [
+                    ["telemetry-languages", telemetryText.languagesTitle],
+                    ["telemetry-integrations", telemetryText.integrationsTitle],
+                    ["telemetry-exports", telemetryText.exportsTitle],
+                  ] as const
+                ).map(([id, title]) => (
+                  <TablePanel
+                    id={id}
+                    title={title}
+                    hint={null}
+                    columns={[
+                      textColumn(telemetryText.valueColumn),
+                      numberColumn(telemetryText.featureColumns.userDays),
+                      textColumn(telemetryText.featureColumns.share),
+                      numberColumn(telemetryText.featureColumns.uses),
+                    ]}
+                    span={4}
+                    empty={telemetryText.noFeatures}
+                    note={null}
+                    scroll={false}
+                  />
                 ))
               }
-            </div>
-            <p class="small muted telemetry-lead">{telemetryText.featuresNote}</p>
+              <TablePanel
+                id="trend-languages"
+                title={trendsText.tables.languages.title}
+                hint={null}
+                columns={trendColumns("languages")}
+                span={12}
+                empty={trendsText.tables.languages.empty}
+                note={trendsText.tables.languages.note === "" ? null : trendsText.tables.languages.note}
+                scroll={true}
+              />
+            </Section>
+
+            <Section id="engagement-platform" title={sections.platform.title} description={sections.platform.description}>
+              {
+                (
+                  [
+                    ["telemetry-apps", telemetryText.appVersionsTitle],
+                    ["telemetry-os", telemetryText.osVersionsTitle],
+                  ] as const
+                ).map(([id, title]) => (
+                  <TablePanel
+                    id={id}
+                    title={title}
+                    hint={null}
+                    columns={[
+                      textColumn(telemetryText.versionColumns.version),
+                      numberColumn(telemetryText.versionColumns.users),
+                      textColumn(telemetryText.versionColumns.share),
+                    ]}
+                    span={6}
+                    empty={telemetryText.noVersions}
+                    note={null}
+                    scroll={false}
+                  />
+                ))
+              }
+            </Section>
+          </div>
+
+          {/* ---------- Güvenilirlik ---------- */}
+          <div id="panel-reliability" class="admin__panel hidden">
+            <Section id="reliability-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.reliability.label}
+                  stats={[
+                    { id: "product-failed", label: productText.kpis.failed, hint: productText.kpiHints.failed, meter: false, spark: false },
+                    { id: "product-notes", label: productText.kpis.notes, hint: productText.kpiHints.notes, meter: false, spark: false },
+                    { id: "product-note-time", label: productText.kpis.noteTime, hint: productText.kpiHints.noteTime, meter: false, spark: false },
+                    { id: "product-on-device", label: productText.kpis.onDevice, hint: productText.kpiHints.onDevice, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+              <TablePanel
+                id="insights-problems"
+                title={text.insights.problemsTitle}
+                hint={null}
+                columns={[
+                  textColumn(text.insights.problemsColumns.problem),
+                  numberColumn(text.insights.problemsColumns.last7),
+                  numberColumn(text.insights.problemsColumns.last30),
+                ]}
+                span={12}
+                empty={text.insights.noProblems}
+                note={null}
+                scroll={false}
+              />
+            </Section>
+
+            <Section id="reliability-errors" title={sections.errors.title} description={sections.errors.description}>
+              <ChartPanel id="product-refusals" title={productText.charts.refusals} hint={null} span={4} legend={null} size="small" />
+              <ChartPanel id="product-provider" title={productText.charts.providerErrors} hint={null} span={4} legend={null} size="small" />
+              <ChartPanel id="product-server" title={productText.charts.serverErrors} hint={null} span={4} legend={null} size="small" />
+            </Section>
+
+            <Section id="reliability-meetings" title={sections.meetings.title} description={sections.meetings.description}>
+              <TablePanel
+                id="product-outcomes"
+                title={product.outcomes}
+                hint={null}
+                columns={[textColumn(productColumns.measure), numberColumn(productColumns.meetings), numberColumn(productColumns.share)]}
+                span={6}
+                empty={null}
+                note=""
+                scroll={false}
+              />
+              <TablePanel
+                id="product-failures"
+                title={product.failures}
+                hint={null}
+                columns={[textColumn(productColumns.lastError), numberColumn(productColumns.meetings), numberColumn(productColumns.share)]}
+                span={6}
+                empty={productText.empty.failures}
+                note={null}
+                scroll={false}
+              />
+            </Section>
+
+            <Section id="reliability-app" title={sections.app.title} description={sections.app.description}>
+              <TablePanel
+                id="product-crashes"
+                title={product.crashes}
+                hint={null}
+                columns={[
+                  textColumn(productColumns.version),
+                  numberColumn(productColumns.crashes),
+                  numberColumn(productColumns.recent),
+                  textColumn(productColumns.latest),
+                ]}
+                span={6}
+                empty={productText.empty.crashes}
+                note={productText.notes.crashes}
+                scroll={false}
+              />
+              <TablePanel
+                id="telemetry-events"
+                title={telemetryText.reliabilityTitle}
+                hint={null}
+                columns={[
+                  textColumn(telemetryText.reliabilityColumns.event),
+                  numberColumn(telemetryText.reliabilityColumns.total),
+                  textColumn(telemetryText.reliabilityColumns.versions),
+                ]}
+                span={6}
+                empty={telemetryText.noEvents}
+                note={null}
+                scroll={false}
+              />
+              <TablePanel
+                id="telemetry-events-daily"
+                title={telemetryText.reliabilityDailyTitle}
+                hint={null}
+                columns={[textColumn(telemetryText.dayColumn), ...countEventKinds.map((kind) => numberColumn(telemetryText.countKindsShort[kind]))]}
+                span={12}
+                empty={telemetryText.noEvents}
+                note={null}
+                scroll={true}
+              />
+              {
+                durationEventKinds.map((kind) => (
+                  <TablePanel
+                    id={`telemetry-duration-${kind}`}
+                    title={telemetryText.durationKinds[kind]}
+                    hint={null}
+                    columns={[
+                      textColumn(telemetryText.durationColumns.bucket),
+                      numberColumn(telemetryText.durationColumns.runs),
+                      textColumn(telemetryText.durationColumns.share),
+                    ]}
+                    span={6}
+                    empty={telemetryText.noDurations}
+                    note={null}
+                    scroll={false}>
+                    <p slot="lead" id={`telemetry-duration-${kind}-summary`} class="panel__lead" />
+                  </TablePanel>
+                ))
+              }
+              <TablePanel
+                id="trend-events"
+                title={trendsText.tables.events.title}
+                hint={null}
+                columns={trendColumns("events")}
+                span={12}
+                empty={trendsText.tables.events.empty}
+                note={trendsText.tables.events.note === "" ? null : trendsText.tables.events.note}
+                scroll={false}
+              />
+            </Section>
+          </div>
+
+          {/* ---------- Maliyet ---------- */}
+          <div id="panel-costs" class="admin__panel hidden">
+            <Section id="costs-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.costs.label}
+                  stats={[
+                    { id: "spend", label: stats.spend.label, hint: stats.spend.hint, meter: true, spark: false },
+                    { id: "elevenlabs", label: stats.elevenLabs.label, hint: stats.elevenLabs.hint, meter: true, spark: false },
+                    { id: "deepgram", label: stats.deepgram.label, hint: stats.deepgram.hint, meter: true, spark: false },
+                    { id: "tokens", label: stats.tokens.label, hint: stats.tokens.hint, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+              <ChartPanel
+                id="product-spend"
+                title={productText.charts.spend}
+                hint={null}
+                span={8}
+                legend={{ main: productText.legendPaid, accent: productText.legendTrial }}
+                size="large"
+              />
+              <FactsPanel
+                id="costs-tokens"
+                title={facts.tokens.title}
+                hint={null}
+                span={4}
+                rows={[
+                  { id: "total", label: facts.tokens.total },
+                  { id: "account", label: facts.tokens.account },
+                  { id: "cap", label: facts.tokens.cap },
+                  { id: "account-cap", label: facts.tokens.accountCap },
+                  { id: "near", label: facts.tokens.near },
+                ]}
+              />
+            </Section>
+
+            <Section id="costs-spend" title={sections.spend.title} description={sections.spend.description}>
+              <ChartPanel
+                id="trend-spend"
+                title={trendsText.charts.spend.title}
+                hint={trendsText.chartsNote}
+                span={12}
+                legend={{ main: trendsText.charts.spend.main, accent: trendsText.charts.spend.accent ?? "" }}
+                size="small"
+              />
+              <TablePanel
+                id="product-costs"
+                title={product.costs}
+                hint={null}
+                columns={[
+                  textColumn(productColumns.month),
+                  numberColumn(productColumns.meetings),
+                  numberColumn(productColumns.hours),
+                  numberColumn(productColumns.llm),
+                  numberColumn(productColumns.elevenLabs),
+                  numberColumn(productColumns.deepgram),
+                  numberColumn(productColumns.perMeeting),
+                  numberColumn(productColumns.perHour),
+                  numberColumn(productColumns.accountLlm),
+                ]}
+                span={12}
+                empty={null}
+                note=""
+                scroll={false}
+              />
+            </Section>
+
+            <Section id="costs-tokens-section" title={sections.tokens.title} description={sections.tokens.description}>
+              <TablePanel
+                id="telemetry-purposes"
+                title={telemetryText.purposesTitle}
+                hint={null}
+                columns={[
+                  textColumn(telemetryText.purposeColumns.purpose),
+                  numberColumn(telemetryText.purposeColumns.calls),
+                  numberColumn(telemetryText.purposeColumns.input),
+                  numberColumn(telemetryText.purposeColumns.output),
+                  textColumn(telemetryText.purposeColumns.share),
+                ]}
+                span={12}
+                empty={telemetryText.noPurposes}
+                note={null}
+                scroll={false}
+              />
+              <TablePanel
+                id="telemetry-tokens-daily"
+                title={telemetryText.purposesDailyTitle}
+                hint={null}
+                columns={[
+                  textColumn(telemetryText.dailyTokenColumns.day),
+                  numberColumn(telemetryText.dailyTokenColumns.calls),
+                  numberColumn(telemetryText.dailyTokenColumns.tokens),
+                  textColumn(telemetryText.dailyTokenColumns.trend),
+                ]}
+                span={6}
+                empty={telemetryText.noPurposes}
+                note={null}
+                scroll={true}
+              />
+              <TablePanel
+                id="trend-tokens"
+                title={trendsText.tables.tokens.title}
+                hint={null}
+                columns={trendColumns("tokens")}
+                span={6}
+                empty={trendsText.tables.tokens.empty}
+                note={trendsText.tables.tokens.note === "" ? null : trendsText.tables.tokens.note}
+                scroll={false}
+              />
+            </Section>
           </div>
 
           {/* ---------- Kullanıcılar ---------- */}
@@ -1063,121 +1143,6 @@ const productSections: readonly ProductSection[] = [
             </section>
           </div>
 
-          {/* ---------- Eğilimler (admin-trends.ts) ---------- */}
-          <div id="panel-trends" class="admin__panel hidden">
-            <section aria-labelledby="trend-charts-title">
-              <h2 class="title-m section-title" id="trend-charts-title">{trendsText.chartsTitle}</h2>
-              <div class="charts">
-                {
-                  trendCharts.map((chart) => (
-                    <figure class="card chart">
-                      <div class="chart__head">
-                        <h3 class="chart__title">{trendsText.charts[chart].title}</h3>
-                        {trendsText.charts[chart].accent === null ? null : (
-                          <p class="chart__legend small muted" aria-hidden="true">
-                            <span class="legend legend--main">{trendsText.charts[chart].main}</span>
-                            <span class="legend legend--accent">{trendsText.charts[chart].accent}</span>
-                          </p>
-                        )}
-                      </div>
-                      <div id={`chart-trend-${chart}`} class="chart__plot" />
-                      <figcaption id={`chart-trend-${chart}-summary`} class="small muted" />
-                    </figure>
-                  ))
-                }
-              </div>
-              <p class="small muted table-note">{trendsText.chartsNote}</p>
-            </section>
-
-            <section aria-labelledby="trend-tables-title">
-              <h2 class="title-m section-title" id="trend-tables-title">{trendsText.tablesTitle}</h2>
-              <div class="insights-grid">
-                {
-                  trendTables.map((table) => (
-                    <section class="card table-card" aria-labelledby={`trend-${table}-title`}>
-                      <h2 class="detail__label table-card__title" id={`trend-${table}-title`}>
-                        {trendsText.tables[table].title}
-                      </h2>
-                      {table === "paths" ? <p id="trend-site-summary" class="small muted table-note" /> : null}
-                      {table === "paths" ? <p id="trend-site-error" class="notice hidden" role="status" /> : null}
-                      <div class="table-scroll" tabindex="0" role="region" aria-labelledby={`trend-${table}-title`}>
-                        <table class="data-table">
-                          <thead>
-                            <tr>
-                              {trendsText.tables[table].columns.map((column) => (
-                                <th scope="col" class:list={{ numeric: column.numeric }}>
-                                  {column.label}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody id={`trend-${table}-rows`} />
-                        </table>
-                      </div>
-                      <p id={`trend-${table}-empty`} class="muted table-empty hidden">
-                        {trendsText.tables[table].empty}
-                      </p>
-                      {table === "revenue" ? <p id="trend-revenue-paid" class="small muted table-note" /> : null}
-                      {trendsText.tables[table].note === "" ? null : <p class="small muted table-note">{trendsText.tables[table].note}</p>}
-                    </section>
-                  ))
-                }
-              </div>
-            </section>
-          </div>
-
-          {/* ---------- İşletim ---------- */}
-          <div id="panel-operations" class="admin__panel hidden">
-            <div class="kpi-group__grid ops-kpis">
-              {
-                opsKpis.map((kpi: KpiSpec) => (
-                  <div class="card kpi" id={`kpi-${kpi.id}-card`}>
-                    <p class="kpi__label">
-                      <Icon name={kpi.icon} size={16} class="kpi__icon" />
-                      {kpi.label}
-                    </p>
-                    <p id={`kpi-${kpi.id}`} class="kpi__value tabular" />
-                    <p id={`kpi-${kpi.id}-sub`} class="kpi__sub small" />
-                  </div>
-                ))
-              }
-            </div>
-
-            <div class="ops-grid">
-              <section class="card table-card ops-grid__wide" aria-labelledby="ops-open-title">
-                <h3 class="detail__label table-card__title" id="ops-open-title">{text.operations.openTitle}</h3>
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-open-title">
-                  <table class="data-table">
-                    <thead>
-                      <tr>{openColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
-                    </thead>
-                    <tbody id="ops-open-rows"></tbody>
-                  </table>
-                </div>
-                <p id="ops-open-empty" class="muted table-empty hidden">{text.operations.noOpen}</p>
-              </section>
-
-              <section class="card table-card" aria-labelledby="ops-stripe-title">
-                <h3 class="detail__label table-card__title" id="ops-stripe-title">{text.operations.stripeTitle}</h3>
-                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="ops-stripe-title">
-                  <table class="data-table">
-                    <thead>
-                      <tr>{stripeColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
-                    </thead>
-                    <tbody id="ops-stripe-rows"></tbody>
-                  </table>
-                </div>
-                <p id="ops-stripe-empty" class="muted table-empty hidden">{text.operations.noStripe}</p>
-              </section>
-
-              <section class="card user-card" aria-labelledby="ops-crashes-title">
-                <h3 class="detail__label" id="ops-crashes-title">{text.operations.crashesTitle}</h3>
-                <ul id="ops-crashes" class="link-list"></ul>
-                <p id="ops-crashes-empty" class="muted hidden">{text.operations.noCrashes}</p>
-              </section>
-            </div>
-          </div>
-
           {/* ---------- Bildirim kutusu ---------- */}
           <div id="panel-inbox" class="admin__panel hidden">
             <section class="inbox" aria-labelledby="inbox-title">
@@ -1237,6 +1202,61 @@ const productSections: readonly ProductSection[] = [
                 </div>
               </div>
             </section>
+          </div>
+
+          {/* ---------- İşletim ---------- */}
+          <div id="panel-operations" class="admin__panel hidden">
+            <Section id="operations-top" title={null} description={null}>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.operations.label}
+                  stats={[
+                    { id: "ops-open", label: text.operations.kpis.open, hint: clientCopy.admin.opsOpenHint, meter: false, spark: false },
+                    { id: "ops-unended", label: text.operations.kpis.unended, hint: clientCopy.admin.opsUnendedHint, meter: false, spark: false },
+                    { id: "ops-reservations", label: text.operations.kpis.reservations, hint: null, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+              <div class="span-12">
+                <Stats
+                  label={layout.views.operations.label}
+                  stats={[
+                    { id: "ops-deepgram", label: text.operations.kpis.deepgram, hint: null, meter: false, spark: false },
+                    { id: "ops-webhook", label: text.operations.kpis.webhook, hint: null, meter: false, spark: false },
+                    { id: "ops-reports", label: text.operations.kpis.reports, hint: null, meter: false, spark: false },
+                  ]}
+                />
+              </div>
+            </Section>
+            <Section id="operations-live" title={sections.live.title} description={sections.live.description}>
+              <TablePanel
+                id="ops-open"
+                title={text.operations.openTitle}
+                hint={null}
+                columns={[
+                  textColumn(text.operations.openColumns.user),
+                  textColumn(text.operations.openColumns.kind),
+                  textColumn(text.operations.openColumns.started),
+                  textColumn(text.operations.openColumns.endsBy),
+                  textColumn(text.operations.openColumns.notes),
+                ]}
+                span={12}
+                empty={text.operations.noOpen}
+                note={null}
+                scroll={false}
+              />
+              <TablePanel
+                id="ops-stripe"
+                title={text.operations.stripeTitle}
+                hint={null}
+                columns={[textColumn(text.operations.stripeColumns.type), numberColumn(text.operations.stripeColumns.count)]}
+                span={6}
+                empty={text.operations.noStripe}
+                note={null}
+                scroll={false}
+              />
+              <ListPanel id="ops-crashes" title={text.operations.crashesTitle} span={6} empty={text.operations.noCrashes} />
+            </Section>
           </div>
 
           {/* ---------- Blog ---------- */}
@@ -1446,1528 +1466,3 @@ const productSections: readonly ProductSection[] = [
 <script>
   import "../client/admin";
 </script>
-
-<style>
-  .admin {
-    display: grid;
-    gap: 20px;
-    padding-top: clamp(28px, 5vw, 56px);
-  }
-
-  /* ---------- Yönetim kabuğu ---------- */
-
-  /* Panel açılınca (admin.ts `admin-app`) sitenin üst çubuğu, alt bilgisi ve çekme katmanı gizlenir; panel tam ekran
-     bir uygulama kabuğudur: solda menü, sağda kendi içinde kayan içerik (sayfa kaymadığı için çekme de devreye girmez). */
-  :global(html.admin-app .site-header),
-  :global(html.admin-app .site-footer),
-  :global(html.admin-app .pull-reveal),
-  :global(html.admin-app .skip-link) {
-    display: none;
-  }
-
-  :global(html.admin-app) .admin {
-    width: 100%;
-    padding: 0;
-  }
-
-  /* Hata bildirimi kabuğun üstünde, sağ altta durur. */
-  :global(html.admin-app) .admin > .notice {
-    position: fixed;
-    right: 24px;
-    bottom: 24px;
-    z-index: 3;
-    max-width: min(420px, 100% - 48px);
-  }
-
-  .console {
-    position: fixed;
-    inset: 0;
-    z-index: 2;
-    display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    background: var(--bg);
-  }
-
-  .console__sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-    min-width: 0;
-    padding: 18px 12px;
-    border-right: 1px solid var(--line);
-    background: color-mix(in srgb, var(--soft) 55%, var(--bg));
-  }
-
-  .console__brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 4px 8px;
-    color: var(--ink);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    text-decoration: none;
-  }
-
-  .console__badge {
-    margin-left: auto;
-    padding: 1px 8px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    color: var(--muted);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .console__nav {
-    display: grid;
-    gap: 2px;
-  }
-
-  .console__nav-item {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    min-height: 36px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--muted);
-    font: inherit;
-    font-size: 0.875rem;
-    font-weight: 500;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .console__nav-item :global(.icon) {
-    flex: none;
-  }
-
-  .console__nav-item:hover {
-    background: var(--selected);
-    color: var(--ink);
-  }
-
-  .console__nav-item[aria-pressed="true"] {
-    background: var(--card);
-    color: var(--ink);
-    box-shadow:
-      0 0 0 1px var(--line),
-      0 1px 2px var(--shadow-near);
-  }
-
-  .console__nav-label {
-    flex: 1;
-    white-space: nowrap;
-  }
-
-  .console__count {
-    min-width: 20px;
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--line);
-    color: var(--ink);
-    font-size: 0.75rem;
-    line-height: 20px;
-    text-align: center;
-  }
-
-  .console__count:empty {
-    display: none;
-  }
-
-  .console__site-link {
-    margin-top: auto;
-    padding: 8px 10px;
-    color: var(--muted);
-    text-decoration: none;
-  }
-
-  .console__site-link:hover {
-    color: var(--ink);
-  }
-
-  .console__main {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    overflow-y: auto;
-  }
-
-  .console__topbar {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 14px clamp(20px, 3vw, 36px);
-    border-bottom: 1px solid var(--line);
-    background: var(--bg);
-  }
-
-  .console__heading {
-    display: grid;
-    min-width: 0;
-  }
-
-  .console__title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    letter-spacing: -0.015em;
-    line-height: 1.35;
-  }
-
-  .console__content {
-    display: grid;
-    width: 100%;
-    max-width: 1360px;
-    padding: 28px clamp(20px, 3vw, 36px) 56px;
-  }
-
-  /* Kabuk içinde kartlar daha sade: küçük köşe, gölgesiz. */
-  .console :global(.card) {
-    border-radius: 14px;
-    box-shadow: none;
-  }
-
-  .admin__panel {
-    display: grid;
-    gap: clamp(32px, 4vw, 48px);
-    min-width: 0;
-  }
-
-  /* Panel eklenince yükleme satırı gizlenir; panel kendi aralıklarıyla akar. */
-  .admin__mount {
-    display: grid;
-    gap: 20px;
-  }
-
-  .admin__mount:empty {
-    display: none;
-  }
-
-  .admin__loading {
-    min-height: 40vh;
-  }
-
-  .section-title {
-    margin-bottom: 16px;
-  }
-
-  /* ---------- Özet kutuları ---------- */
-
-  /* Gruplar alt alta, tam genişlikte; her grup dörtlü ızgara (dar ekranda ikişerli, telefonda tek). */
-  .kpi-groups {
-    display: grid;
-    gap: 28px;
-  }
-
-  .kpi-group {
-    display: grid;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .kpi-group__grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-auto-rows: 1fr;
-    gap: 16px;
-  }
-
-  /* İşletim kutuları üçlü (altı kutu, iki satır). */
-  .ops-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .kpi {
-    display: grid;
-    grid-template-rows: auto auto 1fr;
-    align-content: start;
-    gap: 8px;
-    min-height: 132px;
-    padding: 18px 20px;
-  }
-
-  .kpi--meter {
-    grid-template-rows: auto auto auto 1fr;
-  }
-
-  .kpi__label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--muted);
-  }
-
-  .kpi__label :global(.kpi__icon) {
-    flex: none;
-  }
-
-  .kpi__value {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-size: clamp(1.625rem, 2.2vw, 1.875rem);
-    font-weight: 600;
-    letter-spacing: -0.035em;
-    line-height: 1.05;
-  }
-
-  .kpi__meter {
-    height: 6px;
-  }
-
-  .kpi__sub {
-    align-self: end;
-    color: var(--muted);
-    line-height: 1.45;
-  }
-
-  /* MRR kutusu: üstte ince, durgun pastel film şeridi; altı hafif bir tonla dolar (bulanıklık ya da hareket yok). */
-  .kpi--accent {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(180deg, var(--card) 40%, color-mix(in srgb, #dac6ee 16%, var(--card)) 100%);
-  }
-
-  .kpi--accent::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto;
-    height: 6px;
-    background: linear-gradient(90deg, #f7c9b2, #f4bcc6 35%, #dac6ee 70%, #bfd4f4);
-  }
-
-  /* Uyarı: ölçer eşiği aştı (harcama tavana, kapasite sınıra yakın). */
-  .kpi--warn {
-    border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
-  }
-
-  .kpi--warn .kpi__sub {
-    color: var(--warn);
-  }
-
-  /* ---------- Grafikler ---------- */
-
-  .charts {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  .chart {
-    display: grid;
-    gap: 12px;
-    margin: 0;
-    padding: 20px 22px;
-  }
-
-  .chart__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px 16px;
-  }
-
-  .chart__title {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
-
-  .chart__legend {
-    display: flex;
-    gap: 14px;
-  }
-
-  .legend {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .legend::before {
-    content: "";
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-  }
-
-  .legend--main::before {
-    background: color-mix(in srgb, var(--ink) 72%, var(--card));
-  }
-
-  .legend--accent::before {
-    background: var(--accent);
-  }
-
-  .chart__plot {
-    display: grid;
-    gap: 6px;
-  }
-
-  .chart__plot :global(.chart__svg) {
-    width: 100%;
-    height: auto;
-    overflow: visible;
-  }
-
-  .chart__plot :global(.chart__base) {
-    fill: var(--line);
-  }
-
-  .chart__plot :global(.chart__bar--main) {
-    fill: color-mix(in srgb, var(--ink) 72%, var(--card));
-  }
-
-  .chart__plot :global(.chart__bar--accent) {
-    fill: var(--accent);
-  }
-
-  .chart__plot :global(g:hover .chart__bar--main) {
-    fill: var(--ink);
-  }
-
-  .chart__plot :global(.chart__axis) {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--muted);
-  }
-
-  /* ---------- Bildirim kutusu ---------- */
-
-  .inbox {
-    display: grid;
-    gap: 16px;
-  }
-
-  .inbox__toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px 16px;
-  }
-
-  /* Açık/bitti süzgeci sağa yaslı. */
-  .inbox__toolbar .segmented--quiet {
-    margin-left: auto;
-  }
-
-  .segmented {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 4px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    background: var(--card);
-  }
-
-  .segmented__button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 34px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--muted);
-    font: inherit;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  .segmented__button :global(.icon) {
-    flex: none;
-  }
-
-  .segmented__button:hover {
-    color: var(--ink);
-  }
-
-  .segmented__button[aria-pressed="true"] {
-    background: var(--primary);
-    color: var(--on-primary);
-  }
-
-  .segmented__count {
-    min-width: 20px;
-    padding: 0 6px;
-    border-radius: 999px;
-    background: var(--soft);
-    color: var(--ink);
-    font-size: 0.75rem;
-    line-height: 20px;
-    text-align: center;
-  }
-
-  .segmented__count:empty {
-    display: none;
-  }
-
-  .segmented__button[aria-pressed="true"] .segmented__count {
-    background: color-mix(in srgb, var(--on-primary) 18%, transparent);
-    color: var(--on-primary);
-  }
-
-  .inbox__body {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 16px;
-    align-items: start;
-  }
-
-  .inbox__list-card,
-  .inbox__detail {
-    display: grid;
-    gap: 12px;
-    padding: 12px;
-  }
-
-  .inbox__detail {
-    padding: 20px 22px;
-  }
-
-  .inbox__list {
-    display: grid;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .inbox__list :global(.inbox__item) {
-    display: grid;
-    gap: 2px;
-    width: 100%;
-    padding: 10px 12px;
-    border: 0;
-    border-radius: var(--radius-s);
-    background: transparent;
-    color: var(--ink);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .inbox__list :global(.inbox__item:hover) {
-    background: var(--soft);
-  }
-
-  .inbox__list :global(.inbox__item[aria-current="true"]) {
-    background: var(--selected);
-  }
-
-  .inbox__list :global(.inbox__summary) {
-    font-size: 0.9375rem;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .inbox__list :global(.inbox__meta) {
-    font-size: 0.8125rem;
-    color: var(--muted);
-    overflow-wrap: anywhere;
-  }
-
-  .inbox__empty {
-    padding: 12px;
-  }
-
-  #inbox-more {
-    justify-self: center;
-  }
-
-  .detail {
-    display: grid;
-    gap: 14px;
-    min-width: 0;
-  }
-
-  .detail__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .detail__fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 16px;
-    margin: 0;
-  }
-
-  .detail__fields dt {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
-
-  .detail__fields dd {
-    margin: 0;
-    font-size: 0.9375rem;
-    overflow-wrap: anywhere;
-  }
-
-  .mono {
-    font-family: var(--mono);
-    font-size: 0.8125rem;
-  }
-
-  .detail__label {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--muted);
-    letter-spacing: 0;
-  }
-
-  .detail__message {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-
-  .detail__payload {
-    max-height: 420px;
-    margin: 8px 0 0;
-    padding: 14px 16px;
-    overflow: auto;
-    border-radius: var(--radius-s);
-    border: 1px solid var(--line);
-    background: var(--soft);
-    font-family: var(--mono);
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    white-space: pre;
-  }
-
-  /* ---------- Tablolar (kullanıcılar, toplantılar, işletim) ---------- */
-
-  .table-card {
-    display: grid;
-    gap: 8px;
-    padding: 8px;
-    min-width: 0;
-  }
-
-  .table-card__title {
-    padding: 12px 14px 0;
-  }
-
-  /* Geniş tablo kartın içinde yatay kayar; sayfa yana taşmaz. */
-  .table-scroll {
-    overflow-x: auto;
-    border-radius: var(--radius-s);
-  }
-
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.875rem;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .data-table th {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--line);
-    color: var(--muted);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .data-table .numeric,
-  .data-table :global(td.numeric) {
-    text-align: right;
-  }
-
-  .data-table :global(td) {
-    padding: 10px 14px;
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
-    white-space: nowrap;
-    vertical-align: middle;
-  }
-
-  .data-table :global(tr:last-child td) {
-    border-bottom: 0;
-  }
-
-  .data-table :global(tr.is-clickable) {
-    cursor: pointer;
-  }
-
-  .data-table :global(tr.is-clickable:hover td) {
-    background: var(--soft);
-  }
-
-  /* Hesap kimliği düğmesi: satırın klavyeyle açılan bağlantısı. */
-  .data-table :global(.id-button) {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--ink);
-    font: inherit;
-    font-family: var(--mono);
-    font-size: 0.8125rem;
-    text-decoration: underline;
-    text-decoration-color: var(--line);
-    text-underline-offset: 0.25em;
-    cursor: pointer;
-  }
-
-  .data-table :global(.id-button:hover) {
-    text-decoration-color: currentColor;
-  }
-
-  .table-empty {
-    padding: 16px 14px;
-  }
-
-  .table-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 4px 14px 8px;
-  }
-
-  /* Küçük rozetler (tablo hücrelerinde). */
-  .admin__panel :global(.pill--compact) {
-    padding: 2px 8px;
-    font-size: 0.75rem;
-  }
-
-  .admin__panel :global(.pill-row),
-  .pill-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  /* Betiğin oluşturduğu öğelerde de eş aralıklı yazı (Stripe olay türü). */
-  .admin__panel :global(.mono) {
-    font-family: var(--mono);
-    font-size: 0.8125rem;
-  }
-
-  /* ---------- Kullanıcılar ---------- */
-
-  .users,
-  .user-detail {
-    display: grid;
-    gap: 16px;
-    min-width: 0;
-  }
-
-  .users__toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 12px;
-  }
-
-  .users__toolbar .field {
-    gap: 6px;
-  }
-
-  .users__toolbar label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
-
-  .users__search {
-    flex: 1 1 260px;
-  }
-
-  .input--small {
-    min-height: 40px;
-    padding: 0 12px;
-    font-size: 0.9375rem;
-  }
-
-  .select {
-    padding-right: 32px;
-    appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-    background-position:
-      calc(100% - 17px) 50%,
-      calc(100% - 12px) 50%;
-    background-size: 5px 5px;
-    background-repeat: no-repeat;
-    cursor: pointer;
-  }
-
-  .users__submit {
-    min-height: 40px;
-  }
-
-  .user-detail__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px 16px;
-  }
-
-  .user-detail__title {
-    font-family: var(--mono);
-    font-size: 1.0625rem;
-    letter-spacing: 0;
-    overflow-wrap: anywhere;
-  }
-
-  /* Hesaba yönelik işlem (ücretsiz erişim) başlık satırının sağında. */
-  .user-detail__action {
-    margin-left: auto;
-  }
-
-  .user-detail__grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    align-items: start;
-  }
-
-  .user-card {
-    display: grid;
-    gap: 14px;
-    padding: 20px 22px;
-    min-width: 0;
-  }
-
-  .usage-meters {
-    display: grid;
-    gap: 14px;
-  }
-
-  .usage-meter {
-    display: grid;
-    gap: 6px;
-  }
-
-  .usage-meter__label {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 0.875rem;
-  }
-
-  /* Zaman çizelgesi: solda ince çizgi ve noktalar. */
-  .timeline {
-    display: grid;
-    gap: 12px;
-    margin: 0;
-    padding: 0 0 0 18px;
-    list-style: none;
-    border-left: 1px solid var(--line);
-  }
-
-  .timeline :global(li) {
-    position: relative;
-    display: grid;
-    gap: 2px;
-    font-size: 0.875rem;
-  }
-
-  .timeline :global(li::before) {
-    content: "";
-    position: absolute;
-    left: -22px;
-    top: 7px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-
-  .timeline :global(.timeline__time) {
-    font-size: 0.8125rem;
-    color: var(--muted);
-  }
-
-  /* Rapor ve çökme listeleri: tıklanınca bildirim kutusunda açılır. */
-  .link-list {
-    display: grid;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .link-list :global(.link-list__item) {
-    display: grid;
-    gap: 2px;
-    width: 100%;
-    padding: 8px 10px;
-    border: 0;
-    border-radius: var(--radius-s);
-    background: transparent;
-    color: var(--ink);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .link-list :global(.link-list__item:hover) {
-    background: var(--soft);
-  }
-
-  .link-list :global(.link-list__title) {
-    font-size: 0.9375rem;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .link-list :global(.link-list__meta) {
-    font-size: 0.8125rem;
-    color: var(--muted);
-  }
-
-  /* ---------- İşletim ---------- */
-
-  .ops-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    align-items: start;
-  }
-
-  .ops-grid__wide {
-    grid-column: 1 / -1;
-  }
-
-  /* ---------- Telemetri ---------- */
-
-  .telemetry-lead {
-    margin: 0 0 12px;
-    line-height: 1.5;
-  }
-
-  /* Pay hücresi: ince ölçer ve yüzde (betik çizer). */
-  .data-table :global(.telemetry-share) {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 120px;
-  }
-
-  .data-table :global(.telemetry-share__meter) {
-    width: 72px;
-    flex: none;
-  }
-
-  /* ---------- Ürün ---------- */
-
-  /* Bölüm içinde kutular, grafikler ve tablolar arasında başlık aralığından biraz geniş aralık. */
-  .product-section {
-    gap: 16px;
-  }
-
-  /* ---------- İçgörüler ---------- */
-
-  .insights-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    align-items: start;
-  }
-
-  .table-note {
-    padding: 0 14px 10px;
-    line-height: 1.5;
-  }
-
-  .table-note:empty {
-    display: none;
-  }
-
-  /* Uyarı satırı (bugünlerde tavana takılan istek var): ilk hücre uyarı renginde. */
-  .data-table :global(tr.is-warn td:first-child) {
-    color: var(--warn);
-    font-weight: 600;
-  }
-
-  /* Huni adımı: adı ve altında en büyük adıma göre ince çubuk. */
-  .data-table :global(.funnel__step) {
-    display: grid;
-    gap: 6px;
-    min-width: 150px;
-  }
-
-  .data-table :global(.funnel__bar) {
-    width: 100%;
-    height: 4px;
-  }
-
-  /* Hücredeki rozetler en az iki rozet genişliğinde sarar: dar sütun onları tek tek alt alta dizip satırı uzatmaz. */
-  .data-table :global(td .pill-row) {
-    min-width: 15rem;
-  }
-
-  /* Hata kodu: eş aralıklı, en çok 26 karakterde sarar (sıkışan tablo onu harf harf bölmez); toplantı satırında uyarı
-     renginde. */
-  .data-table :global(.failure-code) {
-    display: inline-block;
-    width: max-content;
-    max-width: 26ch;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    line-height: 1.4;
-    color: var(--muted);
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  /* İçgörü tablolarında ilk sütun (sorun, adım, düğme, site) sarar: telefonda sayılar görünür alanda kalır. */
-  .insights-grid .data-table :global(td:first-child) {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .insights-grid .data-table :global(td:first-child .mono) {
-    font-size: 0.75rem;
-  }
-
-  .data-table :global(.failure-code--warn) {
-    color: var(--warn);
-  }
-
-  /* Yorum gibi uzun başlıklar satıra sarar. */
-  .link-list :global(.link-list__title--wrap) {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  /* ---------- Blog ---------- */
-
-  .blog,
-  .blog-editor {
-    display: grid;
-    gap: 16px;
-    min-width: 0;
-  }
-
-  /* Bildirim görünür alana kaydırılınca yapışkan üst çubuğun altında kalmaz. */
-  #blog-notice,
-  #blog-editor-notice {
-    scroll-margin-top: 112px;
-  }
-
-  .blog__top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .blog-cadence {
-    flex: 1 1 320px;
-    min-height: 0;
-  }
-
-  .blog-cadence__latest {
-    font-size: 1.0625rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
-
-  .blog__new {
-    min-height: 40px;
-  }
-
-  .blog__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  /* Sitede aç: satırda yalnızca simge, düzenleyicide simge ve metin. */
-  :global(.blog-open) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-width: 28px;
-    min-height: 28px;
-    border-radius: 8px;
-    color: var(--muted);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    text-decoration: none;
-  }
-
-  :global(.blog-open:hover) {
-    background: var(--soft);
-    color: var(--ink);
-  }
-
-  .blog-open--labelled {
-    padding: 4px 10px;
-    border: 1px solid var(--line);
-    color: var(--ink);
-  }
-
-  .blog-table :global(.blog-row__meta) {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .blog-cover-picker {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  /* Kapağın küçük önizlemesi: paylaşım görseliyle aynı oran. */
-  .blog-cover-swatch {
-    flex: 0 0 auto;
-    width: 76px;
-    aspect-ratio: 1200 / 630;
-    border-radius: 8px;
-    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
-  }
-
-  .blog-cover-picker .select {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .blog-editor__toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .blog-image {
-    display: grid;
-    gap: 12px;
-    padding: 16px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-    background: var(--soft);
-  }
-
-  .blog-image__grid {
-    display: grid;
-    grid-template-columns: 168px minmax(0, 1fr);
-    gap: 16px;
-    align-items: start;
-  }
-
-  .blog-image__preview {
-    display: grid;
-    place-items: center;
-    aspect-ratio: 4 / 3;
-    overflow: hidden;
-    border: 1px dashed var(--line);
-    border-radius: var(--radius-s);
-    background: var(--card);
-    color: var(--muted);
-  }
-
-  .blog-image__preview :global(img) {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-
-  .blog-image__preview:has(img) :global(.blog-image__placeholder) {
-    display: none;
-  }
-
-  .blog-image__fields {
-    display: grid;
-    gap: 14px;
-    min-width: 0;
-  }
-
-  .blog-image__fields .field {
-    gap: 6px;
-  }
-
-  .blog-image__fields label {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
-
-  .blog-image__label {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
-
-  .blog-image__picker {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-    min-width: 0;
-  }
-
-  .blog-image__fields label.blog-image__choose {
-    color: var(--ink);
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  /* Klavyeyle gizli dosya alanına gelince görünen düğme odak halkası alır. */
-  .blog-image__picker input:focus-visible + .blog-image__choose {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-  }
-
-  .blog-image__file-name {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  /* Bölüm görünür alana kaydırılınca yapışkan üst çubuğun altında kalmaz. */
-  #blog-image {
-    scroll-margin-top: 112px;
-  }
-
-  .blog-image__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
-  @media (max-width: 560px) {
-    .blog-image__grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  /* Başlık sütunu satıra sarar (uzun başlık tabloyu genişletmesin). */
-  .blog-table :global(td:first-child) {
-    min-width: 16rem;
-    white-space: normal;
-  }
-
-  .blog-table :global(.blog-row) {
-    display: grid;
-    gap: 2px;
-  }
-
-  .blog-table :global(.blog-row__title) {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--ink);
-    font: inherit;
-    font-weight: 500;
-    text-align: left;
-    text-decoration: underline;
-    text-decoration-color: var(--line);
-    text-underline-offset: 0.25em;
-    cursor: pointer;
-  }
-
-  .blog-table :global(.blog-row__title:hover) {
-    text-decoration-color: currentColor;
-  }
-
-  .blog-table :global(.blog-row__slug) {
-    color: var(--muted);
-    font-size: 0.75rem;
-    overflow-wrap: anywhere;
-  }
-
-  .blog-editor__title {
-    font-size: 1.125rem;
-  }
-
-  .blog-share {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 10px;
-  }
-
-  .blog-editor__grid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-    gap: 16px;
-    align-items: start;
-  }
-
-  .blog-editor__meta,
-  .blog-editor__body {
-    display: grid;
-    gap: 18px;
-    padding: 20px 22px;
-    min-width: 0;
-  }
-
-  .blog-editor__body {
-    gap: 14px;
-  }
-
-  .blog-editor__meta .field {
-    gap: 6px;
-  }
-
-  .blog-editor__meta label {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
-
-  .blog-field__row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .blog-counter--warn {
-    color: var(--warn);
-  }
-
-  .blog-hint {
-    color: var(--muted);
-    font-size: 0.8125rem;
-    line-height: 1.45;
-    overflow-wrap: anywhere;
-  }
-
-  .blog-textarea {
-    min-height: 92px;
-    padding-block: 10px;
-    resize: vertical;
-    line-height: 1.5;
-    font-size: 0.9375rem;
-  }
-
-  .blog-editor__meta .blog-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--ink);
-    font-size: 0.9375rem;
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  .blog-toggle input {
-    width: 18px;
-    height: 18px;
-    margin: 0;
-    accent-color: var(--primary);
-  }
-
-  .blog-body {
-    min-height: 520px;
-    padding-block: 12px;
-    resize: vertical;
-    font-family: var(--mono);
-    font-size: 0.875rem;
-    line-height: 1.6;
-  }
-
-  /* Izgara öğesi içeriğine göre genişlemez: tablo ve kod bloğu kendi kutularında yatay kayar. */
-  /* Önizleme kendi içinde kayar: uzun yazı sayfayı aşağı uzatmaz (yükseklik yazma alanıyla aynı ölçekte). */
-  .blog-preview {
-    min-width: 0;
-    min-height: 520px;
-    max-height: min(720px, 72vh);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 4px 10px 4px 2px;
-    overflow-wrap: anywhere;
-  }
-
-  /* Sitedeki yazı kapağının küçük hali (components/BlogCover.astro): gradyan ve başlık, ölçüler kapak genişliğine göre. */
-  .blog-preview :global(.blog-preview__cover) {
-    container-type: inline-size;
-    display: flex;
-    align-items: flex-start;
-    aspect-ratio: 1200 / 630;
-    margin-bottom: 18px;
-    padding: 6.4cqi 7cqi;
-    border-radius: 18px;
-  }
-
-  .blog-preview :global(.blog-preview__cover-title) {
-    max-width: 88%;
-    margin: 0;
-    color: #0a0a0a;
-    font-size: 6.6cqi;
-    font-weight: 600;
-    letter-spacing: -0.04em;
-    line-height: 1.04;
-    text-wrap: balance;
-  }
-
-  .blog-preview :global(img) {
-    display: block;
-    max-width: 100%;
-    height: auto;
-    margin: 8px auto;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-s);
-  }
-
-  .blog-preview :global(pre) {
-    overflow-x: auto;
-    padding: 12px 14px;
-    border-radius: var(--radius-s);
-    background: var(--soft);
-    font-size: 0.8125rem;
-  }
-
-  .blog-editor__actions {
-    grid-column: 1 / -1;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .blog-editor__delete {
-    margin-left: auto;
-  }
-
-  .blog-confirm {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 12px;
-    flex: 1 1 100%;
-    padding: 12px 16px;
-    border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-    border-radius: var(--radius-s);
-    background: color-mix(in srgb, var(--danger) 6%, var(--card));
-  }
-
-  .blog-confirm p {
-    flex: 1 1 260px;
-    font-size: 0.9375rem;
-  }
-
-  @media (max-width: 1040px) {
-    .kpi-group__grid,
-    .ops-kpis {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  /* Dar ekranda menü üstte, yatay kayan bir şerit olur. */
-  @media (max-width: 860px) {
-    .console {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-
-    .console__sidebar {
-      flex-direction: row;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 12px;
-      overflow-x: auto;
-      border-right: 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .console__nav {
-      display: flex;
-    }
-
-    .console__nav-item {
-      width: auto;
-    }
-
-    .console__brand-name,
-    .console__badge,
-    .console__site-link {
-      display: none;
-    }
-
-    .charts,
-    .inbox__body,
-    .user-detail__grid,
-    .insights-grid,
-    .ops-grid,
-    .blog-editor__grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .blog-body,
-    .blog-preview {
-      min-height: 360px;
-    }
-  }
-
-  /* Dar ekranda süzgeçler tek satırda, tam genişlikte; menü yalnızca simgelerdir ve şeride sığar. */
-  @media (max-width: 560px) {
-    .console__nav {
-      flex: 1;
-      justify-content: space-around;
-    }
-
-    .console__nav-label {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-
-    .segmented {
-      flex-wrap: nowrap;
-      width: 100%;
-    }
-
-    .segmented__button {
-      flex: 1 1 auto;
-      justify-content: center;
-      padding: 0 8px;
-    }
-
-    .segmented__button :global(.icon) {
-      display: none;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .detail__fields {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .kpi {
-      min-height: 0;
-    }
-
-    .kpi-group__grid,
-    .ops-kpis {
-      grid-template-columns: minmax(0, 1fr);
-      grid-auto-rows: auto;
-    }
-  }
-</style>

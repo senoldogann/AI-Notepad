@@ -1,0 +1,40 @@
+---
+// Döküm kartı: etiket ve değer satırları (ör. abonelerin dökümü). Etiketler sabittir; betik `<id>-<satır>` değerini
+// yazar, uyarıda satıra (`<id>-<satır>-row`) `is-warn` ekler.
+import type { PanelSpan } from "../../lib/admin-table";
+import Hint from "./Hint.astro";
+
+export interface FactRow {
+  readonly id: string;
+  readonly label: string;
+}
+
+interface Props {
+  readonly id: string;
+  readonly title: string;
+  readonly hint: string | null;
+  readonly span: PanelSpan;
+  readonly rows: readonly FactRow[];
+}
+const { id, title, hint, span, rows } = Astro.props;
+---
+
+<section class:list={["panel", `span-${span}`]} aria-labelledby={`${id}-title`}>
+  <header class="panel__head">
+    <h3 class="panel__title" id={`${id}-title`}>
+      {title}
+      {hint === null ? null : <Hint text={hint} />}
+    </h3>
+  </header>
+  <dl class="facts">
+    {
+      rows.map((row: FactRow) => (
+        <div class="facts__row" id={`${id}-${row.id}-row`}>
+          <dt>{row.label}</dt>
+          <dd id={`${id}-${row.id}`} class="tabular" />
+        </div>
+      ))
+    }
+  </dl>
+  <slot />
+</section>

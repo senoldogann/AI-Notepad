@@ -1,4 +1,4 @@
-// Yönetim panelinin "Trends" görünümü metinleri (İngilizce; yalnızca yönetici görür): günlük anlık görüntü grafikleri,
+// Yönetim panelinin eğilim verisinin metinleri (İngilizce; yalnızca yönetici görür): günlük anlık görüntü grafikleri,
 // gerçek gelir, token kovaları, konuşma tanıma dilleri, hesap silmeleri ve yeniden denemeler, indirme kampanyaları ve
 // site istatistikleri. Sayfa (admin.astro) ve betik (admin-trends.ts) aynı nesneyi kullanır; DOM'a dokunmaz.
 
@@ -21,21 +21,8 @@ export interface TrendTableCopy {
 
 /** Görünüm metinleri. `{ad}` yer tutucuları değerlerle doldurulur. */
 export interface AdminTrendsCopy {
-  readonly view: string;
-  readonly chartsTitle: string;
   readonly chartsNote: string;
   readonly charts: Readonly<Record<TrendChartId, { readonly title: string; readonly main: string; readonly accent: string | null }>>;
-  /** `{day}`, `{value}`. */
-  readonly barTitle: string;
-  /** `{day}`. */
-  readonly noSnapshot: string;
-  /** `{days}`, `{latest}`. */
-  readonly snapshotSummary: string;
-  readonly noSnapshots: string;
-  /** `{currency}`, `{paid}`, `{refunded}`. */
-  readonly revenueSummary: string;
-  readonly noRevenue: string;
-  readonly tablesTitle: string;
   readonly tables: Readonly<Record<TrendTableId, TrendTableCopy>>;
   readonly buckets: Readonly<Record<TrendTokenBucket, string>>;
   /** `{days}`, `{count}`. */
@@ -47,7 +34,8 @@ export interface AdminTrendsCopy {
   readonly autoLanguage: string;
   readonly direct: string;
   readonly noCampaign: string;
-  readonly siteTitle: string;
+  /** Sitenin günlük sayfa görüntüleme grafiği: başlık ve okumadaki seri adı. */
+  readonly siteChart: { readonly title: string; readonly pageViews: string };
   /** `{days}`, `{views}`, `{visits}`. */
   readonly siteSummary: string;
   readonly siteUnavailable: string;
@@ -56,8 +44,6 @@ export interface AdminTrendsCopy {
 
 /** Görünüm metinleri. */
 export const adminTrendsCopy: AdminTrendsCopy = {
-  view: "Trends",
-  chartsTitle: "Last 90 days",
   chartsNote:
     "Daily snapshots written by the nightly job for the finished UTC day. Days before the first snapshot are empty. Spend is the server's estimate; Deepgram counts the stream time charged to its budget.",
   charts: {
@@ -67,13 +53,6 @@ export const adminTrendsCopy: AdminTrendsCopy = {
     spend: { title: "Spend by provider", main: "Anthropic", accent: "ElevenLabs + Deepgram" },
     revenue: { title: "Payments and refunds", main: "Paid", accent: "Refunded" },
   },
-  barTitle: "{day}: {value}",
-  noSnapshot: "{day}: no snapshot",
-  snapshotSummary: "{days} snapshots; latest: {latest}",
-  noSnapshots: "No snapshots yet: the nightly job writes the first one after the next UTC midnight.",
-  revenueSummary: "{currency}: {paid} paid, {refunded} refunded in 90 days",
-  noRevenue: "No paid invoices recorded yet.",
-  tablesTitle: "Last 30 days",
   tables: {
     revenue: {
       title: "Revenue by currency",
@@ -168,7 +147,7 @@ export const adminTrendsCopy: AdminTrendsCopy = {
   autoLanguage: "auto",
   direct: "(direct)",
   noCampaign: "(none)",
-  siteTitle: "Website (Cloudflare Web Analytics)",
+  siteChart: { title: "Page views per day", pageViews: "Page views" },
   siteSummary: "Last {days} days: {views} page views, {visits} visits",
   siteUnavailable: "Not configured: set CF_ANALYTICS_ACCOUNT_ID, CF_ANALYTICS_SITE_TAG and the CF_ANALYTICS_TOKEN secret on the server.",
   none: "—",

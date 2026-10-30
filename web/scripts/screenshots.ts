@@ -85,9 +85,12 @@ const targets: readonly Target[] = [
   // Davet koduyla gelinir: kod saklanır (sonraki hesap sayfalarında da dolar), bu yüzden hesap sayfalarından sonra.
   { name: "account-invite", path: "/account?code=k7m2-qx9d&plan=monthly", ready: "#invite-status.invite__ok", signedIn: true, account: "trial-ended" },
   { name: "invite-code", path: "/invite?code=K7M2QX9D", ready: "#invite-code-box:not(.hidden)", signedIn: false, account: null },
-  { name: "admin", path: "/admin", ready: "#kpi-mrr:not(:empty)", signedIn: true, account: null },
-  { name: "admin-insights", path: "/admin#insights", ready: "#insights-funnel-rows tr", signedIn: true, account: null },
-  { name: "admin-product", path: "/admin#product", ready: "#product-cohorts-rows tr", signedIn: true, account: null },
+  { name: "admin", path: "/admin", ready: "#kpi-ov-mrr-spark svg", signedIn: true, account: null },
+  { name: "admin-revenue", path: "/admin#revenue", ready: "#trend-revenue-rows tr", signedIn: true, account: null },
+  { name: "admin-growth", path: "/admin#growth", ready: "#insights-funnel-rows tr", signedIn: true, account: null },
+  { name: "admin-engagement", path: "/admin#engagement", ready: "#product-cohorts-rows tr", signedIn: true, account: null },
+  { name: "admin-reliability", path: "/admin#reliability", ready: "#product-outcomes-rows tr", signedIn: true, account: null },
+  { name: "admin-costs", path: "/admin#costs", ready: "#product-costs-rows tr", signedIn: true, account: null },
   { name: "admin-users", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-user", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
   { name: "admin-user-free", path: "/admin#users", ready: "#users-rows tr", signedIn: true, account: null },
@@ -547,7 +550,7 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         ],
       },
     },
-    // Ürün görünümü: az veriyle (birkaç hesap) dolu ve boş hücreler; bu ayın satırı kısmi, başlamamış kohort haftaları null.
+    // Ürün verisi: az veriyle (birkaç hesap) dolu ve boş hücreler; bu ayın satırı kısmi, başlamamış kohort haftaları null.
     "/v1/admin/product": {
       generatedAt: now.toISOString(),
       engagement: {
@@ -638,6 +641,108 @@ function fixtures(now: Date): Readonly<Record<string, object>> {
         versions: [
           { version: "0.1.8", total: 2, recent: 1, lastAt: at(-1) },
           { version: "", total: 1, recent: 0, lastAt: at(-100) },
+        ],
+      },
+    },
+    // Eğilimler: 90 günün son 40'ında anlık görüntü (öncesi boş), bir para biriminde tahsilat; site istatistikleri ve
+    // telemetri az veriyle. Genel bakışın eğrileri ve gelir, büyüme, kullanım, maliyet görünümleri bunlardan çizilir.
+    "/v1/admin/trends": {
+      windowDays: 30,
+      daily: Array.from({ length: 90 }, (_: unknown, index: number) => ({
+        day: at(index - 90).slice(0, 10),
+        snapshot:
+          index < 50
+            ? null
+            : {
+                subscriptionsMonthly: 20 + Math.round((index - 50) * 0.9),
+                subscriptionsYearly: 5 + Math.round((index - 50) * 0.2),
+                activeUsers7d: 40 + (index - 50) + (index % 5),
+                mrrListUsd: (20 + Math.round((index - 50) * 0.9)) * 5.99 + ((5 + Math.round((index - 50) * 0.2)) * 49) / 12,
+                spendAnthropicUsd: 3 + (index % 7) * 0.6,
+                spendElevenLabsUsd: 1 + (index % 4) * 0.4,
+                spendDeepgramUsd: 0.5 + (index % 3) * 0.2,
+                invoicedMrr: [{ currency: "usd", mrrCents: 21_400, payingSubscriptions: 30 }],
+              },
+      })),
+      revenue: {
+        currencies: [
+          {
+            currency: "usd",
+            mrrCents: 21_400,
+            payingSubscriptions: 30,
+            arpuCents: 713,
+            paidLast30DaysCents: 18_900,
+            refundedLast30DaysCents: 599,
+            netLast30DaysCents: 16_200,
+            ltvCents: 2_140,
+            daily: Array.from({ length: 90 }, (_: unknown, index: number) => ({
+              day: at(index - 90).slice(0, 10),
+              paidCents: index % 3 === 0 ? 599 * (1 + (index % 4)) : 0,
+              refundedCents: index === 70 ? 599 : 0,
+            })),
+          },
+        ],
+        firstPaymentsLast30Days: 6,
+        medianDaysToFirstPayment: 4,
+      },
+      tokenBuckets: [
+        { bucket: "meeting_note", calls: 120, inputTokens: 2_400_000, outputTokens: 310_000 },
+        { bucket: "meeting_live_text", calls: 3_400, inputTokens: 1_100_000, outputTokens: 240_000 },
+        { bucket: "account_quick", calls: 60, inputTokens: 90_000, outputTokens: 12_000 },
+      ],
+      languages: [
+        { requested: "auto", detected: "en", requests: 80, audioHours: 41.5 },
+        { requested: "fi", detected: "fi", requests: 22, audioHours: 9.2 },
+      ],
+      accountDeletions: [{ detail: "trial", count: 1 }],
+      retries: [{ detail: "elevenlabs", count: 3 }],
+      campaigns: [{ source: "linkedin", campaign: "launch-fi", count: 14 }],
+    },
+    "/v1/admin/site-analytics": {
+      days: 30,
+      pageViews: 1_840,
+      visits: 960,
+      daily: Array.from({ length: 30 }, (_: unknown, index: number) => ({ day: at(index - 30).slice(0, 10), pageViews: 40 + (index % 6) * 8, visits: 22 + (index % 5) * 4 })),
+      topPaths: [
+        { key: "/", pageViews: 820, visits: 610 },
+        { key: "/pricing", pageViews: 240, visits: 190 },
+        { key: "/fi", pageViews: 160, visits: 120 },
+      ],
+      topReferrers: [
+        { key: "", pageViews: 900, visits: 700 },
+        { key: "linkedin.com", pageViews: 320, visits: 180 },
+      ],
+    },
+    "/v1/admin/telemetry": {
+      windowDays: 30,
+      versions: {
+        activeUsers: 24,
+        apps: [
+          { version: "0.1.10 (19)", users: 18 },
+          { version: "0.1.9 (18)", users: 6 },
+        ],
+        os: [{ version: "macOS 26.6.2", users: 24 }],
+      },
+      purposes: {
+        totals: [
+          { purpose: "note", inputTokens: 2_400_000, outputTokens: 310_000, calls: 120 },
+          { purpose: "live_translation", inputTokens: 1_100_000, outputTokens: 240_000, calls: 3_400 },
+        ],
+        daily: [{ day: at(-1).slice(0, 10), purpose: "note", inputTokens: 80_000, outputTokens: 10_000, calls: 4 }],
+      },
+      events: {
+        counts: [{ kind: "deepgram_reconnect", appVersion: "0.1.10 (19)", count: 3 }],
+        daily: [{ day: at(-1).slice(0, 10), kind: "deepgram_reconnect", count: 3 }],
+        durations: [{ kind: "note_generation_duration", bucket: "le_30", count: 12, secondsSum: 240 }],
+        durationBuckets: ["le_10", "le_30", "le_60", "le_120", "le_300", "le_600", "le_1200", "le_1800", "le_3600", "gt_3600"],
+      },
+      features: {
+        reports: 140,
+        rows: [
+          { feature: "live_translation", value: "", users: 60, total: 60 },
+          { feature: "ask", value: "", users: 35, total: 80 },
+          { feature: "translation_language", value: "tr", users: 40, total: 40 },
+          { feature: "export", value: "markdown", users: 12, total: 15 },
         ],
       },
     },
@@ -888,9 +993,8 @@ async function capturePages(browser: Browser, base: string, outDir: string, find
         await page.evaluate((): void => document.getElementById("blog-tab-preview")?.scrollIntoView({ block: "start" }));
         await capture(page, outDir, `${shot}-preview`, findings);
       }
-      // İçgörüler ve ürün görünümleri kabuğun içinde kayar: alt kartlar (indirme kaynakları, iptal nedenleri; birim
-      // ekonomisi, çökmeler) ayrı bir görüntüde.
-      if (target.name === "admin-insights" || target.name === "admin-product") {
+      // Analiz görünümleri kabuğun içinde kayar: alttaki bölümler (tablolar) ayrı bir görüntüde.
+      if (["admin", "admin-revenue", "admin-growth", "admin-engagement", "admin-reliability", "admin-costs"].includes(target.name)) {
         await page.evaluate((): void => document.querySelector(".console__main")?.scrollTo(0, 100_000));
         await capture(page, outDir, `${shot}-bottom`, findings);
       }
