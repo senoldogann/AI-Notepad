@@ -232,7 +232,8 @@ const graceAccessSql: string = "s.status = 'past_due' AND s.past_due_since + ?2 
 /** Stripe'tan faturalanan (ücretsiz erişim olmayan) abonelik satırı için SQL koşulu (`subscriptions s`). */
 const billedSubscriptionSql: string = "s.complimentary = 0";
 
-interface SubscriptionCounts {
+/** Abonelik sayıları (`subscriptionCounts`; tanımlar `adminStats` belgesinde). */
+export interface SubscriptionCounts {
   readonly active: number;
   readonly grace: number;
   readonly ending: number;
@@ -330,6 +331,69 @@ function keyMap(rows: readonly KeyCountRow[]): Map<string, number> {
   return new Map(rows.map((row: KeyCountRow): [string, number] => [row.key, row.count]));
 }
 
+/** Deneme sayıları (`trialCounts`; tanımlar `adminStats` belgesinde). */
+export interface TrialCounts {
+  readonly active: number;
+  readonly exhausted: number;
+}
+
+/** Toplama sorgusu satır döndürmedi (SQLite'ta toplama her zaman bir satır döndürür; olmaması şema hatasıdır). */
+export class AggregateRowMissingError extends Error {
+  override readonly name: string = "AggregateRowMissingError";
+
+  constructor(query: string) {
+    super(`Toplama sorgusu satır döndürmedi: ${query}`);
+  }
+}
+
+/**
+ * `nowMs` anındaki süren ve biten denemeler (`adminStats` → `trials`; günlük anlık görüntü gün sonu anıyla çağırır).
+ */
+export async function trialCounts(db: D1Database, config: Config, nowMs: number): Promise<TrialCounts> {
+  const row: TrialCounts | null = await db
+    .prepare(
+      `SELECT COALESCE(SUM(CASE WHEN t.used < ?3 AND NOT t.expired THEN 1 ELSE 0 END), 0) AS active,
+         COALESCE(SUM(CASE WHEN t.used >= ?3 OR t.expired THEN 1 ELSE 0 END), 0) AS exhausted
+       FROM (
+         SELECT u.id AS user_id,
+           u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS used,
+           COALESCE(u.trial_started_at + ?4 <= ?1, 0) AS expired
+         FROM users u
+       ) t
+       WHERE t.used > 0 AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = t.user_id AND ((${activeAccessSql}) OR (${graceAccessSql})))`,
+    )
+    .bind(nowMs, config.pastDueGraceMs, config.trialMeetings, config.trialDurationMs)
+    .first<TrialCounts>();
+  if (row === null) {
+    throw new AggregateRowMissingError("trialCounts");
+  }
+  return row;
+}
+
+/**
+ * `nowMs` anındaki abonelik sayıları (`adminStats` → `subscriptions`; günlük anlık görüntü gün sonu anıyla çağırır).
+ */
+export async function subscriptionCounts(db: D1Database, config: Config, nowMs: number): Promise<SubscriptionCounts> {
+  const row: SubscriptionCounts | null = await db
+    .prepare(
+      `SELECT COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS active,
+         COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${graceAccessSql} THEN 1 ELSE 0 END), 0) AS grace,
+         COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ending,
+         COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled,
+         COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' AND NOT ${freeInviteMonthSql} THEN 1 ELSE 0 END), 0) AS monthly,
+         COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'yearly' THEN 1 ELSE 0 END), 0) AS yearly,
+         COALESCE(SUM(CASE WHEN s.complimentary = 1 AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS complimentary,
+         COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.plan = 'monthly' AND ${freeInviteMonthSql} THEN 1 ELSE 0 END), 0) AS freeInviteMonth
+       FROM subscriptions s`,
+    )
+    .bind(nowMs, config.pastDueGraceMs)
+    .first<SubscriptionCounts>();
+  if (row === null) {
+    throw new AggregateRowMissingError("subscriptionCounts");
+  }
+  return row;
+}
+
 /**
  * Yönetici istatistikleri; tümü mevcut tablolardan, toplama sorgularıyla (aralıklar dizinli). Tanımlar:
  * - `trials.activeTrialUsers`: abonelik erişimi olmayan, en az bir deneme toplantısı başlatmış ve denemesi bitmemiş
@@ -394,34 +458,8 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       .bind(firstDayMs)
       .all<DayValueRow>(),
     db.prepare("SELECT provider AS key, COUNT(*) AS count FROM auth_identities GROUP BY provider").all<KeyCountRow>(),
-    db
-      .prepare(
-        `SELECT COALESCE(SUM(CASE WHEN t.used < ?3 AND NOT t.expired THEN 1 ELSE 0 END), 0) AS active,
-           COALESCE(SUM(CASE WHEN t.used >= ?3 OR t.expired THEN 1 ELSE 0 END), 0) AS exhausted
-         FROM (
-           SELECT u.id AS user_id,
-             u.carried_trial_meetings + (SELECT COUNT(*) FROM meeting_sessions m WHERE m.user_id = u.id AND m.kind = 'trial') AS used,
-             COALESCE(u.trial_started_at + ?4 <= ?1, 0) AS expired
-           FROM users u
-         ) t
-         WHERE t.used > 0 AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = t.user_id AND ((${activeAccessSql}) OR (${graceAccessSql})))`,
-      )
-      .bind(nowMs, config.pastDueGraceMs, config.trialMeetings, config.trialDurationMs)
-      .first<{ active: number; exhausted: number }>(),
-    db
-      .prepare(
-        `SELECT COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS active,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${graceAccessSql} THEN 1 ELSE 0 END), 0) AS grace,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS ending,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND s.status = 'canceled' THEN 1 ELSE 0 END), 0) AS canceled,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'monthly' AND NOT ${freeInviteMonthSql} THEN 1 ELSE 0 END), 0) AS monthly,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.cancel_at IS NULL AND s.plan = 'yearly' THEN 1 ELSE 0 END), 0) AS yearly,
-           COALESCE(SUM(CASE WHEN s.complimentary = 1 AND ${activeAccessSql} THEN 1 ELSE 0 END), 0) AS complimentary,
-           COALESCE(SUM(CASE WHEN ${billedSubscriptionSql} AND ${activeAccessSql} AND s.plan = 'monthly' AND ${freeInviteMonthSql} THEN 1 ELSE 0 END), 0) AS freeInviteMonth
-         FROM subscriptions s`,
-      )
-      .bind(nowMs, config.pastDueGraceMs)
-      .first<SubscriptionCounts>(),
+    trialCounts(db, config, nowMs),
+    subscriptionCounts(db, config, nowMs),
     db
       .prepare(
         `SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch') AS day, kind, COUNT(*) AS count
@@ -517,7 +555,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
   const subscriptionByDay: number[] = valuesByDay(days, kindDayMap(meetingRows.results, "subscription"));
   const providers: Map<string, number> = keyMap(providerRows.results);
   const openReports: Map<string, number> = keyMap(reportRows.results);
-  const subscriptions: SubscriptionCounts = subscriptionRow ?? { active: 0, grace: 0, ending: 0, canceled: 0, monthly: 0, yearly: 0, complimentary: 0, freeInviteMonth: 0 };
+  const subscriptions: SubscriptionCounts = subscriptionRow;
   const billingEvents: Map<string, number> = keyMap(billingRows.results);
   const monthly: MonthlyUsageRow = monthlyUsageRow ?? { audio_seconds: 0, tokens: 0, account_tokens: 0, near_cap: 0 };
 
@@ -532,7 +570,7 @@ export async function adminStats(db: D1Database, config: Config, now: Date): Pro
       newLast30Days: days.map((day: string, index: number): DayCount => ({ day, count: newUsersByDay[index] ?? 0 })),
       byProvider: { apple: providers.get("apple") ?? 0, google: providers.get("google") ?? 0 },
     },
-    trials: { activeTrialUsers: trialRow?.active ?? 0, exhaustedTrialUsers: trialRow?.exhausted ?? 0 },
+    trials: { activeTrialUsers: trialRow.active, exhaustedTrialUsers: trialRow.exhausted },
     subscriptions: {
       active: subscriptions.active,
       grace: subscriptions.grace,

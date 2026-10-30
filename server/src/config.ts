@@ -74,6 +74,17 @@ export interface BlogConfig {
   readonly token: string | null;
 }
 
+/**
+ * Yönetim panelindeki site istatistikleri (bkz. `siteAnalytics.ts`): Cloudflare hesabı (`CF_ANALYTICS_ACCOUNT_ID`),
+ * Web Analytics site etiketi (`CF_ANALYTICS_SITE_TAG`) ve gizli `CF_ANALYTICS_TOKEN`. Biri eksikse null'dır ve uç
+ * `503 analytics_unavailable` döner.
+ */
+export interface SiteAnalyticsConfig {
+  readonly accountId: string | null;
+  readonly siteTag: string | null;
+  readonly token: string | null;
+}
+
 /** Ortamdan doğrulanmış, tipli yapılandırma. */
 export interface Config {
   readonly environment: "development" | "production";
@@ -157,6 +168,7 @@ export interface Config {
   };
   readonly deepgram: DeepgramConfig;
   readonly blog: BlogConfig;
+  readonly siteAnalytics: SiteAnalyticsConfig;
   readonly dailySpendCeilingMicroUsd: number;
   /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
   readonly dailyTrialSpendCeilingMicroUsd: number;
@@ -347,6 +359,11 @@ const envSchema = z.object({
     .refine((name: string): boolean => !name.includes("..") && !name.startsWith("/") && !name.endsWith("/") && !name.endsWith(".lock")),
   /** Girilmişse boşluksuz ve en az 20 karakter; girilmemişse blog yayını kapalıdır (`503 blog_unavailable`). */
   GITHUB_BLOG_TOKEN: z.string().regex(/^\S{20,}$/).optional(),
+  /** Cloudflare hesap kimliği ve Web Analytics site etiketi: 32 onaltılık karakter ya da boş (site istatistikleri kapalı). */
+  CF_ANALYTICS_ACCOUNT_ID: z.string().regex(/^(?:[0-9a-f]{32})?$/),
+  CF_ANALYTICS_SITE_TAG: z.string().regex(/^(?:[0-9a-f]{32})?$/),
+  /** Girilmişse boşluksuz ve en az 20 karakter; girilmemişse site istatistikleri kapalıdır (`503 analytics_unavailable`). */
+  CF_ANALYTICS_TOKEN: z.string().regex(/^\S{20,}$/).optional(),
   ACCESS_TOKEN_SECRET: z.string().min(32),
   TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
@@ -485,6 +502,11 @@ export function parseConfig(env: Env): Config {
     elevenLabs: { monthlyAudioHours: value.ELEVENLABS_MONTHLY_AUDIO_HOURS, billingDay: value.ELEVENLABS_BILLING_DAY },
     deepgram,
     blog: blogConfig(value.GITHUB_BLOG_REPO, value.GITHUB_BLOG_BRANCH, value.GITHUB_BLOG_TOKEN),
+    siteAnalytics: {
+      accountId: value.CF_ANALYTICS_ACCOUNT_ID === "" ? null : value.CF_ANALYTICS_ACCOUNT_ID,
+      siteTag: value.CF_ANALYTICS_SITE_TAG === "" ? null : value.CF_ANALYTICS_SITE_TAG,
+      token: value.CF_ANALYTICS_TOKEN ?? null,
+    },
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,

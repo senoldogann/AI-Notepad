@@ -73,14 +73,73 @@ export function referrerHostOf(referer: string | null): string {
   return valid ? host : "other";
 }
 
-/** Sayılacak indirmenin kaynağı ve Referer alan adı. */
-export interface DownloadOrigin {
-  readonly source: DownloadSource;
-  readonly referrerHost: string;
+/**
+ * Kampanya bağlantılarının izinli `utm_source` değerleri (`GET /v1/download/mac?utm_source=<kaynak>&utm_campaign=<ad>`).
+ * Listede olmayan kaynak `other` sayılır: adres döngüyle çağrılarak sayaç tablosuna rastgele değer yazılamaz.
+ */
+export const campaignSources = [
+  "producthunt",
+  "hackernews",
+  "reddit",
+  "x",
+  "linkedin",
+  "facebook",
+  "instagram",
+  "youtube",
+  "tiktok",
+  "mastodon",
+  "bluesky",
+  "github",
+  "newsletter",
+  "email",
+  "blog",
+  "google",
+  "bing",
+  "chatgpt",
+  "perplexity",
+  "partner",
+] as const;
+
+/** Kampanya kaynağı: izin listesinden ya da tanınmayan (`other`). */
+export type CampaignSource = (typeof campaignSources)[number] | "other";
+
+/** Kampanya adının biçimi: küçük harf, rakam, `-` ve `_`; en çok 40 karakter. */
+const campaignNamePattern: RegExp = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+
+/** İndirmenin kampanyası: kaynak ve ad (yoksa boş metin, biçimi geçersizse `other`). */
+export interface DownloadCampaign {
+  readonly source: CampaignSource;
+  readonly campaign: string;
 }
 
 /**
- * Bugünün (UTC) indirme sayaçlarını (`downloads` toplamı, `download_sources` kaynak ve Referer alan adı) artırır. Aynı
+ * `utm_source` ve `utm_campaign` parametrelerinin kampanyası; `utm_source` yoksa ya da boşsa null (kampanyasız
+ * indirme). Kaynak izin listesinde değilse `other`; ad küçük harfe çevrilir, biçimi geçersizse `other`, yoksa boş.
+ * Saf fonksiyondur.
+ */
+export function downloadCampaignOf(utmSource: string | null, utmCampaign: string | null): DownloadCampaign | null {
+  if (utmSource === null || utmSource === "") {
+    return null;
+  }
+  const lowerSource: string = utmSource.toLowerCase();
+  const source: CampaignSource = campaignSources.find((candidate: CampaignSource): boolean => candidate === lowerSource) ?? "other";
+  if (utmCampaign === null || utmCampaign === "") {
+    return { source, campaign: "" };
+  }
+  const lowerCampaign: string = utmCampaign.toLowerCase();
+  return { source, campaign: campaignNamePattern.test(lowerCampaign) ? lowerCampaign : "other" };
+}
+
+/** Sayılacak indirmenin kaynağı, Referer alan adı ve (varsa) kampanyası. */
+export interface DownloadOrigin {
+  readonly source: DownloadSource;
+  readonly referrerHost: string;
+  readonly campaign: DownloadCampaign | null;
+}
+
+/**
+ * Bugünün (UTC) indirme sayaçlarını (`downloads` toplamı, `download_sources` kaynak ve Referer alan adı, kampanyalı
+ * indirmede `download_campaigns`) artırır. Aynı
  * ağdan aynı gün gelen tekrar indirme sayılmaz ve D1'e yazmaz (tek okuma): ağ, `visitorKey`'in (`clientIpKey`; IPv6'da
  * /64 önek) gün ile birlikte HMAC özetiyle `download_visitors`'ta tutulur; özet günler arasında bağlanamaz ve ertesi gün
  * silinir. Böylece adresi döngüyle çağırmak D1 yazımı harcatamaz. Sayaçlar IP, tarayıcı ya da başka bir tanımlayıcı
@@ -109,6 +168,16 @@ export async function countDownload(db: D1Database, hashSecret: string, visitorK
            ON CONFLICT(day, source, referrer_host) DO UPDATE SET count = count + 1`,
         )
         .bind(day, origin.source, origin.referrerHost),
+      ...(origin.campaign === null
+        ? []
+        : [
+            db
+              .prepare(
+                `INSERT INTO download_campaigns (day, utm_source, utm_campaign, count) VALUES (?, ?, ?, 1)
+                 ON CONFLICT(day, utm_source, utm_campaign) DO UPDATE SET count = count + 1`,
+              )
+              .bind(day, origin.campaign.source, origin.campaign.campaign),
+          ]),
     ]);
   } catch (error: unknown) {
     log("warn", "download_count_failed", { error: errorName(error) });

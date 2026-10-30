@@ -8,8 +8,12 @@ import { dayKey } from "./usage";
  * toplamdır: kullanıcı, IP ya da içerik yazılmaz.
  */
 
-/** Sayaç türü: ürün reddi (hata kodu), üst servis hatası (servis adı) ya da 5xx yanıt (hata kodu). */
-export type OpsEventKind = "refusal" | "provider_error" | "server_error";
+/**
+ * Sayaç türü: ürün reddi (hata kodu), üst servis hatası (servis adı), 5xx yanıt (hata kodu), hesap silme (silinen
+ * hesabın kesimi: `subscriber`, `trial`, `signup`; bkz. `account.ts`) ya da üst servis çağrısının yeniden denemesi
+ * (servis adı; bkz. `retry.ts`).
+ */
+export type OpsEventKind = "refusal" | "provider_error" | "server_error" | "account_deleted" | "retry";
 
 /** Tek sayaç artışı. */
 export interface OpsEvent {
@@ -120,6 +124,14 @@ export async function recordOpsEvents(db: D1Database, events: readonly OpsEvent[
   } catch (error: unknown) {
     log("warn", "ops_event_record_failed", { events: events.length, error: errorName(error) });
   }
+}
+
+/**
+ * Yeniden deneme sayacını yazan işlev (`Platform.recordRetry`): her çağrı bugünün (UTC, `now()`) `retry` satırını
+ * servis adıyla bir artırır. `recordOpsEvents` gibi D1 hatası uyarıyla loglanır, yeniden denemeyi düşürmez.
+ */
+export function retryRecorder(db: D1Database, now: () => Date): (service: string) => Promise<void> {
+  return (service: string): Promise<void> => recordOpsEvents(db, [{ kind: "retry", detail: service }], now());
 }
 
 /**

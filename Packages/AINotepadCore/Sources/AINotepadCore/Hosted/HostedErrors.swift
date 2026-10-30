@@ -53,6 +53,8 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case blogConflict = "blog_conflict"
     case blogPostInvalid = "blog_post_invalid"
     case blogImageExists = "blog_image_exists"
+    // Site istatistikleri yalnızca yönetim panelinindir (`server/src/siteAnalytics.ts`).
+    case analyticsUnavailable = "analytics_unavailable"
     case internalError = "internal_error"
 }
 
@@ -264,7 +266,7 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
     case .internalError:
         return String(localized: "Sunucuda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.")
     case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid,
-         .blogUnavailable, .blogPostExists, .blogConflict, .blogPostInvalid, .blogImageExists:
+         .blogUnavailable, .blogPostExists, .blogConflict, .blogPostInvalid, .blogImageExists, .analyticsUnavailable:
         return String(localized: "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.")
     }
 }

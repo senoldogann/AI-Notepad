@@ -35,7 +35,8 @@ olduğu gibi: `npx wrangler secret put DEVICECHECK_PRIVATE_KEY --env production 
 `DEEPGRAM_API_KEY` (yalnızca `DEEPGRAM_POLICY=on` iken: Deepgram konsolunda Member ya da üstü yetkili anahtar; yalnızca
 kısa ömürlü jeton vermek için kullanılır), `GITHUB_BLOG_TOKEN` (isteğe bağlı; yönetim panelinden blog yayını, aşağıda
 "Blog yayını"; girilmemişse blog uçları `503 blog_unavailable`; girilmişse boşluksuz ve en az 20 karakter olmalı, değilse
-her istek `500`).
+her istek `500`), `CF_ANALYTICS_TOKEN` (isteğe bağlı; yönetim panelindeki site istatistikleri, aşağıda "Site
+istatistikleri"; girilmemişse uç `503 analytics_unavailable`).
 `TRIAL_HASH_SECRET` kimlik deneme defterinin, deneme IP özetlerinin ve davet edilenin kart parmak izi özetinin HMAC
 sırrıdır (webhook da okur); değiştirilirse defterdeki eski satırlar yeni girişlerle eşleşmez (silinmiş hesabın kimliği
 denemeyi yeniden alabilir, eski davetlerin kartları yeniden kullanılabilir). `ACCESS_TOKEN_SECRET`
@@ -57,6 +58,7 @@ türetmeler dosyadaki açıklamalarda). Bu sürümle gelenler:
 | `REFERRAL_MAX_PENDING` | Davet edenin aynı anda açık tutabileceği en çok davet (3): ödülü bekleyen, son 24 saatte Checkout'a götürülen ve son 365 günde kart yüzünden düşen davetler; dolunca kod `409 referral_limit_reached` alır. |
 | `MONTHLY_ACCOUNT_TOKEN_CAP` | Abonenin toplantıya bağlı olmayan çağrılarının (Sor, not düzenleme…) aylık token sınırı; `MONTHLY_TOKEN_CAP`'in parçası, ondan büyük olamaz. Toplantı bütçeleri değişmez. |
 | `ELEVENLABS_MONTHLY_AUDIO_HOURS`, `ELEVENLABS_BILLING_DAY` | ElevenLabs aylık kredi planının ses saati (Creator: ~110 saat) ve yenilendiği gün (1–28, UTC). Dönem kullanımı `daily_spend.audio_seconds`'tan; %80 ve %95 aşılınca `elevenlabs_capacity_threshold` alarmı, eşik üstündeyken her gün Cron'da `elevenlabs_capacity_high` alarmı; `GET /v1/admin/stats` → `elevenLabs: {cycleStart, usedHours, capHours, percent}`. |
+| `CF_ANALYTICS_ACCOUNT_ID`, `CF_ANALYTICS_SITE_TAG` | Site istatistiklerinin Cloudflare hesap kimliği ve Web Analytics site etiketi (32 onaltılık karakter); boşsa `GET /v1/admin/site-analytics` `503 analytics_unavailable`. Aşağıda "Site istatistikleri". |
 | `REPORT_BYTES_PER_DAY` | Rapor türü başına (geri bildirim, çökme, iletişim ayrı) tüm kullanıcılar için günlük bayt bütçesi; ayrıca hesap başına günde 20 rapor. |
 | `TRIAL_DAYS` | Denemenin süresi (gün); hesabın ilk deneme toplantısıyla başlar. Deneme `TRIAL_MEETINGS` toplantı ya da bu süre, hangisi önce dolarsa. |
 | `DAILY_TRIAL_SPEND_CEILING_USD` | Deneme harcamasının (deneme toplantıları + denemedeki toplantı dışı çağrılar) ayrı günlük tavanı; aşılınca deneme harcaması açan her istek (yeni ve açık deneme toplantıları, yeniden işleme, denemedeki hesap çağrısı) `503 trial_capacity_reached` (`daily_trial_spend_ceiling_reached` alarmı, günde bir kez). Aboneler yalnızca `DAILY_SPEND_CEILING_USD`'ye tabidir. |
@@ -244,6 +246,30 @@ yüzden davet programındaki cihaz denetimi (`sharesDevice`) de Mac'te eşleşme
     referral_limit_reached` döner. Böylece tek kod ve tek kartla açılan hesaplar sınırsız ücretsiz ay alamaz.
   - Davet eden son 365 günde en çok 12 ödül (`capped`); doğrulama kullanıcı başına dakikada 10.
 
+## Site istatistikleri
+
+Yönetim panelinin "Trends" görünümü sitenin Cloudflare Web Analytics toplamlarını (son 30 gün: sayfa görüntüleme,
+ziyaret, günler, en çok açılan sayfalar, yönlendiren siteler) Cloudflare GraphQL API'sinin
+`rumPageloadEventsAdaptiveGroups` veri kümesinden okur (`src/siteAnalytics.ts`; yeni veri toplanmaz). Sahibin bir kez
+yapacakları: Cloudflare panelinde My Profile › API Tokens › Create Token › Custom: yalnızca Account › Account Analytics ›
+Read (hesap: gistsmith.com'un hesabı); `npx wrangler secret put CF_ANALYTICS_TOKEN --env production`. Hesap kimliği
+(panelde hesabın Overview sayfası) ve Web Analytics › gistsmith.com sitesinin GraphQL `siteTag` değeri (işaretçi
+betiğindeki jetonla karıştırma; sahte bir değerde uç `502` ve Cloudflare'in hata mesajı loglanır) `wrangler.jsonc` → `env.production.vars` →
+`CF_ANALYTICS_ACCOUNT_ID`, `CF_ANALYTICS_SITE_TAG`'e yazılır. Biri eksikse yalnızca o bölüm "Not configured" gösterir;
+Cloudflare hatası (ör. yetkisiz jeton) `502 upstream_unavailable` ve `site_analytics_failed` logu verir.
+
+## Günlük anlık görüntü ve gerçek gelir
+
+Cron her gece biten UTC gününün toplamlarını ve gün sonundaki durumu `daily_metrics`'e yazar (`src/dailyMetrics.ts`;
+`daily_metrics` adımı): hesaplar, aktif kullanıcılar (gün, 7 ve 30 gün; toplantı başlatan), toplantılar, denemeler,
+plan ve duruma göre abonelikler, liste fiyatıyla MRR, sağlayıcıya göre harcama (Anthropic `daily_spend.llm_micro_usd`,
+ElevenLabs farkı, Deepgram gün içinde ilk jetonu alan toplantıların bütçeye sayılan akışı) ve para birimine göre
+faturalanan MRR (`daily_revenue_metrics`). Gerçek gelir Stripe webhook'undan gelir (`src/revenue.ts`): `invoice.paid`
+bizim müşterimizin abonelik faturasını `revenue_invoices`'a (tahsilat, vergisiz toplam, indirim, vergi, para birimi)
+yazar ve hesabın ilk ücretli ödeme anını `subscriptions.first_paid_at`'e koyar; `charge.refunded` kayıtlı faturanın
+birikimli iadesini `revenue_refunds`'a yazar. Hesap silinince gelir satırlarının hesap bağı kalkar. Bu kayıtlardan önceki
+günler ve faturalar boştur (geriye dönük doldurma yok).
+
 ## Zamanlanmış temizlik
 
 `wrangler.jsonc` → `triggers.crons` her gün 03:17 UTC'de `scheduled` işleyicisini çalıştırır (`src/cleanup.ts`). Silinenler:
@@ -253,7 +279,8 @@ ya da kullanılmış cihaz meydan okumaları, süresi dolmuş ya da ailesi düş
 başlangıçları, 2 günden eski kullanıcı günlük kullanımı, 13 aydan eski toplantılar (deneme toplantıları önce
 `users.carried_trial_meetings`'e eklenir: deneme hakkı geri gelmez) ve aylık kullanım, 13 aydır kullanılmayan cihazlar,
 180 günden eski raporlar (durumundan bağımsız), 730 gündür güncellenmemiş kimlik deneme defteri satırları ve hesabı
-silinmiş davet edilenlerin davet satırları. Aynı Cron günü gelen davet ödüllerini de verir (`referral_rewards` adımı).
+silinmiş davet edilenlerin davet satırları; 400 günden eski günlük token kovaları, konuşma tanıma dilleri ve indirme
+kampanyaları; 5 yıldan eski günlük anlık görüntüler; 10 yıldan eski gelir kayıtları (önce iadeleri). Aynı Cron günü gelen davet ödüllerini de verir (`referral_rewards` adımı).
 İndirme sayacı (gün başına tek satır, kişisel veri yok) silinmez. Silme tablo başına 1000 satırlık en çok 3 turdur; kalan
 ertesi gün silinir (`cleanup_incomplete` uyarısı). Her adım ayrı denenir: biri başarısız olursa `cleanup_failed` alarmı
 yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır. Yerelde: `npx wrangler dev --test-scheduled`, sonra
@@ -320,6 +347,8 @@ yazılır, diğerleri çalışır ve sonunda `CleanupFailedError` fırlatılır.
 | `GET /v1/download/mac` | — | `?src=<home-hero \| home-cta \| download-page \| account>` (yoksa `direct`, tanınmayan `other`) → `302` → `DMG_URL`; ağ başına günde bir indirme sayılır: UTC gün toplamı ve kaynak + Referer alan adı sayacı (`download_sources`; yol ya da tam adres değil). Tekilleştirme için ağın gün ile HMAC özeti ertesi güne dek tutulur; tekrar indirme D1'e yazmaz. Sayaç yazılamazsa yine yönlendirir (`download_count_failed` uyarısı) |
 | `GET /v1/admin/stats` | Bearer + yönetici | indirme, kullanıcı, deneme, abonelik (plan başına yenilenecek sayılar; MRR = aylık × `PRICE_USD_MONTHLY` + yıllık × `PRICE_USD_YEARLY` / 12), davet sayaçları (nedene göre düşen davetler dahil), toplantı, harcama, token ve açık rapor özetleri; 30 günlük seriler (UTC, eskiden yeniye, boş gün 0). Tanımlar `src/admin.ts` → `adminStats` |
 | `GET /v1/admin/insights` | Bearer + yönetici | sorunlar (son 7 ve 30 gün: deneme kapasitesi ve harcama tavanı retleri, koda göre retler, servise göre üst servis hataları, 5xx), son 30 günün hunisi (indirme → hesap → ilk toplantı → ilk not → ≥ 3 toplantı → abone → davetle abone → iptal), indirme kaynakları ve Referer alan adları, Stripe iptal nedenleri, davet özeti (son 30 günde Checkout, katılım, ilk ödeme, ödül, nedene göre düşen davetler; şu an ücretsiz aydakiler; en çok davet edenler). Tanımlar `src/adminInsights.ts` |
+| `GET /v1/admin/trends` | Bearer + yönetici | son 90 günün anlık görüntüleri (`daily: [{day, snapshot \| null}]`), gerçek gelir (`revenue: {currencies: [{currency, mrrCents, payingSubscriptions, arpuCents, paidLast30DaysCents, taxLast30DaysCents, discountLast30DaysCents, refundedLast30DaysCents, netLast30DaysCents, paidAllTimeCents, netAllTimeCents, paidSubscriptionsAllTime, ltvCents, daily}], firstPaymentsLast30Days, medianDaysToFirstPayment}`) ve son 30 günün token kovaları, konuşma tanıma dilleri, hesap silmeleri, yeniden denemeler ve indirme kampanyaları. Tanımlar `src/adminTrends.ts` |
+| `GET /v1/admin/site-analytics` | Bearer + yönetici | `{generatedAt, days, pageViews, visits, daily: [{day, pageViews, visits}], topPaths: [{key, pageViews, visits}], topReferrers: [...]}` (Cloudflare Web Analytics, son 30 gün); ayarlı değilse `503 analytics_unavailable` |
 | `GET /v1/admin/operations` | Bearer + yönetici | açık ve bitirilmemiş toplantılar, takılı ayırmalar, kesinleşmemiş Deepgram tahminleri, Stripe olayları (son olay, 24 saat, 7 günün türleri) ve son çökmeler. Tanımlar `src/adminOps.ts` |
 | `GET /v1/admin/users` | Bearer + yönetici | `?q=<kimlik öneki>&segment=&provider=&cursor=`; `segment`: `subscribed`, `past_due`, `canceled`, `trial`, `free`, `invited` (davet koduyla abone olmuş) ya da bırakma kesimleri `no_meeting`, `trial_ended`, `inactive` (7 gündür toplantı yok), `failed` (toplantısında istek başarısız). Öğede `invite`: `invited` / `free_month` (davetin ücretsiz ilk ayında) / `null`. Tanımlar `src/adminUsers.ts` |
 | `GET /v1/admin/users/{id}` | Bearer + yönetici | hesabın ayrıntısı: özet, Mac doğrulaması, Stripe müşterisi, son iptal nedeni, bu ayın kullanımı, toplantılar (en çok 100), raporlar (en çok 20), kullandığı davet (`invitedBy`: davet eden, kod, durum ve düşme nedeni, ücretsiz ayda mı, kart denetlendi mi, zamanlar), davetleri (`invites`: kod, sayaçlar, tahmini ödül tarihi, arkadaşlar) ve zaman çizelgesi (davet olayları dahil). Tanımlar `src/adminUsers.ts` |

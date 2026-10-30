@@ -283,18 +283,20 @@ export async function reserveUsage(db: D1Database, reservation: UsageReservation
 }
 
 /**
- * Harcama ifadesi: deneme harcamasıysa deneme toplamına da yazılır. Yalnızca ayırma satırı hâlâ duruyorsa yazılır:
+ * Harcama ifadesi: deneme harcamasıysa deneme toplamına, LLM çağrısıysa Anthropic payına (`llm_micro_usd`) da yazılır. Yalnızca ayırma satırı hâlâ duruyorsa yazılır:
  * satırı kaldıran (süre dolumu temizliği ya da hesap silme) tahmini maliyeti zaten yazmıştır; gerçek maliyet ikinci kez
  * eklenmez. Bu yüzden kesinleştirmede ayırmayı silen ifade en sonda çalışır.
  */
 function spendStatement(db: D1Database, reservation: UsageReservation, microUsd: number, now: Date): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd)
-       SELECT ?1, ?2, CASE WHEN ?3 = 1 THEN ?2 ELSE 0 END WHERE EXISTS (SELECT 1 FROM usage_reservations WHERE id = ?4)
-       ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd`,
+      `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd, llm_micro_usd)
+       SELECT ?1, ?2, CASE WHEN ?3 = 1 THEN ?2 ELSE 0 END, CASE WHEN ?5 = 'llm' THEN ?2 ELSE 0 END
+       WHERE EXISTS (SELECT 1 FROM usage_reservations WHERE id = ?4)
+       ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd,
+         llm_micro_usd = llm_micro_usd + excluded.llm_micro_usd`,
     )
-    .bind(dayKey(now), microUsd, reservation.trialSpend ? 1 : 0, reservation.id);
+    .bind(dayKey(now), microUsd, reservation.trialSpend ? 1 : 0, reservation.id, reservation.kind);
 }
 
 /** Kesinleştirmenin son ifadesi: ayırma satırını siler (önceki ifadeler satırın varlığına bakar). */
@@ -407,12 +409,12 @@ function removedReservationStatements(db: D1Database, condition: string, binds: 
   return [
     db
       .prepare(
-        `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd, audio_seconds)
+        `INSERT INTO daily_spend (day, micro_usd, trial_micro_usd, audio_seconds, llm_micro_usd)
          SELECT day, SUM(estimated_micro_usd), SUM(CASE WHEN trial_spend = 1 THEN estimated_micro_usd ELSE 0 END),
-           SUM(CASE WHEN kind = 'audio' THEN audio_seconds ELSE 0 END)
+           SUM(CASE WHEN kind = 'audio' THEN audio_seconds ELSE 0 END), SUM(CASE WHEN kind = 'llm' THEN estimated_micro_usd ELSE 0 END)
          FROM usage_reservations WHERE ${condition} GROUP BY day
          ON CONFLICT(day) DO UPDATE SET micro_usd = micro_usd + excluded.micro_usd, trial_micro_usd = trial_micro_usd + excluded.trial_micro_usd,
-           audio_seconds = audio_seconds + excluded.audio_seconds`,
+           audio_seconds = audio_seconds + excluded.audio_seconds, llm_micro_usd = llm_micro_usd + excluded.llm_micro_usd`,
       )
       .bind(...binds),
     db.prepare(`DELETE FROM usage_reservations WHERE ${condition}`).bind(...binds),

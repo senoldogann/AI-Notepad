@@ -6,6 +6,8 @@ import { deleteAccount } from "./account";
 import { adminStats, requireAdmin } from "./admin";
 import { adminInsights } from "./adminInsights";
 import { adminOperations } from "./adminOps";
+import { adminTrends } from "./adminTrends";
+import { fetchSiteAnalytics, requireSiteAnalytics } from "./siteAnalytics";
 import { adminUserDetail, listAdminUsers, parseAdminUserFilter } from "./adminUsers";
 import {
   type ActiveBlog,
@@ -46,7 +48,7 @@ import { complimentaryRequestSchema, complimentaryUntilMs, grantComplimentaryAcc
 import { type Config, ConfigError, type StripeWebhookConfig, parseConfig, parseStripeWebhookConfig } from "./config";
 import { Base64Error, base64Decode, base64Encode, hmacSha256Hex } from "./crypto";
 import { issueDeepgramGrant } from "./deepgram";
-import { type DownloadOrigin, countDownload, downloadSourceOf, latestMacVersion, referrerHostOf } from "./downloads";
+import { type DownloadOrigin, countDownload, downloadCampaignOf, downloadSourceOf, latestMacVersion, referrerHostOf } from "./downloads";
 import { type AccountLLMAccess, entitlements, requireAccountLLMAccess } from "./entitlements";
 import type { Env } from "./env";
 import { ApiError, UpstreamError } from "./errors";
@@ -491,9 +493,11 @@ async function route(request: Request, env: Env, config: Config, context: Reques
   }
   if (path === "/v1/download/mac" && method === "GET") {
     // Ağ başına günde bir indirme sayılır (bkz. `countDownload`): tekrar isteği tek okuma yapar, D1'e yazmaz.
+    const params: URLSearchParams = new URL(request.url).searchParams;
     const origin: DownloadOrigin = {
-      source: downloadSourceOf(new URL(request.url).searchParams.get("src")),
+      source: downloadSourceOf(params.get("src")),
       referrerHost: referrerHostOf(request.headers.get("referer")),
+      campaign: downloadCampaignOf(params.get("utm_source"), params.get("utm_campaign")),
     };
     await countDownload(db, config.secrets.trialHash, ipKey, origin, now);
     return new Response(null, { status: 302, headers: { location: config.dmgUrl } });
@@ -574,6 +578,13 @@ async function routeAdmin(request: Request, env: Env, config: Config, context: R
   }
   if (path === "/v1/admin/insights" && method === "GET") {
     return jsonResponse(200, await adminInsights(db, now));
+  }
+  if (path === "/v1/admin/trends" && method === "GET") {
+    return jsonResponse(200, await adminTrends(db, now));
+  }
+  // Site istatistikleri Cloudflare'den okunur; ayarlar eksikse `503 analytics_unavailable` (panelin geri kalanı çalışır).
+  if (path === "/v1/admin/site-analytics" && method === "GET") {
+    return jsonResponse(200, await fetchSiteAnalytics(context.platform, requireSiteAnalytics(config.siteAnalytics), now));
   }
   if (path === "/v1/admin/users" && method === "GET") {
     return jsonResponse(200, await listAdminUsers(db, config, parseAdminUserFilter(new URL(request.url)), now));

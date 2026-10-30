@@ -66,6 +66,9 @@ export interface Env {
   /** Blog yazılarının durduğu GitHub deposu (`sahip/ad`) ve yazıların işlendiği dal (bkz. `blog.ts`). */
   readonly GITHUB_BLOG_REPO: string;
   readonly GITHUB_BLOG_BRANCH: string;
+  /** Sitenin Cloudflare Web Analytics verisinin hesabı ve site etiketi (bkz. `siteAnalytics.ts`); boşsa kapalı. */
+  readonly CF_ANALYTICS_ACCOUNT_ID: string;
+  readonly CF_ANALYTICS_SITE_TAG: string;
 
   readonly ACCESS_TOKEN_SECRET: string;
   /** Kimlik deneme defteri ve deneme IP özetlerinin HMAC sırrı (erişim jetonu sırrından ayrı). */
@@ -84,4 +87,9 @@ export interface Env {
    * kişisel erişim jetonu). Yoksa blog uçları `503 blog_unavailable` döner.
    */
   readonly GITHUB_BLOG_TOKEN?: string;
+  /**
+   * Yönetim panelindeki site istatistikleri için Cloudflare API jetonu (yalnızca Account › Account Analytics › Read).
+   * Yoksa `GET /v1/admin/site-analytics` `503 analytics_unavailable` döner.
+   */
+  readonly CF_ANALYTICS_TOKEN?: string;
 }

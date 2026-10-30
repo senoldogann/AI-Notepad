@@ -25,6 +25,7 @@ import {
   usdCents,
 } from "./referrals";
 import { withRetries } from "./retry";
+import { type InvoiceRevenue, firstPaidAtSql, invoiceRevenueOf, revenueInvoiceStatements, revenueRefundStatement } from "./revenue";
 
 /** Stripe isteğinin zaman aşımı (SDK'nın fetch istemcisi isteğin tamamına uygular). */
 const stripeTimeoutMs: number = 20_000;
@@ -64,7 +65,7 @@ function stripeFailure(operation: string, userId: string | null, error: unknown)
 /** Stripe çağrısını yeniden denemeyle yapar; başarısızlıkta mesaj taşımayan istemci hatası fırlatır. */
 export async function callStripe<T>(platform: Platform, operation: string, userId: string | null, call: () => Promise<T>): Promise<T> {
   try {
-    return await withRetries({ service: "stripe", attempts: 3, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableStripeError }, call);
+    return await withRetries({ service: "stripe", attempts: 3, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableStripeError, recordRetry: platform.recordRetry }, call);
   } catch (error: unknown) {
     throw stripeFailure(operation, userId, error);
   }
@@ -73,7 +74,7 @@ export async function callStripe<T>(platform: Platform, operation: string, userI
 /** `callStripe` gibi; nesne Stripe'ta yoksa (404) hata yerine null döner. */
 async function callStripeOrMissing<T>(platform: Platform, operation: string, userId: string | null, call: () => Promise<T>): Promise<T | null> {
   try {
-    return await withRetries({ service: "stripe", attempts: 3, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableStripeError }, call);
+    return await withRetries({ service: "stripe", attempts: 3, baseDelayMs: platform.retryBaseDelayMs, isRetryable: isRetryableStripeError, recordRetry: platform.recordRetry }, call);
   } catch (error: unknown) {
     if (error instanceof Stripe.errors.StripeInvalidRequestError && error.statusCode === 404) {
       return null;
@@ -602,6 +603,8 @@ type EventStatements = D1PreparedStatement[];
  * - `past_due_since`: durum `past_due` olduğunda yazılır, `past_due` sürdükçe korunur, başka duruma geçince silinir;
  *   ek süre bundan hesaplanır (`entitlements.subscriptionAccess`).
  * - `plan`: geçerli aboneliğin fiyatından (`planOfSubscription`); Portal'da plan değişirse sonraki olay günceller.
+ * - `first_paid_at`: boşsa hesabın kayıtlı ilk ücretli faturasından (`firstPaidAtSql`; fatura abonelik olayından önce
+ *   gelmiş olabilir); doluysa korunur (yeniden abone olunca da).
  * - Süren ücretsiz erişim (`complimentary.ts`) ezilmez: olay Stripe çağrılmadan işlenmiş sayılır ve alarm yazılır
  *   (ücretsiz erişimi olan hesabın Stripe'ta yaşayan aboneliği elle incelenmeli). Süresi geçmiş ücretsiz erişimin
  *   yerini Stripe aboneliği alır. Koşul yazımın kendisinde de vardır (arada verilen ücretsiz erişim ezilmez).
@@ -668,9 +671,10 @@ async function subscriptionEventStatements(
     db
       .prepare(
         `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at,
-           past_due_since, last_event_created, updated_at, plan)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?4 = 'past_due' THEN ?8 END, ?7, ?8, ?9)
+           past_due_since, last_event_created, updated_at, plan, first_paid_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?4 = 'past_due' THEN ?8 END, ?7, ?8, ?9, ${firstPaidAtSql("?1")})
          ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id = excluded.stripe_customer_id, plan = excluded.plan, complimentary = 0,
+           first_paid_at = COALESCE(subscriptions.first_paid_at, excluded.first_paid_at),
            past_due_since = CASE
              WHEN excluded.status <> 'past_due' THEN NULL
              WHEN subscriptions.status = 'past_due' AND subscriptions.stripe_subscription_id = excluded.stripe_subscription_id
@@ -803,7 +807,8 @@ function latestInvoiceId(subscription: Stripe.Subscription): string | null {
  * hemen biter; ardından gelen `customer.subscription.deleted` aynı durumu yazar). Alarmdan öteye geçmeyenler: eski bir
  * aboneliğin ya da aynı aboneliğin eski bir ayının iadesi (ödenmiş güncel ay kesilmez), aynı Stripe hesabındaki başka
  * ürünün aboneliği (`isOurSubscription`), kopya aboneliğin iadesi, aboneliği bulunamayan ödeme ve kısmi iade.
- * Davet ödülü: aboneliğin herhangi bir (kısmi de olsa) iadesi bekleyen davet ödülünü düşürür (`refunded`).
+ * Davet ödülü: aboneliğin herhangi bir (kısmi de olsa) iadesi bekleyen davet ödülünü düşürür (`refunded`). Gelir:
+ * ödemenin faturası kayıtlı abonelik faturasıysa (`revenue_invoices`) birikimli iade tutarı yazılır (`revenueRefundStatement`).
  */
 async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform: Platform, event: Stripe.Event, charge: Stripe.Charge, prices: StripePrices): Promise<EventStatements> {
   const customer: string | null = charge.customer === null ? null : customerIdOf(charge.customer);
@@ -839,8 +844,10 @@ async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform
     latestInvoice: latest,
     canceled,
   });
+  // Gelir: ödemenin faturası bizim kayıtlı faturamızsa birikimli iade tutarı (kopya aboneliğin iadesi dahil).
+  const revenue: EventStatements = paid === null ? [] : [revenueRefundStatement(db, charge, paid.invoiceId, event.created * 1000)];
   if (!ends || userId === null || subscriptionId === null) {
-    return referralVoid;
+    return [...referralVoid, ...revenue];
   }
   return [
     db
@@ -851,6 +858,7 @@ async function chargeRefundedStatements(db: D1Database, stripe: Stripe, platform
       )
       .bind(nowMs, event.created, userId, subscriptionId),
     ...referralVoid,
+    ...revenue,
   ];
 }
 
@@ -974,6 +982,25 @@ async function invoicePaidReferralStatements(
   });
 }
 
+/**
+ * `invoice.paid` gelir ifadeleri (`revenueInvoiceStatements`): faturanın müşterisi tanınan kullanıcıysa ve fatura bir
+ * aboneliğinse. Kopya aboneliğin faturası da yazılır (tahsil edildi; iadesi `charge.refunded` ile düşer). Stripe
+ * çağrılmaz.
+ */
+async function invoicePaidRevenueStatements(db: D1Database, event: Stripe.Event, invoice: Stripe.Invoice): Promise<EventStatements> {
+  const subscriptionId: string | null = invoiceSubscriptionId(invoice);
+  if (subscriptionId === null || invoice.id === undefined || invoice.customer === null) {
+    return [];
+  }
+  const userId: string | null = await customerOwner(db, customerIdOf(invoice.customer));
+  if (userId === null) {
+    log("info", "stripe_invoice_unknown_customer", { eventId: event.id, invoiceId: invoice.id });
+    return [];
+  }
+  const revenue: InvoiceRevenue = invoiceRevenueOf(invoice, invoice.id, subscriptionId, event.created);
+  return revenueInvoiceStatements(db, userId, revenue);
+}
+
 /** Olay türüne göre Stripe yan etkileri ve veritabanı ifadeleri; tanınmayan olay yalnızca kaydedilir. */
 async function eventStatements(db: D1Database, platform: Platform, config: StripeWebhookConfig, event: Stripe.Event): Promise<EventStatements> {
   const subscription: Stripe.Subscription | null = subscriptionFromEvent(event);
@@ -988,7 +1015,10 @@ async function eventStatements(db: D1Database, platform: Platform, config: Strip
     case "invoice.paid": {
       const stripe: Stripe = stripeClient(platform, config);
       await invoicePaidDuplicateRefund(db, stripe, platform, event, event.data.object);
-      return invoicePaidReferralStatements(db, stripe, platform, config, event.data.object);
+      return [
+        ...(await invoicePaidReferralStatements(db, stripe, platform, config, event.data.object)),
+        ...(await invoicePaidRevenueStatements(db, event, event.data.object)),
+      ];
     }
     case "charge.dispute.created":
       return disputeStatements(db, stripeClient(platform, config), platform, event, event.data.object, config.stripePrices);
@@ -1003,8 +1033,9 @@ async function eventStatements(db: D1Database, platform: Platform, config: Strip
  * Stripe yeniden dener, düzeltilince olay işlenir). İşlenmiş olay Stripe çağrılmadan `duplicate` döner. Olay kimliği
  * `stripe_events` tablosuna, durum değişiklikleri aynı toplu işlemde yazılır: aynı olay eşzamanlı ikinci kez gelirse
  * birincil anahtar çakışır, hiçbir şey değişmez. İşlenen olaylar: abonelik olayları (`subscriptionEventStatements`),
- * `customer.deleted`, `charge.refunded` (alarm; tam iadede ödemenin aboneliği biter; davet ödülü düşer), `invoice.paid`
- * (kopya aboneliğin geç ödemesi iade edilir; davetle aboneliğin ilerlemesi ve katılımda kart denetimi),
+ * `customer.deleted`, `charge.refunded` (alarm; tam iadede ödemenin aboneliği biter; davet ödülü düşer; gelirden iade),
+ * `invoice.paid` (kopya aboneliğin geç ödemesi iade edilir; davetle aboneliğin ilerlemesi ve katılımda kart denetimi;
+ * gelir satırı ve ilk ödeme anı),
  * `charge.dispute.created` (alarm, abonelik iptali, davet ödülü düşer); diğerleri yalnızca kaydedilir.
  */
 export async function handleStripeWebhook(db: D1Database, platform: Platform, config: StripeWebhookConfig, payload: string, signature: string): Promise<{ duplicate: boolean }> {
