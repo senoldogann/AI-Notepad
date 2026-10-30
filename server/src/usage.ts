@@ -6,8 +6,8 @@ import { log } from "./log";
  * Claude Haiku 5.5 fiyatları (USD / milyon token). İstem 100K token'a kadar 0,10 / 0,50; üstünde 0,50 / 2,50.
  * Kaynak: Anthropic model belgeleri (claude-api, shared/models.md).
  */
-const haikuShortInputUsdPerMTok: number = 0.1;
-const haikuShortOutputUsdPerMTok: number = 0.5;
+export const haikuShortInputUsdPerMTok: number = 0.1;
+export const haikuShortOutputUsdPerMTok: number = 0.5;
 const haikuLongInputUsdPerMTok: number = 0.5;
 const haikuLongOutputUsdPerMTok: number = 2.5;
 const haikuLongPromptThreshold: number = 100_000;
