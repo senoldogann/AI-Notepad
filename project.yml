@@ -81,8 +81,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/AINotepad.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
-        MARKETING_VERSION: "0.1.6"
-        CURRENT_PROJECT_VERSION: "15"
+        MARKETING_VERSION: "0.1.7"
+        CURRENT_PROJECT_VERSION: "16"
   # Abonelik sürümü: anahtarsız; yapay zekâ, son geçiş ve canlı metin jetonu (Deepgram) bizim sunucumuz (server/)
   # üzerinden. Canlı motoru her kayıt için sunucu seçer; sunucu Deepgram vermezse canlı metin Mac'te (WhisperKit), bkz.
   # App/Hosted/HostedSeams.swift.
@@ -172,8 +172,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/Hosted/AINotepadHosted.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Gistsmith
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Gistsmith toplantıda söylediklerini yazıya dökmek için mikrofonu kullanır."
-        MARKETING_VERSION: "0.1.6"
-        CURRENT_PROJECT_VERSION: "15"
+        MARKETING_VERSION: "0.1.7"
+        CURRENT_PROJECT_VERSION: "16"
       configs:
         # Yerel sunucu: `cd server && npm run dev` (http yalnızca Debug'da kabul edilir).
         Debug:
@@ -236,8 +236,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "AI-Notepad yüz yüze toplantıyı yazıya dökmek için mikrofonu kullanır."
         CODE_SIGN_ENTITLEMENTS: iOS/AINotepad.entitlements
-        MARKETING_VERSION: "0.1.6"
-        CURRENT_PROJECT_VERSION: "15"
+        MARKETING_VERSION: "0.1.7"
+        CURRENT_PROJECT_VERSION: "16"
     info:
       path: iOS/Info.plist
       properties:
@@ -281,8 +281,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: AI-Notepad
         # Niyetlerin gövdesi eklentide boş derlenir (bkz. iOS/Shared/RecordingIntents.swift).
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
-        MARKETING_VERSION: "0.1.6"
-        CURRENT_PROJECT_VERSION: "15"
+        MARKETING_VERSION: "0.1.7"
+        CURRENT_PROJECT_VERSION: "16"
     info:
       path: iOSWidgets/Info.plist
       properties:
