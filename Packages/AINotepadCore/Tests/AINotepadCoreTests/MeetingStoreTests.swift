@@ -41,10 +41,14 @@ func record(id: String, startedAt: Date, status: MeetingStatus, audioDeleted: Bo
     @Test func loadingMergesDirectoriesPreferringFirst() throws {
         let local: URL = try temporaryDirectory()
         let cloud: URL = try temporaryDirectory()
-        for (root, id, title) in [(local, "20261027-090000", "Yerel"), (cloud, "20261027-090000", "Eski"), (cloud, "20261026-080000", "iCloud")] {
+        // Başlangıç anları klasör adlarıyla aynı sırada sabittir: liste başlangıca göre yeniden eskiye sıralanır,
+        // "şimdi" kullanılsaydı sonuç kayıtlar arasındaki milisaniyelere kalırdı.
+        let newer: Date = Date(timeIntervalSince1970: 1_793_091_600)
+        let older: Date = newer.addingTimeInterval(-90_000)
+        for (root, id, title, startedAt) in [(local, "20261027-090000", "Yerel", newer), (cloud, "20261027-090000", "Eski", newer), (cloud, "20261026-080000", "iCloud", older)] {
             let folder: URL = root.appending(path: id, directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try saveMeeting(record: record(id: id, startedAt: Date(), status: .done, audioDeleted: false).with(folder: title), directory: folder)
+            try saveMeeting(record: record(id: id, startedAt: startedAt, status: .done, audioDeleted: false).with(folder: title), directory: folder)
         }
         let result: MeetingLoadResult = loadMeetings(directories: [local, cloud])
         #expect(result.meetings.map(\.folder) == ["Yerel", "iCloud"])
