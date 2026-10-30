@@ -4,8 +4,8 @@ import SwiftUI
 
 // Abonelik sürümünün kullanım göstergeleri: Ayarlar › Hesap'taki kullanım kartı, kenar çubuğundaki küçük gösterge,
 // ana penceredeki kullanım bildirimleri ve kayıt panelinde kısaltılmış toplantının kalan dakikası. Görünüm sakin ve
-// durağandır (hareketli bulanık gradyan yok). Ölçerin olağan dolgusu nötrdür; renk yalnızca gerçek durumda, uyarılarla
-// aynı renkle (`NoticeSeverity`) gelir.
+// durağandır (hareketli bulanık gradyan yok). Ölçerin olağan dolgusu kullanıcının vurgu rengidir; uyarı renkleri
+// yalnızca gerçek durumda, uyarılarla aynı renkle (`NoticeSeverity`) gelir.
 
 /// Ayın sıfırlanma günü, ör. "1 Kasım" (sunucu ayı UTC'ye göre sayar; gün UTC'de yazılır). Saf fonksiyondur.
 func hostedResetDayText(now: Date) -> String {
@@ -53,12 +53,22 @@ func hostedTrialLevel(left: Int) -> HostedUsageLevel {
     }
 }
 
-/// Kullanım düzeyinin rengi (ölçer dolgusu ve yanındaki metin): olağan durumda nötr ve soluk; dikkat ve dolu
-/// durumunda uyarılarla aynı renk. Saf fonksiyondur.
+/// Ölçerin yanındaki metnin rengi: olağan durumda soluk; dikkat ve dolu durumunda uyarılarla aynı renk. Saf fonksiyondur.
 @MainActor
 private func usageLevelColor(level: HostedUsageLevel) -> Color {
     switch level {
     case .normal: Theme.muted
+    case .warning: NoticeSeverity.attention.tint
+    case .full: NoticeSeverity.error.tint
+    }
+}
+
+/// Ölçerin dolgusu: olağan durumda kullanıcının Görünüm'de seçtiği vurgu rengi (arayüzle uyumlu); dikkat ve dolu
+/// durumunda uyarılarla aynı renk. Saf fonksiyondur.
+@MainActor
+private func meterFillColor(level: HostedUsageLevel, accent: PanelAccent) -> Color {
+    switch level {
+    case .normal: accent.color
     case .warning: NoticeSeverity.attention.tint
     case .full: NoticeSeverity.error.tint
     }
@@ -78,10 +88,11 @@ private struct HostedInfoHint: View {
     }
 }
 
-/// Yuvarlak uçlu kullanım ölçeri: sakin zemin üstünde nötr dolgu; %80'de dikkat, %100'de hata rengi.
+/// Yuvarlak uçlu kullanım ölçeri: sakin zemin üstünde vurgu renginde dolgu; %80'de dikkat, %100'de hata rengi.
 struct HostedUsageMeter: View {
     let fraction: Double
     let height: CGFloat
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         GeometryReader { (proxy: GeometryProxy) in
@@ -90,7 +101,7 @@ struct HostedUsageMeter: View {
                 Capsule().strokeBorder(Theme.line.opacity(0.6), lineWidth: 0.5)
                 if fraction > 0 {
                     Capsule()
-                        .fill(usageLevelColor(level: hostedUsageLevel(fraction: fraction)))
+                        .fill(meterFillColor(level: hostedUsageLevel(fraction: fraction), accent: appearance.accent))
                         .frame(width: max(height, proxy.size.width * fraction))
                 }
             }
@@ -102,18 +113,19 @@ struct HostedUsageMeter: View {
     }
 }
 
-/// Deneme toplantıları: her toplantı bir parça; kalanlar dolu, kullanılanlar boş. Dolgu nötr; 1 toplantı kaldıysa
-/// dikkat rengi, deneme bittiyse boş parçaların çerçevesi hata renginde.
+/// Deneme toplantıları: her toplantı bir parça; kalanlar dolu, kullanılanlar boş. Dolgu vurgu renginde; 1 toplantı
+/// kaldıysa dikkat rengi, deneme bittiyse boş parçaların çerçevesi hata renginde.
 struct HostedTrialSegments: View {
     let left: Int
     let total: Int
     let height: CGFloat
+    @Environment(\.panelAppearance) private var appearance: PanelAppearance
 
     var body: some View {
         HStack(spacing: height) {
             ForEach(0..<max(total, 1), id: \.self) { (index: Int) in
                 Capsule()
-                    .fill(index < left ? usageLevelColor(level: hostedTrialLevel(left: left)) : Theme.soft)
+                    .fill(index < left ? meterFillColor(level: hostedTrialLevel(left: left), accent: appearance.accent) : Theme.soft)
                     .overlay(Capsule().strokeBorder(left == 0 ? NoticeSeverity.error.tint.opacity(0.6) : Theme.line.opacity(0.6), lineWidth: 0.5))
                     .frame(height: height)
             }
