@@ -15,11 +15,13 @@ interface Props {
   readonly text?: CommonCopy;
   /** "Ominaisuudet" bağlantısının hedefi; varsayılan ana sayfanın özellikler bölümü. */
   readonly featuresHref?: string | undefined;
+  /** "Hinnat" bağlantısının hedefi; varsayılan fiyat sayfası. */
+  readonly pricingHref?: string | undefined;
 }
-const { page, text = copy.common, featuresHref = `${routes.home}#features` } = Astro.props;
+const { page, text = copy.common, featuresHref = `${routes.home}#features`, pricingHref = routes.pricing } = Astro.props;
 const links: readonly { readonly href: string; readonly label: string; readonly sessionLink: boolean; readonly lang: string | null }[] = [
   { href: featuresHref, label: text.nav.features, sessionLink: false, lang: null },
-  { href: routes.pricing, label: text.nav.pricing, sessionLink: false, lang: null },
+  { href: pricingHref, label: text.nav.pricing, sessionLink: false, lang: null },
   { href: routes.download, label: text.nav.download, sessionLink: false, lang: null },
   { href: routes.signIn, label: text.nav.signIn, sessionLink: true, lang: null },
 ];

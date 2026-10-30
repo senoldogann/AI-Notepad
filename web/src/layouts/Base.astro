@@ -26,8 +26,10 @@ interface Props {
   readonly common?: CommonCopy;
   /** Üst çubuktaki "Ominaisuudet" bağlantısının hedefi; varsayılan ana sayfanın özellikler bölümü. */
   readonly featuresHref?: string | undefined;
+  /** Üst çubuktaki "Hinnat" bağlantısının hedefi; varsayılan fiyat sayfası. */
+  readonly pricingHref?: string | undefined;
 }
-const { page, meta, indexed, social, lang = "en", common = copy.common, featuresHref } = Astro.props;
+const { page, meta, indexed, social, lang = "en", common = copy.common, featuresHref, pricingHref } = Astro.props;
 const origin: string = siteConfig.siteOrigin;
 const canonical: string = `${origin}${sitePagePath(page)}`;
 const ogImage: string = social.kind === "article" ? social.image : `${origin}/og.png`;
@@ -84,7 +86,7 @@ const alternateHref: string | null = alternate === undefined ? null : `${origin}
     <a class="skip-link" href="#main">{common.skipLink}</a>
     {/* Sayfanın kendisi; sonundaki çekmede yukarı kayar ve arkasındaki PullReveal görünür. */}
     <div id="page-shell" class="page-shell">
-      <Header page={sitePageKey(page)} text={common} featuresHref={featuresHref} />
+      <Header page={sitePageKey(page)} text={common} featuresHref={featuresHref} pricingHref={pricingHref} />
       <main id="main" tabindex="-1">
         <slot />
       </main>
