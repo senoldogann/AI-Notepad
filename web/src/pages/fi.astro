@@ -1,0 +1,14 @@
+---
+// Fince tanıtım sayfası (`/fi`): İngilizce ana sayfayla aynı gösterim (Landing.astro), Finlandiya pazarına yazılmış
+// Fince metinler (copy-fi.ts) ve Fince üst çubuk/alt bilgi. Üst çubuktaki dil bağlantısı İngilizce sürüme gider.
+import Base from "../layouts/Base.astro";
+import Landing from "../components/Landing.astro";
+import { websiteCard } from "../lib/social";
+import { commonFi, homeFi } from "../copy-fi";
+
+const text = homeFi;
+---
+
+<Base page="fi" meta={text.meta} indexed={true} social={websiteCard} lang="fi" common={commonFi} featuresHref="#features">
+  <Landing text={text} common={commonFi} page="fi" />
+</Base>

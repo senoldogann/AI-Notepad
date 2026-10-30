@@ -1,7 +1,8 @@
 # Gistsmith web sitesi
 
-Cloudflare Pages'te durağan, yalnızca İngilizce site (https://gistsmith.com): tanıtım, fiyat, indirme, giriş (Apple ve
-Google), davet, hesap, iletişim formu, yönetim paneli ve yasal metinler. Abonelik sunucusuyla (`../server`,
+Cloudflare Pages'te durağan site (https://gistsmith.com): İngilizce tanıtım, fiyat, indirme, giriş (Apple ve
+Google), davet, hesap, iletişim formu, yönetim paneli ve yasal metinler; ayrıca Finlandiya pazarı için Fince tanıtım
+sayfası `/fi` (metinler `src/copy-fi.ts`, İngilizceyle aynı gösterim `src/components/Landing.astro`). Abonelik sunucusuyla (`../server`,
 https://api.gistsmith.com) tarayıcıdan konuşur.
 
 **Yığın:** Astro (durağan çıktı) ve katı TypeScript. Sayfalar derlemede HTML olur; tarayıcıya yalnızca küçük betikler
@@ -16,6 +17,7 @@ yalnızca toplu sayfa görüntüleme, yönlendiren site, ülke ve cihaz türü s
 | Yol | Sayfa |
 |---|---|
 | `/` | Ana sayfa |
+| `/fi` | Fince tanıtım sayfası (Finlandiya pazarı; üst çubuktaki dil bağlantıları `/` ile `/fi` arasında) |
 | `/pricing` | Fiyat (Stripe Checkout iptali buraya döner) |
 | `/download` | İndirme ve kurulum |
 | `/compare`, `/vs/granola`, `/vs/otter` | Karşılaştırma (rakip değerleri yalnızca kendi fiyat sayfalarından; `copy.ts` `compare`) |

@@ -7,6 +7,7 @@
 /** Sayfa kimlikleri. */
 export type PageKey =
   | "home"
+  | "fi"
   | "pricing"
   | "download"
   | "compare"
@@ -26,6 +27,7 @@ export type PageKey =
 /** Sayfaların yolları. */
 export const routes: Readonly<Record<PageKey, string>> = {
   home: "/",
+  fi: "/fi",
   pricing: "/pricing",
   download: "/download",
   compare: "/compare",
@@ -44,7 +46,25 @@ export const routes: Readonly<Record<PageKey, string>> = {
 };
 
 /** Arama motorlarına açık sayfalar (hesap, yönetim ve 404 kişiye özel ya da içeriksizdir). */
-export const indexedPages: readonly PageKey[] = ["home", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "invite", "contact", "privacy", "terms"];
+export const indexedPages: readonly PageKey[] = ["home", "fi", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "invite", "contact", "privacy", "terms"];
+
+/**
+ * Aynı sayfanın öbür dildeki hâli: `hreflang` bağlantıları, üst çubuktaki dil bağlantısı ve paylaşım kartının dili
+ * bundan üretilir. Yalnızca çevrilmiş sayfaların eşi vardır.
+ */
+export interface PageAlternate {
+  readonly page: PageKey;
+  /** Öbür sürümün dili (`<html lang>` ve `hreflang`). */
+  readonly lang: "en" | "fi";
+  /** Dil bağlantısının metni, öbür sürümün dilinde. */
+  readonly label: string;
+}
+
+/** Sayfaların dil eşleri. */
+export const pageAlternates: Readonly<Partial<Record<PageKey, PageAlternate>>> = {
+  home: { page: "fi", lang: "fi", label: "Suomeksi" },
+  fi: { page: "home", lang: "en", label: "In English" },
+};
 
 /** Önbelleğe alınmayan kişiye özel sayfalar. */
 export const privatePages: readonly PageKey[] = ["account", "admin"];
