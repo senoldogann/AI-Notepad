@@ -7344,47 +7344,6 @@
         }
       }
     },
-    "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "The first %lld minute of the recording was transcribed; the rest could not be processed: %@"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "The first %lld minutes of the recording were transcribed; the rest could not be processed: %@"
-                }
-              }
-            }
-          }
-        },
-        "tr": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "Kaydın ilk %lld dakikası yazıya döküldü; kalanı işlenemedi: %@"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "Kaydın tamamı işleniyor": {
       "localizations": {
         "en": {
@@ -15699,17 +15658,6 @@
         }
       }
     },
-    "Arkadaşın davet koduyla abone olunca ilk ayı ücretsiz olur. Onun ilk ödemesinden %lld gün sonra sana bir ay ücretsiz yazılır (yılda en çok %lld).": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When a friend subscribes with your code, their first month is free. %lld days after their first payment, you get a free month too (up to %lld a year)."
-          }
-        }
-      }
-    },
     "Davet metnini kopyala": {
       "extractionState": "manual",
       "localizations": {
@@ -15728,17 +15676,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Friends joined: %lld · Months earned: %lld"
-          }
-        }
-      }
-    },
-    "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan ilk ayın ücretsiz: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "I use Gistsmith for my meetings: it transcribes the conversation live and has the note and tasks ready when the meeting ends. Subscribe with this link and your first month is free: %@"
           }
         }
       }
@@ -15800,6 +15737,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "The on-device model requires macOS 26. In Settings, choose a provider with your own key (e.g. Anthropic)."
+          }
+        }
+      }
+    },
+    "Otomatik dilde canlı metin bu dilde yazılır. Toplantı bitince konuşulan dil (35 dil) kendiliğinden bulunur ve not ona göre yazılır.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With automatic language, live text is written in this language. After the meeting the spoken language (35 languages) is detected and the note follows it."
+          }
+        }
+      }
+    },
+    "Kaydın ilk %lld dakikası yeniden yazıya döküldü; kalanında canlı metin kullanıldı: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The first %lld minutes of the recording were transcribed again; live text is used for the rest: %@"
+          }
+        }
+      }
+    },
+    "Hesabının ücretsiz tam erişimi var; ödenecek ya da yönetilecek bir şey yok.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account has free full access; there is nothing to pay or manage."
+          }
+        }
+      }
+    },
+    "Ücretsiz tam erişim: ödeme ve yenileme yok.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free full access: no payments, no renewals."
+          }
+        }
+      }
+    },
+    "Ücretsiz tam erişim": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free full access"
+          }
+        }
+      }
+    },
+    "Toplantılarım için Gistsmith kullanıyorum: konuşulanı canlı yazıya döküyor, toplantı bitince notu ve görevleri hazırlıyor. Bu bağlantıyla abone olursan aylık planda ilk ayın ücretsiz, yıllık planda ilk yılın %@ indirimli: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I use Gistsmith for my meetings: it transcribes them live and writes the notes and tasks when the meeting ends. Subscribe with this link and your first month is free on the monthly plan, or %@ off your first year on the yearly plan: %@"
+          }
+        }
+      }
+    },
+    "Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Hesabın zaten ücretsiz olduğu için sana ödül yazılmaz.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a friend subscribes with your invite code, their first month on the monthly plan is free. Your account is already free, so no reward is added for you."
+          }
+        }
+      }
+    },
+    "Arkadaşın davet koduyla abone olunca aylık planda ilk ayı ücretsiz olur. Onun ilk ödemesinden %lld gün sonra sana da bir ay bedava: sonraki ödemenden %@ düşülür (yılda en çok %lld).": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a friend subscribes with your invite code, their first month on the monthly plan is free. %lld days after their first payment you get a free month too: %@ comes off your next payment (up to %lld a year)."
+          }
+        }
+      }
+    },
+    "Katılan arkadaş: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friends joined: %lld"
+          }
+        }
+      }
+    },
+    "Sıradaki ödül: %@ civarı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next reward: around %@"
           }
         }
       }
