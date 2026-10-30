@@ -327,16 +327,14 @@ private func silentWav() -> Data {
         await #expect(throws: HostedClientError.sessionEnded) { _ = try await familyClient.entitlements() }
     }
 
-    // Rapor ucu: geri bildirim ve çökme raporu hesap ister. Jetonsuz geri bildirim 401 `unauthorized` alır (uygulama
-    // giriş yoksa sunucuya gitmeden "giriş yap" der); hesaplı (bearer) geri bildirim ve çökme raporu 2xx alır.
-    @Test func reportsRequireAccountAgainstLocalServer() async throws {
+    // Rapor ucu: hesapsız sürümlerin (geliştirici sürümü, iPhone) jetonsuz geri bildirimi kabul edilir
+    // (`anonymousReportDestination`; sunucu tür bütçesinin dörtte birini ayırır); hesaplı (bearer) geri bildirim ve çökme
+    // raporu da 2xx alır.
+    @Test func reportsAcceptedWithAndWithoutAccountAgainstLocalServer() async throws {
         let baseURL: URL = try localServerBase()
         let diagnostics: ReportDiagnostics = currentReportDiagnostics(bundle: .main, platformName: "macOS")
         let feedback: ReportRequest = try feedbackReport(message: "Uçtan uca deneme geri bildirimi.", email: "e2e@ornek.fi", diagnostics: diagnostics)
-        let anonymous: HostedAPIError? = await hostedError {
-            try await submitReport(report: feedback, destination: ReportDestination(baseURL: baseURL, accessToken: nil))
-        }
-        #expect(anonymous?.code == .unauthorized)
+        try await submitReport(report: feedback, destination: ReportDestination(baseURL: baseURL, accessToken: nil))
 
         let user: SignedInUser = try await signedInUser(baseURL: baseURL)
         try await submitReport(report: feedback, destination: ReportDestination(baseURL: baseURL, accessToken: try await user.client.validAccessToken()))
