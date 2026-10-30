@@ -54,6 +54,7 @@ const allServices: readonly ExternalService[] = ["appleSignIn", "turnstile", "lo
 /** Sayfaların kullandığı dış hizmetler: giriş sayfası Apple, iletişim sayfası Turnstile, yönetim paneli yerel görsel önizlemesi; diğerleri hiçbiri. */
 export const pageServices: Readonly<Record<PageKey, readonly ExternalService[]>> = {
   home: [],
+  fi: [],
   pricing: [],
   download: [],
   compare: [],

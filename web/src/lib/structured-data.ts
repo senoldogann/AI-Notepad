@@ -165,13 +165,17 @@ function requirements(text: string): Requirements {
   return { operatingSystem, processor };
 }
 
-/** Ana sayfanın JSON-LD belgesi: uygulama, işletme ve sayfadaki sık sorulan sorular (`faq`). Saf fonksiyondur. */
+/**
+ * Ana sayfanın JSON-LD belgesi: uygulama, işletme ve sayfadaki sık sorulan sorular (`faq`). `page` hangi dildeki
+ * gösterimin çizildiğidir (`/` ya da `/fi`): adresler ondan üretilir. Saf fonksiyondur.
+ */
 export function homeStructuredData(
   config: SiteConfig,
   common: CommonCopy,
   meta: PageMeta,
   operator: Operator,
   faq: readonly Faq[],
+  page: "home" | "fi" = "home",
 ): StructuredDataDocument {
   const origin: string = config.siteOrigin;
   const organizationId: string = `${origin}/#organization`;
@@ -184,7 +188,7 @@ export function homeStructuredData(
         "@type": "SoftwareApplication",
         name: productName,
         description: meta.description,
-        url: pageUrl("home", origin),
+        url: pageUrl(page, origin),
         image: `${origin}/og.png`,
         downloadUrl: pageUrl("download", origin),
         applicationCategory: "BusinessApplication",
@@ -197,7 +201,7 @@ export function homeStructuredData(
         publisher: { "@id": organizationId },
       },
       { "@type": "Organization", "@id": organizationId, name: operator.name, url: origin, email: operator.email },
-      faqPageNode(faq, pageUrl("home", origin)),
+      faqPageNode(faq, pageUrl(page, origin)),
     ],
   };
 }

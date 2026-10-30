@@ -56,6 +56,7 @@ const variants: readonly Variant[] = [
 
 const targets: readonly Target[] = [
   { name: "home", path: "/", ready: "main", signedIn: false, account: null },
+  { name: "fi", path: "/fi", ready: "main", signedIn: false, account: null },
   { name: "pricing", path: "/pricing", ready: "main", signedIn: false, account: null },
   { name: "download", path: "/download", ready: "main", signedIn: false, account: null },
   { name: "compare", path: "/compare", ready: "main", signedIn: false, account: null },

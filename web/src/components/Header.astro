@@ -1,24 +1,32 @@
 ---
 // Üst çubuk: logo, menü, tema düğmesi ve indirme sayfası düğmesi. Dar ekranda menü <details> ile açılır.
 // Tema düğmesini public/theme.js bağlar; betik yoksa düğme gizlidir (tema sistemi izler). Sekmede oturum varsa
-// "Giriş yap" bağlantıları "Hesap"a döner (src/client/header.ts).
+// "Giriş yap" bağlantıları "Hesap"a döner (src/client/header.ts). Metinler sayfadan gelir (`/fi` Fince); sayfanın
+// öbür dildeki sürümü varsa menünün sonunda dil bağlantısı durur (routes.ts `pageAlternates`).
 import Icon from "./Icon.astro";
 import Logo from "./Logo.astro";
 import { productName } from "../config";
 import { copy, type CommonCopy } from "../copy";
-import { type PageKey, routes } from "../routes";
+import { type PageAlternate, type PageKey, pageAlternates, routes } from "../routes";
 
 interface Props {
   readonly page: PageKey;
+  /** Arayüz metinleri; varsayılan İngilizce. */
+  readonly text?: CommonCopy;
+  /** "Ominaisuudet" bağlantısının hedefi; varsayılan ana sayfanın özellikler bölümü. */
+  readonly featuresHref?: string | undefined;
 }
-const { page } = Astro.props;
-const text: CommonCopy = copy.common;
-const links: readonly { readonly href: string; readonly label: string; readonly sessionLink: boolean }[] = [
-  { href: `${routes.home}#features`, label: text.nav.features, sessionLink: false },
-  { href: routes.pricing, label: text.nav.pricing, sessionLink: false },
-  { href: routes.download, label: text.nav.download, sessionLink: false },
-  { href: routes.signIn, label: text.nav.signIn, sessionLink: true },
+const { page, text = copy.common, featuresHref = `${routes.home}#features` } = Astro.props;
+const links: readonly { readonly href: string; readonly label: string; readonly sessionLink: boolean; readonly lang: string | null }[] = [
+  { href: featuresHref, label: text.nav.features, sessionLink: false, lang: null },
+  { href: routes.pricing, label: text.nav.pricing, sessionLink: false, lang: null },
+  { href: routes.download, label: text.nav.download, sessionLink: false, lang: null },
+  { href: routes.signIn, label: text.nav.signIn, sessionLink: true, lang: null },
 ];
+/** Sayfanın öbür dildeki sürümü: dil bağlantısı. */
+const alternate: PageAlternate | undefined = pageAlternates[page];
+const menu: readonly { readonly href: string; readonly label: string; readonly sessionLink: boolean; readonly lang: string | null }[] =
+  alternate === undefined ? links : [...links, { href: routes[alternate.page], label: alternate.label, sessionLink: false, lang: alternate.lang }];
 const currentPath: string = routes[page];
 ---
 
@@ -32,13 +40,14 @@ const currentPath: string = routes[page];
     <nav class="nav" aria-label={text.navLabel}>
       <ul class="nav__list">
         {
-          links.map((link) => (
+          menu.map((link) => (
             <li>
               <a
                 class="nav__link"
                 href={link.href}
                 aria-current={link.href === currentPath ? "page" : undefined}
                 data-session-link={link.sessionLink ? "" : undefined}
+                hreflang={link.lang ?? undefined}
               >
                 {link.label}
               </a>
@@ -66,9 +75,9 @@ const currentPath: string = routes[page];
         </summary>
         <ul class="menu__list">
           {
-            links.map((link) => (
+            menu.map((link) => (
               <li>
-                <a href={link.href} data-session-link={link.sessionLink ? "" : undefined}>
+                <a href={link.href} data-session-link={link.sessionLink ? "" : undefined} hreflang={link.lang ?? undefined}>
                   {link.label}
                 </a>
               </li>
