@@ -47,6 +47,11 @@ public enum HostedErrorCode: String, Sendable, CaseIterable, Equatable {
     case referralUnavailable = "referral_unavailable"
     case referralLimitReached = "referral_limit_reached"
     case webhookInvalid = "webhook_invalid"
+    // Blog yayını yalnızca yönetim panelinindir (`server/src/blog.ts`); uygulama bu uçları çağırmaz.
+    case blogUnavailable = "blog_unavailable"
+    case blogPostExists = "blog_post_exists"
+    case blogConflict = "blog_conflict"
+    case blogPostInvalid = "blog_post_invalid"
     case internalError = "internal_error"
 }
 
@@ -257,7 +262,8 @@ public func hostedErrorMessage(error: HostedAPIError) -> String {
         return String(localized: "Bu işleme izin yok.")
     case .internalError:
         return String(localized: "Sunucuda beklenmeyen bir hata oluştu; biraz sonra yeniden dene.")
-    case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid:
+    case .badRequest, .invalidBody, .notFound, .methodNotAllowed, .lengthRequired, .unsupportedMediaType, .webhookInvalid,
+         .blogUnavailable, .blogPostExists, .blogConflict, .blogPostInvalid:
         return String(localized: "Bu sürüm sunucuyla uyuşmuyor. Uygulamayı güncelleyip yeniden dene.")
     }
 }
