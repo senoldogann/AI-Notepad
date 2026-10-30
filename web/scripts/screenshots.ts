@@ -966,6 +966,15 @@ async function checkOverflow(page: Page, shot: string, findings: Finding[]): Pro
         }
       }
     }
+    // İçinde kayan alanlar (ör. yönetim kabuğunun içeriği) yana taşmamalı: sayfa taşmasa da telefonda içerik yana
+    // kayar. Görünmez sözde öğeler (ipucu balonu) de bu alanı genişletir; kasıtlı yatay kaydırıcılar hariçtir.
+    const intended: string = ".table-scroll, .table-wrap, .detail__payload, .console__sidebar, .comparison, textarea, pre";
+    for (const element of Array.from(document.querySelectorAll("body *"))) {
+      const overflowX: string = getComputedStyle(element).overflowX;
+      if ((overflowX === "auto" || overflowX === "scroll") && !element.matches(intended) && element.scrollWidth > element.clientWidth + 1) {
+        offenders.push(`iç yatay kaydırma: ${element.tagName.toLowerCase()}.${String(element.className).split(" ").join(".")} (${element.scrollWidth} > ${element.clientWidth})`);
+      }
+    }
     return { scrollWidth: document.documentElement.scrollWidth, viewport, offenders: offenders.slice(0, 5) };
   });
   if (overflow.scrollWidth > overflow.viewport) {
