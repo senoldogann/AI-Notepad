@@ -3,6 +3,7 @@ title: "Recording Teams, Zoom and Google Meet on a Mac: what macOS allows"
 description: What macOS lets an app hear during a video call, which permissions it asks for, where to find them in System Settings, and what to check when a recording comes out empty.
 author: Senol Dogan
 published: 2026-10-29
+draft: false
 ---
 
 You want a recording of a call, or at least a transcript. You're on a Mac, and the call might be on Microsoft Teams today, Zoom tomorrow and Google Meet on Friday. What can an app actually record, and what does macOS ask you to allow first?

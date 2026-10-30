@@ -3,6 +3,7 @@ title: How to take meeting notes on a Mac without a bot joining the call
 description: Bots in the participant list make calls awkward. Here's how your Mac can hear both sides of a meeting on its own, and how to tell people you're recording.
 author: Senol Dogan
 published: 2026-10-29
+draft: false
 ---
 
 A lot of note-taking tools work by sending a bot into your call. It shows up as an extra participant with a name like "Notetaker", someone has to admit it from the waiting room, and at least one person asks what it is. Some companies block these bots outright. With clients, the bot can set an odd tone before you've said a word.

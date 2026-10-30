@@ -122,7 +122,7 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { reado
 export type JsonObject = { readonly [key: string]: JsonValue };
 
 /** HTTP yöntemleri. */
-type Method = "GET" | "POST" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "DELETE";
 
 /** Bir isteğin tanımı. */
 export interface ApiCall {

@@ -1,5 +1,5 @@
-// Blog yazıları: içerik koleksiyonundan (src/content.config.ts) okunur, yeniden eskiye sıralanır; okuma süresi, tarih
-// metni ve RSS akışı buradan üretilir.
+// Blog yazıları: içerik koleksiyonundan (src/content.config.ts) okunur, taslaklar ve tarihi gelmemiş yazılar ayrılır,
+// yeniden eskiye sıralanır; okuma süresi, tarih metni ve RSS akışı buradan üretilir.
 import { type CollectionEntry, getCollection } from "astro:content";
 import { siteLocale } from "../config";
 import { blogPostPath } from "../routes";
@@ -39,9 +39,30 @@ export function blogPost(entry: CollectionEntry<"blog">): BlogPost {
   };
 }
 
-/** Tüm blog girdileri, yeniden eskiye (aynı gündekiler başlığa göre). */
+/**
+ * Derlemenin anı: tüm sayfalar (dizin, yazı sayfaları, RSS, site haritası) yayımlanacak yazıları bu ana göre seçer.
+ * Site her gün 06:00 UTC'de yeniden derlenir (.github/workflows/deploy-web.yml); zamanlanmış yazı tarihindeki ilk
+ * derlemede yayımlanır.
+ */
+export const buildDate: Date = new Date();
+
+/** Yazının yayımlanmaya karar veren ön bilgisi. */
+export interface BlogVisibility {
+  readonly draft: boolean;
+  readonly published: Date;
+}
+
+/** Yazı bu derlemede yayımlanır mı: taslak değil ve yayın günü derleme gününe (UTC) eşit ya da önce. Saf fonksiyondur. */
+export function isBlogPostPublic(post: BlogVisibility, build: Date): boolean {
+  return !post.draft && publishedIso(post.published) <= publishedIso(build);
+}
+
+/**
+ * Yayımlanan blog girdileri (taslaklar ve tarihi gelmemiş yazılar hariç, `isBlogPostPublic`), yeniden eskiye (aynı
+ * gündekiler başlığa göre). Blogun her sayfası yazıları buradan alır.
+ */
 export async function blogEntries(): Promise<CollectionEntry<"blog">[]> {
-  const entries: CollectionEntry<"blog">[] = await getCollection("blog");
+  const entries: CollectionEntry<"blog">[] = await getCollection("blog", (entry: CollectionEntry<"blog">): boolean => isBlogPostPublic(entry.data, buildDate));
   return [...entries].sort(
     (a: CollectionEntry<"blog">, b: CollectionEntry<"blog">): number =>
       b.data.published.getTime() - a.data.published.getTime() || a.data.title.localeCompare(b.data.title),

@@ -1,5 +1,5 @@
 // Yönetim panelinin sunucu uçları (`/v1/admin/*`, Bearer oturum): özet istatistikler, içgörüler (davet özeti dahil), kullanıcı listesi ve ayrıntısı (davetler dahil),
-// işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği. Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
+// işletim görünümü, bildirim kutusu listesi, tek bildirim ve durum değişikliği, blog yazıları (liste, okuma, kayıt, silme). Yanıtlar api.ts'teki okuyucularla katı biçimde doğrulanır.
 // Zaman alanları (`generatedAt`, `createdAt`) Unix ms sayısı ya da ISO 8601 metni olabilir; ikisi de ms'ye çevrilir.
 // Bildirim kimliği metin ya da tamsayı olabilir; metne çevrilir.
 import {
@@ -1132,4 +1132,127 @@ export async function fetchOperations(): Promise<Operations> {
 export async function setReportStatus(id: string, status: ReportStatus): Promise<void> {
   const path: string = `/v1/admin/reports/${encodeURIComponent(id)}`;
   await authorizedSend({ method: "POST", path, body: { status }, attempts: 1 });
+}
+
+/** Blog yazısının durumu: taslak, tarihi gelecekte (zamanlanmış) ya da yayında (sunucu `BlogPostStatus`). */
+export type BlogPostStatus = "draft" | "scheduled" | "live";
+
+/** Listedeki blog yazısı (`GET /v1/admin/blog/posts`): ön bilgi, durum ve dosyanın GitHub sürümü (`sha`). */
+export interface BlogPostSummary {
+  readonly slug: string;
+  readonly title: string;
+  readonly description: string;
+  readonly author: string;
+  /** `YYYY-MM-DD` (UTC). */
+  readonly published: string;
+  readonly draft: boolean;
+  readonly status: BlogPostStatus;
+  readonly sha: string;
+}
+
+/** Yazının tamamı (`GET` ve `PUT /v1/admin/blog/posts/{kısa ad}`): Markdown gövdesi de. */
+export interface BlogPost extends BlogPostSummary {
+  readonly body: string;
+}
+
+/** Yazı listesi ve sunucunun bugünü (`YYYY-MM-DD`, UTC; durumlar buna göredir). */
+export interface BlogPostList {
+  readonly today: string;
+  readonly posts: readonly BlogPostSummary[];
+}
+
+/** Kaydedilecek yazı: `sha` yeni yazıda null, güncellemede açılan sürüm. */
+export interface BlogPostDraft {
+  readonly title: string;
+  readonly description: string;
+  readonly author: string;
+  readonly published: string;
+  readonly draft: boolean;
+  readonly body: string;
+  readonly sha: string | null;
+}
+
+/** `YYYY-MM-DD` alanı. */
+function isoDayField(object: JsonObject, key: string, response: RawResponse, path: string): string {
+  const day: string = stringField(object, key, response, path);
+  if (!dayPattern.test(day)) {
+    throw new ApiResponseError(path, response.status, `"${key}" YYYY-MM-DD değil: ${day}`, response.text);
+  }
+  return day;
+}
+
+/** Yazı durumu alanı. */
+function blogStatusField(object: JsonObject, response: RawResponse, path: string): BlogPostStatus {
+  const status: string = stringField(object, "status", response, path);
+  if (status !== "draft" && status !== "scheduled" && status !== "live") {
+    throw new ApiResponseError(path, response.status, `bilinmeyen yazı durumu "${status}"`, response.text);
+  }
+  return status;
+}
+
+/** Listedeki yazıyı okur. */
+function parseBlogPostSummary(item: JsonObject, response: RawResponse, path: string): BlogPostSummary {
+  return {
+    slug: stringField(item, "slug", response, path),
+    title: stringField(item, "title", response, path),
+    description: stringField(item, "description", response, path),
+    author: stringField(item, "author", response, path),
+    published: isoDayField(item, "published", response, path),
+    draft: booleanField(item, "draft", response, path),
+    status: blogStatusField(item, response, path),
+    sha: stringField(item, "sha", response, path),
+  };
+}
+
+/** `GET /v1/admin/blog/posts` yanıtını okur. */
+export function parseBlogPostList(response: RawResponse, path: string): BlogPostList {
+  const body: JsonObject = parseObject(response, path);
+  return {
+    today: isoDayField(body, "today", response, path),
+    posts: objectArrayField(body, "posts", response, path).map((item: JsonObject): BlogPostSummary => parseBlogPostSummary(item, response, path)),
+  };
+}
+
+/** Tek yazı yanıtını (`GET` ya da `PUT`) okur. */
+export function parseBlogPost(response: RawResponse, path: string): BlogPost {
+  const body: JsonObject = parseObject(response, path);
+  return { ...parseBlogPostSummary(body, response, path), body: stringField(body, "body", response, path) };
+}
+
+/** Yazının uç yolu. Saf fonksiyondur. */
+function blogPostApiPath(slug: string): string {
+  return `/v1/admin/blog/posts/${encodeURIComponent(slug)}`;
+}
+
+/** Tüm blog yazıları (gövdesiz), yeniden eskiye. */
+export async function fetchBlogPosts(): Promise<BlogPostList> {
+  const path: string = "/v1/admin/blog/posts";
+  return parseBlogPostList(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** Tek blog yazısı. */
+export async function fetchBlogPost(slug: string): Promise<BlogPost> {
+  const path: string = blogPostApiPath(slug);
+  return parseBlogPost(await authorizedSend({ method: "GET", path, body: null, attempts: 3 }), path);
+}
+
+/** Yazıyı yaratır ya da günceller (sunucu GitHub'daki dosyayı yazar); kayıttan sonraki hâlini döndürür. */
+export async function saveBlogPost(slug: string, draft: BlogPostDraft): Promise<BlogPost> {
+  const path: string = blogPostApiPath(slug);
+  const body: JsonObject = {
+    title: draft.title,
+    description: draft.description,
+    author: draft.author,
+    published: draft.published,
+    draft: draft.draft,
+    body: draft.body,
+    sha: draft.sha,
+  };
+  return parseBlogPost(await authorizedSend({ method: "PUT", path, body, attempts: 1 }), path);
+}
+
+/** Yazıyı siler (204); `sha` açılan sürümdür. */
+export async function deleteBlogPost(slug: string, sha: string): Promise<void> {
+  const path: string = `${blogPostApiPath(slug)}?${new URLSearchParams({ sha }).toString()}`;
+  await authorizedSend({ method: "DELETE", path, body: null, attempts: 1 });
 }

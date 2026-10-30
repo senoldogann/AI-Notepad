@@ -63,6 +63,9 @@ export interface Env {
   readonly REFRESH_TOKEN_DAYS: string;
   readonly STRIPE_PRICE_ID: string;
   readonly STRIPE_YEARLY_PRICE_ID: string;
+  /** Blog yazılarının durduğu GitHub deposu (`sahip/ad`) ve yazıların işlendiği dal (bkz. `blog.ts`). */
+  readonly GITHUB_BLOG_REPO: string;
+  readonly GITHUB_BLOG_BRANCH: string;
 
   readonly ACCESS_TOKEN_SECRET: string;
   /** Kimlik deneme defteri ve deneme IP özetlerinin HMAC sırrı (erişim jetonu sırrından ayrı). */
@@ -76,4 +79,9 @@ export interface Env {
   readonly DEVICECHECK_PRIVATE_KEY?: string;
   /** Yalnızca `DEEPGRAM_POLICY=on` iken gerekir (Deepgram API anahtarı; jeton vermek için, Member ya da üstü yetki). */
   readonly DEEPGRAM_API_KEY?: string;
+  /**
+   * Yönetim panelinden blog yayını için GitHub jetonu (yalnızca bu depoda Contents okuma/yazma yetkili ince ayarlı
+   * kişisel erişim jetonu). Yoksa blog uçları `503 blog_unavailable` döner.
+   */
+  readonly GITHUB_BLOG_TOKEN?: string;
 }

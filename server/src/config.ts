@@ -62,6 +62,18 @@ export interface DeepgramConfig {
   readonly microUsdPerMinute: number;
 }
 
+/**
+ * Yönetim panelinden blog yayını (bkz. `blog.ts`): yazılar `owner/repo` deposunun `branch` dalındaki
+ * `web/src/content/blog/*.md` dosyalarıdır. `token` gizli `GITHUB_BLOG_TOKEN`'dır; girilmemişse null ve blog uçları
+ * `503 blog_unavailable` döner.
+ */
+export interface BlogConfig {
+  readonly owner: string;
+  readonly repo: string;
+  readonly branch: string;
+  readonly token: string | null;
+}
+
 /** Ortamdan doğrulanmış, tipli yapılandırma. */
 export interface Config {
   readonly environment: "development" | "production";
@@ -144,6 +156,7 @@ export interface Config {
     readonly billingDay: number;
   };
   readonly deepgram: DeepgramConfig;
+  readonly blog: BlogConfig;
   readonly dailySpendCeilingMicroUsd: number;
   /** Deneme harcamasının (deneme toplantıları ve denemedeki hesap çağrıları) günlük ayrı tavanı. */
   readonly dailyTrialSpendCeilingMicroUsd: number;
@@ -325,6 +338,15 @@ const envSchema = z.object({
   REFRESH_TOKEN_DAYS: positiveInt,
   STRIPE_PRICE_ID: z.string().startsWith("price_"),
   STRIPE_YEARLY_PRICE_ID: z.string().startsWith("price_"),
+  /** `sahip/ad`: GitHub kullanıcı ya da kuruluş adı ve depo adı. */
+  GITHUB_BLOG_REPO: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/),
+  /** Dal adı: boşluk, `..` ve git'in yasakladığı işaretler yok. */
+  GITHUB_BLOG_BRANCH: z
+    .string()
+    .regex(/^[A-Za-z0-9._/-]{1,100}$/)
+    .refine((name: string): boolean => !name.includes("..") && !name.startsWith("/") && !name.endsWith("/") && !name.endsWith(".lock")),
+  /** Girilmişse boşluksuz ve en az 20 karakter; girilmemişse blog yayını kapalıdır (`503 blog_unavailable`). */
+  GITHUB_BLOG_TOKEN: z.string().regex(/^\S{20,}$/).optional(),
   ACCESS_TOKEN_SECRET: z.string().min(32),
   TRIAL_HASH_SECRET: z.string().min(32),
   ANTHROPIC_API_KEY: secret,
@@ -462,6 +484,7 @@ export function parseConfig(env: Env): Config {
     },
     elevenLabs: { monthlyAudioHours: value.ELEVENLABS_MONTHLY_AUDIO_HOURS, billingDay: value.ELEVENLABS_BILLING_DAY },
     deepgram,
+    blog: blogConfig(value.GITHUB_BLOG_REPO, value.GITHUB_BLOG_BRANCH, value.GITHUB_BLOG_TOKEN),
     dailySpendCeilingMicroUsd: Math.round(value.DAILY_SPEND_CEILING_USD * 1_000_000),
     dailyTrialSpendCeilingMicroUsd: Math.round(value.DAILY_TRIAL_SPEND_CEILING_USD * 1_000_000),
     refreshTokenMs: value.REFRESH_TOKEN_DAYS * 86_400_000,
@@ -542,4 +565,16 @@ function deepgramConfig(settings: DeepgramSettings): DeepgramConfig {
     throw new ConfigError(["DEEPGRAM_API_KEY"]);
   }
   return { access: { policy: "on", apiKey }, budgetMicroUsd, microUsdPerMinute };
+}
+
+/**
+ * Blog yayınının deposu, dalı ve jetonu. `GITHUB_BLOG_REPO` şemada `sahip/ad` biçiminde doğrulanmıştır; jeton
+ * girilmemişse null. Saf fonksiyondur.
+ */
+function blogConfig(repository: string, branch: string, token: string | undefined): BlogConfig {
+  const [owner, repo]: string[] = repository.split("/");
+  if (owner === undefined || repo === undefined) {
+    throw new ConfigError(["GITHUB_BLOG_REPO"]);
+  }
+  return { owner, repo, branch, token: token ?? null };
 }

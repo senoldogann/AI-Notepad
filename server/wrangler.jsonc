@@ -155,7 +155,13 @@
     "REFRESH_TOKEN_DAYS": "60",
     // Aynı ürünün iki fiyatı: aylık (varsayılan plan) ve yıllık. İkisi de "bizim" sayılır (webhook, iade, itiraz).
     "STRIPE_PRICE_ID": "price_placeholder",
-    "STRIPE_YEARLY_PRICE_ID": "price_yearly_placeholder"
+    "STRIPE_YEARLY_PRICE_ID": "price_yearly_placeholder",
+    // Yönetim panelinden blog yayını (src/blog.ts): yazılar bu deponun bu dalındaki web/src/content/blog/*.md
+    // dosyalarıdır; panel GitHub API'siyle okur, yazar ve siler (her kayıt dala bir commit). Gizli GITHUB_BLOG_TOKEN
+    // (yalnızca bu depoda Contents okuma/yazma yetkili ince ayarlı jeton) girilmemişse blog uçları
+    // `503 blog_unavailable` döner. Yerelde ve testlerde jeton yoktur.
+    "GITHUB_BLOG_REPO": "senoldogann/AI-Notepad",
+    "GITHUB_BLOG_BRANCH": "main"
   },
   "env": {
     "production": {
@@ -265,7 +271,11 @@
         "REFRESH_TOKEN_DAYS": "60",
         "STRIPE_PRICE_ID": "price_1UVi9QLYGoRn8lDP4oA916Gt",
         // Yıllık fiyat (arama anahtarı `gistsmith_yearly`, vergi dahil, aylıkla aynı ürün).
-        "STRIPE_YEARLY_PRICE_ID": "price_1UW0JgLYGoRn8lDPf8gFeNSz"
+        "STRIPE_YEARLY_PRICE_ID": "price_1UW0JgLYGoRn8lDPf8gFeNSz",
+        // Bkz. üstteki geliştirme `vars` açıklaması. Dala gelen her blog commit'i sitenin yayın iş akışını
+        // (.github/workflows/deploy-web.yml) tetikler.
+        "GITHUB_BLOG_REPO": "senoldogann/AI-Notepad",
+        "GITHUB_BLOG_BRANCH": "main"
       }
     }
   }

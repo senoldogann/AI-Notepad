@@ -1,8 +1,9 @@
 ---
-// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): beş görünüm — genel
+// Yönetim paneli (menüde ve site haritasında yok, arama motorlarına kapalı, önbelleğe alınmaz): altı görünüm — genel
 // bakış (özet kutuları ve son 30 günün grafikleri), içgörüler (sorunlar, huni, indirme kaynakları, iptal nedenleri,
 // davet özeti), kullanıcılar (liste, bırakma ve davet kesimleri, ayrıntıda davet eden ve davetler), işletim (açık toplantılar, takılı
-// işler, Stripe olayları, son çökmeler) ve bildirim kutusu. Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
+// işler, Stripe olayları, son çökmeler), bildirim kutusu ve blog (yazı listesi, haftalık düzen, düzenleyici, önizleme,
+// paylaşım). Değerler tarayıcıda `/v1/admin/*` uçlarından doldurulur
 // (src/client/admin*.ts). Panelin varlığı belli olmaz: sayfa başlığı nötrdür, panel `<template>` içinde durur ve
 // yalnızca sunucu yönetici erişimini doğrulayınca (`/v1/admin/stats` başarılı) sayfaya eklenir. O zamana dek yalnızca
 // nötr bir yükleme satırı görünür; oturum yoksa ya da sunucu 403 (veya yenilemesi başarısız 401) dönerse standart
@@ -17,9 +18,11 @@ import { type AdminCopy, copy } from "../copy";
 import type { IconName } from "../lib/icons";
 import { routes } from "../routes";
 import { type AdminInviteCopy, adminInviteCopy } from "../client/admin-invites-copy";
+import { type AdminBlogCopy, adminBlogCopy } from "../client/admin-blog-copy";
 
 const text: AdminCopy = copy.admin;
 const inviteText: AdminInviteCopy = adminInviteCopy;
+const blogText: AdminBlogCopy = adminBlogCopy;
 
 /** Özet kutusu: kimlik (betik `kpi-<id>`, `kpi-<id>-sub` ve varsa `kpi-<id>-meter` doldurur), etiket, simge, ölçer var mı. */
 interface KpiSpec {
@@ -105,6 +108,7 @@ const views: readonly { readonly id: string; readonly label: string; readonly ic
   { id: "users", label: text.views.users, icon: "users" },
   { id: "operations", label: text.views.operations, icon: "laptop" },
   { id: "inbox", label: text.views.inbox, icon: "inbox" },
+  { id: "blog", label: blogText.view, icon: "note" },
 ];
 
 /** Bildirim kutusu sekmeleri. */
@@ -193,6 +197,14 @@ const openColumns: readonly Column[] = [
   textColumn(text.operations.openColumns.started),
   textColumn(text.operations.openColumns.endsBy),
   textColumn(text.operations.openColumns.notes),
+];
+
+/** Blog yazı listesi (betik `blog-rows` gövdesini doldurur). */
+const blogColumns: readonly Column[] = [
+  textColumn(blogText.columns.title),
+  textColumn(blogText.columns.status),
+  textColumn(blogText.columns.date),
+  textColumn(blogText.columns.author),
 ];
 
 const stripeColumns: readonly Column[] = [textColumn(text.operations.stripeColumns.type), numberColumn(text.operations.stripeColumns.count)];
@@ -764,6 +776,122 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
                   </div>
                 </div>
               </div>
+            </section>
+          </div>
+
+          {/* ---------- Blog ---------- */}
+          <div id="panel-blog" class="admin__panel hidden">
+            <section id="blog-list-view" class="blog" aria-labelledby="blog-list-title">
+              <p id="blog-notice" class="notice hidden" role="status"></p>
+              <div class="blog__top">
+                <div id="blog-cadence" class="card kpi blog-cadence">
+                  <p class="kpi__label">
+                    <Icon name="calendar" size={16} class="kpi__icon" />
+                    {blogText.cadenceTitle}
+                  </p>
+                  <p id="blog-cadence-latest" class="blog-cadence__latest"></p>
+                  <p id="blog-cadence-next" class="kpi__sub small"></p>
+                </div>
+                {/* Liste yüklenince açılır: yeni yazının önerilen tarihi ve yazarı listeden gelir (admin-blog.ts). */}
+                <button id="blog-new" class="button button--primary button--small blog__new" type="button" disabled>
+                  <Icon name="note" size={16} class="" />
+                  {blogText.newPost}
+                </button>
+              </div>
+              <div class="card table-card">
+                <h2 class="detail__label table-card__title" id="blog-list-title">{blogText.listTitle}</h2>
+                <div class="table-scroll" tabindex="0" role="region" aria-labelledby="blog-list-title">
+                  <table class="data-table blog-table">
+                    <thead>
+                      <tr>{blogColumns.map((column: Column) => <th scope="col" class:list={{ numeric: column.numeric }}>{column.label}</th>)}</tr>
+                    </thead>
+                    <tbody id="blog-rows"></tbody>
+                  </table>
+                </div>
+                <p id="blog-empty" class="muted table-empty hidden">{blogText.empty}</p>
+              </div>
+            </section>
+
+            <section id="blog-editor-view" class="blog-editor hidden" aria-labelledby="blog-editor-title">
+              <div class="user-detail__head">
+                <button id="blog-back" class="button button--secondary button--small" type="button">{blogText.back}</button>
+                <h2 id="blog-editor-title" class="title-m blog-editor__title">{blogText.newTitle}</h2>
+                <div id="blog-editor-status" class="pill-row"></div>
+              </div>
+              <p id="blog-editor-notice" class="notice hidden" role="status"></p>
+              <div id="blog-share" class="blog-share hidden">
+                <span class="detail__label">{blogText.shareTitle}</span>
+                <a id="blog-share-x" class="button button--secondary button--small" href="#blog" target="_blank" rel="noopener noreferrer">{blogText.share.x}</a>
+                <a id="blog-share-linkedin" class="button button--secondary button--small" href="#blog" target="_blank" rel="noopener noreferrer"
+                  >{blogText.share.linkedin}</a
+                >
+                <a id="blog-share-bluesky" class="button button--secondary button--small" href="#blog" target="_blank" rel="noopener noreferrer"
+                  >{blogText.share.bluesky}</a
+                >
+              </div>
+
+              <form id="blog-form" class="blog-editor__grid" novalidate>
+                <div class="card blog-editor__meta">
+                  <div class="field">
+                    <div class="blog-field__row">
+                      <label for="blog-title">{blogText.fields.title}</label>
+                      <span id="blog-title-counter" class="small muted tabular"></span>
+                    </div>
+                    <input id="blog-title" class="input input--small" type="text" autocomplete="off" aria-describedby="blog-title-counter" />
+                  </div>
+                  <div class="field">
+                    <label for="blog-slug">{blogText.fields.slug}</label>
+                    <input id="blog-slug" class="input input--small mono" type="text" autocomplete="off" spellcheck="false" aria-describedby="blog-slug-url" />
+                    <p class="blog-hint">
+                      <span id="blog-slug-url" class="mono"></span>
+                      <span id="blog-slug-locked" class="hidden"> · {blogText.slugLocked}</span>
+                    </p>
+                  </div>
+                  <div class="field">
+                    <div class="blog-field__row">
+                      <label for="blog-description">{blogText.fields.description}</label>
+                      <span id="blog-description-counter" class="small muted tabular"></span>
+                    </div>
+                    <textarea id="blog-description" class="input blog-textarea" rows="3" aria-describedby="blog-description-counter"></textarea>
+                  </div>
+                  <div class="field">
+                    <label for="blog-author">{blogText.fields.author}</label>
+                    <input id="blog-author" class="input input--small" type="text" autocomplete="off" />
+                  </div>
+                  <div class="field">
+                    <label for="blog-published">{blogText.fields.published}</label>
+                    <input id="blog-published" class="input input--small" type="date" aria-describedby="blog-published-hint" />
+                    <p id="blog-published-hint" class="blog-hint">{blogText.publishedHint}</p>
+                  </div>
+                  <div class="field">
+                    <label class="blog-toggle" for="blog-draft">
+                      <input id="blog-draft" type="checkbox" aria-describedby="blog-draft-hint" />
+                      {blogText.fields.draft}
+                    </label>
+                    <p id="blog-draft-hint" class="blog-hint">{blogText.draftHint}</p>
+                  </div>
+                </div>
+
+                <div class="card blog-editor__body">
+                  <div class="segmented" role="group" aria-label={blogText.fields.body}>
+                    <button id="blog-tab-write" class="segmented__button" type="button" aria-pressed="true">{blogText.write}</button>
+                    <button id="blog-tab-preview" class="segmented__button" type="button" aria-pressed="false">{blogText.preview}</button>
+                  </div>
+                  <label class="visually-hidden" for="blog-body">{blogText.fields.body}</label>
+                  <textarea id="blog-body" class="input blog-body" spellcheck="true"></textarea>
+                  <div id="blog-preview" class="prose blog-preview hidden" aria-live="polite"></div>
+                </div>
+
+                <div class="blog-editor__actions">
+                  <button id="blog-save" class="button button--primary button--small" type="submit">{blogText.save}</button>
+                  <button id="blog-delete" class="button button--danger button--small blog-editor__delete hidden" type="button">{blogText.delete}</button>
+                  <div id="blog-delete-confirm" class="blog-confirm hidden" role="group" aria-labelledby="blog-delete-question">
+                    <p id="blog-delete-question">{blogText.deleteConfirm}</p>
+                    <button id="blog-delete-yes" class="button button--danger-solid button--small" type="button">{blogText.deleteYes}</button>
+                    <button id="blog-delete-no" class="button button--secondary button--small" type="button">{blogText.deleteNo}</button>
+                  </div>
+                </div>
+              </form>
             </section>
           </div>
         </div>
@@ -1759,6 +1887,219 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     overflow-wrap: anywhere;
   }
 
+  /* ---------- Blog ---------- */
+
+  .blog,
+  .blog-editor {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  /* Bildirim görünür alana kaydırılınca yapışkan üst çubuğun altında kalmaz. */
+  #blog-notice,
+  #blog-editor-notice {
+    scroll-margin-top: 112px;
+  }
+
+  .blog__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .blog-cadence {
+    flex: 1 1 320px;
+    min-height: 0;
+  }
+
+  .blog-cadence__latest {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .blog__new {
+    min-height: 40px;
+  }
+
+  /* Başlık sütunu satıra sarar (uzun başlık tabloyu genişletmesin). */
+  .blog-table :global(td:first-child) {
+    min-width: 16rem;
+    white-space: normal;
+  }
+
+  .blog-table :global(.blog-row) {
+    display: grid;
+    gap: 2px;
+  }
+
+  .blog-table :global(.blog-row__title) {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-weight: 500;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: var(--line);
+    text-underline-offset: 0.25em;
+    cursor: pointer;
+  }
+
+  .blog-table :global(.blog-row__title:hover) {
+    text-decoration-color: currentColor;
+  }
+
+  .blog-table :global(.blog-row__slug) {
+    color: var(--muted);
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .blog-editor__title {
+    font-size: 1.125rem;
+  }
+
+  .blog-share {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+  }
+
+  .blog-editor__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .blog-editor__meta,
+  .blog-editor__body {
+    display: grid;
+    gap: 18px;
+    padding: 20px 22px;
+    min-width: 0;
+  }
+
+  .blog-editor__body {
+    gap: 14px;
+  }
+
+  .blog-editor__meta .field {
+    gap: 6px;
+  }
+
+  .blog-editor__meta label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .blog-field__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .blog-counter--warn {
+    color: var(--warn);
+  }
+
+  .blog-hint {
+    color: var(--muted);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .blog-textarea {
+    min-height: 92px;
+    padding-block: 10px;
+    resize: vertical;
+    line-height: 1.5;
+    font-size: 0.9375rem;
+  }
+
+  .blog-editor__meta .blog-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .blog-toggle input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--primary);
+  }
+
+  .blog-body {
+    min-height: 520px;
+    padding-block: 12px;
+    resize: vertical;
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  /* Izgara öğesi içeriğine göre genişlemez: tablo ve kod bloğu kendi kutularında yatay kayar. */
+  .blog-preview {
+    min-width: 0;
+    min-height: 520px;
+    padding: 4px 2px;
+    overflow-wrap: anywhere;
+  }
+
+  .blog-preview :global(img) {
+    max-width: 100%;
+  }
+
+  .blog-preview :global(pre) {
+    overflow-x: auto;
+    padding: 12px 14px;
+    border-radius: var(--radius-s);
+    background: var(--soft);
+    font-size: 0.8125rem;
+  }
+
+  .blog-editor__actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .blog-editor__delete {
+    margin-left: auto;
+  }
+
+  .blog-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    flex: 1 1 100%;
+    padding: 12px 16px;
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+    border-radius: var(--radius-s);
+    background: color-mix(in srgb, var(--danger) 6%, var(--card));
+  }
+
+  .blog-confirm p {
+    flex: 1 1 260px;
+    font-size: 0.9375rem;
+  }
+
   @media (max-width: 1040px) {
     .kpi-group__grid,
     .ops-kpis {
@@ -1801,8 +2142,14 @@ const userFields: readonly { readonly id: string; readonly label: string; readon
     .inbox__body,
     .user-detail__grid,
     .insights-grid,
-    .ops-grid {
+    .ops-grid,
+    .blog-editor__grid {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    .blog-body,
+    .blog-preview {
+      min-height: 360px;
     }
   }
 
