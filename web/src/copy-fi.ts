@@ -57,7 +57,7 @@ export const homeFi: HomeCopy = {
   meta: {
     title: `${productName} — kokousmuistiinpanot Macilla, ilman bottia`,
     description:
-      "Kokousmuistiinpanot Macille: reaaliaikainen litterointi, käännös ja valmis muistiinpano heti kokouksen päätyttyä – tehtävät ensimmäisenä. Kokoukseen ei liity bottia. 3 kokousta tai 7 päivää ilmaiseksi.",
+      "Kokousmuistiinpanot Macille: litterointi, käännös ja valmis muistiinpano heti kokouksen päätyttyä. Kokoukseen ei liity bottia. 3 kokousta tai 7 päivää ilmaiseksi.",
   },
   eyebrow: "Kokousmuistiinpanot Macille",
   title: tagline,

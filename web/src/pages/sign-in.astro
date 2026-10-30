@@ -16,7 +16,7 @@ const text: SignInCopy = copy.signIn;
 const common: CommonCopy = copy.common;
 ---
 
-<Base page="signIn" meta={text.meta} indexed={true} social={websiteCard}>
+<Base page="signIn" meta={text.meta} indexed={false} social={websiteCard}>
   <section class="page auth" id="signin" data-account-path={routes.account} data-redirect-uri={pageUrl("signIn", siteConfig.siteOrigin)}>
     <Film palette="violet" layout="clouds-right" class="auth__cover">
       <div class="glass auth__badge">

@@ -1,7 +1,7 @@
 // Blog yazıları: içerik koleksiyonundan (src/content.config.ts) okunur, taslaklar ve tarihi gelmemiş yazılar ayrılır,
 // yeniden eskiye sıralanır; okuma süresi, kapak, tarih metni, ilgili yazılar ve RSS akışı buradan üretilir.
 import { type CollectionEntry, getCollection } from "astro:content";
-import { siteLocale } from "../config";
+import { productName, siteLocale } from "../config";
 import { blogOgImagePath, blogPostPath } from "../routes";
 import { type FilmCover, coverFilm } from "./film";
 
@@ -31,6 +31,15 @@ export function coverTitleSize(title: string): CoverTitleSize {
     return "large";
   }
   return title.length <= 66 ? "medium" : "small";
+}
+
+/** Arama sonucunda kesilmeden görünen sayfa başlığının en çok uzunluğu (karakter). */
+const searchTitleLimit: number = 65;
+
+/** Yazı sayfasının başlığı: sığarsa "<başlık> — <ürün>", sığmazsa yalnızca yazı başlığı. Saf fonksiyondur. */
+export function blogPageTitle(title: string): string {
+  const withProduct: string = `${title} — ${productName}`;
+  return withProduct.length <= searchTitleLimit ? withProduct : title;
 }
 
 /** Dakikada okunan sözcük (okuma süresi tahmini). */

@@ -45,8 +45,11 @@ export const routes: Readonly<Record<PageKey, string>> = {
   notFound: "/404",
 };
 
-/** Arama motorlarına açık sayfalar (hesap, yönetim ve 404 kişiye özel ya da içeriksizdir). */
-export const indexedPages: readonly PageKey[] = ["home", "fi", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "signIn", "invite", "contact", "privacy", "terms"];
+/**
+ * Arama motorlarına açık sayfalar. Hesap, yönetim ve 404 kişiye özel ya da içeriksizdir; giriş ve davet sayfaları
+ * yalnızca bir işlemin adımıdır (aramada çıkmaları ziyaretçiye bir şey anlatmaz).
+ */
+export const indexedPages: readonly PageKey[] = ["home", "fi", "pricing", "download", "compare", "vsGranola", "vsOtter", "blog", "mcp", "contact", "privacy", "terms"];
 
 /**
  * Aynı sayfanın öbür dildeki hâli: `hreflang` bağlantıları, üst çubuktaki dil bağlantısı ve paylaşım kartının dili
