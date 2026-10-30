@@ -26,7 +26,6 @@ final class PhoneAsk {
         self.store = store
     }
 
-    /// Soruyu arşive sorar; cevap akarak gelir. `meetingIDs` boş değilse yalnız o toplantılara (`@` ile etiketlenenler).
     /// Kullanıcının kaydettiği tarifler.
     private(set) var userRecipes: [Recipe] = []
     /// Tariflerin okunamama ya da saklanamama nedeni.
@@ -65,6 +64,7 @@ final class PhoneAsk {
         }
     }
 
+    /// Soruyu arşive sorar; cevap akarak gelir. `meetingIDs` boş değilse yalnız o toplantılara (`@` ile etiketlenenler).
     func ask(question: String, meetingIDs: [String], recipeTitle: String?) {
         let trimmed: String = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAnswering else {

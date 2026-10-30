@@ -263,8 +263,9 @@ final class PhoneRecorder {
         }
     }
 
-    /// Açılışta kayıtta ya da işlemede kalmış (uygulama kapanmış) toplantılar yeniden işlenir; anahtarlar okunamazsa
-    /// "yarıda kaldı" olarak saklanır (toplantı sayfasından yeniden işlenebilir).
+    /// Açılışta (ve arka plandan dönünce) bu iPhone'da kayıtta ya da işlemede kalmış toplantılar eldeki anahtarlarla
+    /// yeniden işlenir; ElevenLabs anahtarı yoksa son geçiş atlanır ve nedeni toplantıda görünür, LLM yoksa not yazılmaz
+    /// ve sonra "Notu yenile" ile yazılabilir.
     func resumeUnfinished() async {
         endStaleActivities()
         // Bu oturumda işlenmekte olanlar (sahne yeniden kurulduysa) ikinci kez işlenmez: çift ücret, aynı dosyaya iki yazar.
@@ -280,14 +281,19 @@ final class PhoneRecorder {
         guard !stale.isEmpty, phase == .idle else {
             return
         }
-        // Cihaz içi modda ElevenLabs anahtarı aranmaz (yoksa her açılışta "anahtar yok" görünürdü).
-        let elevenLabs: String? = phoneEngine() == .cloud ? await optionalElevenLabsKey() : nil
+        // Son geçiş ayara değil kaydın motoruna göre seçilir (bkz. `process`): ElevenLabs anahtarı yalnız bulutta
+        // kaydedilmiş bir toplantı kaldıysa aranır (yalnız cihaz içi kayıtlar kaldıysa "anahtar yok" görünmez).
+        let elevenLabs: String? = stale.contains { (record: MeetingRecord) -> Bool in record.engine != .local } ? await optionalElevenLabsKey() : nil
         let keys: ProcessingKeys = ProcessingKeys(elevenLabs: elevenLabs, llm: await llmProviderReportingFailure())
         for record in stale {
             do {
                 let directory: URL = try store.sessionDirectory(id: record.id)
                 Self.logger.info("Yarıda kalan toplantı yeniden işleniyor, toplantı: \(record.id, privacy: .public)")
-                process(record: record.with(status: .processing, failureMessage: nil), directory: directory, keys: keys)
+                // Anahtarlar beklenirken aynı toplantı başka bir çağrıyla işlemeye girmiş olabilir: ikinci sistem görevi
+                // istenmez (sahipsiz kalıp süresi dolunca süren işlemeyi iptal ederdi).
+                guard process(record: record.with(status: .processing, failureMessage: nil), directory: directory, keys: keys) else {
+                    continue
+                }
                 submitContinuedProcessing(id: record.id, subtitle: continuedProcessingSubtitle(title: record.title, startedAt: record.startedAt))
             } catch {
                 errorMessages = appendUnique(messages: errorMessages, message: userFacingMessage(error: error))
@@ -298,20 +304,20 @@ final class PhoneRecorder {
     #if DEBUG
     /// `--ornek-kayit` (yalnız Debug, görsel kontrol): mikrofon ve bulut olmadan örnek bir canlı kayıt gösterir.
     func showSampleRecording() {
-        let sample: [(text: String, person: Int, turkish: String?, isFinal: Bool)] = [
+        let sample: [(text: String, person: Int, translation: String?, isFinal: Bool)] = [
             ("Hyvää huomenta kaikille, aloitetaan viikkopalaveri.", 1, "Herkese günaydın, haftalık toplantıya başlayalım.", true),
             ("Budjetti on nyt valmis ja se lähtee hallitukselle perjantaina.", 1, "Bütçe hazır ve cuma günü yönetim kuruluna gidiyor.", true),
             ("Hyvä. Kuka hoitaa asiakasesityksen?", 2, "Güzel. Müşteri sunumunu kim üstleniyor?", true),
             ("Minä voin tehdä sen, kunhan saan luvut tiistaihin mennessä", 3, nil, false),
         ]
-        transcript = sample.enumerated().map { (item: (offset: Int, element: (text: String, person: Int, turkish: String?, isFinal: Bool))) -> LiveSegment in
+        transcript = sample.enumerated().map { (item: (offset: Int, element: (text: String, person: Int, translation: String?, isFinal: Bool))) -> LiveSegment in
             LiveSegment(
                 id: SegmentID(speaker: .others, index: item.offset), startSec: Double(item.offset * 6), endSec: Double(item.offset * 6 + 5),
                 text: item.element.text, isFinal: item.element.isFinal, failureMessage: nil, person: item.element.person
             )
         }
-        translations = Dictionary(uniqueKeysWithValues: sample.enumerated().compactMap { (item: (offset: Int, element: (text: String, person: Int, turkish: String?, isFinal: Bool))) -> (SegmentID, String)? in
-            item.element.turkish.map { (SegmentID(speaker: .others, index: item.offset), $0) }
+        translations = Dictionary(uniqueKeysWithValues: sample.enumerated().compactMap { (item: (offset: Int, element: (text: String, person: Int, translation: String?, isFinal: Bool))) -> (SegmentID, String)? in
+            item.element.translation.map { (SegmentID(speaker: .others, index: item.offset), $0) }
         })
         lockedLanguage = .finnish
         startedAt = Date().addingTimeInterval(-754)
@@ -403,11 +409,13 @@ final class PhoneRecorder {
 
     /// Toplantıyı işler (ses, son geçiş, not) ve saklar. Uygulama arka plana geçerse iOS'tan ek süre istenir ve varsa
     /// sürdürülen işleme görevinin ilerlemesi güncellenir; süre yetmezse toplantı açılışta yeniden işlenir
-    /// (`resumeUnfinished`). Aynı toplantı aynı anda iki kez işlenmez (çift ücret, aynı dosyaya iki yazar).
-    private func process(record: MeetingRecord, directory: URL, keys: ProcessingKeys) {
+    /// (`resumeUnfinished`). Aynı toplantı aynı anda iki kez işlenmez (çift ücret, aynı dosyaya iki yazar). İşleme
+    /// başlatıldıysa true; toplantı zaten işleniyorsa false.
+    @discardableResult
+    private func process(record: MeetingRecord, directory: URL, keys: ProcessingKeys) -> Bool {
         guard processingSteps[record.id] == nil else {
             Self.logger.warning("Toplantı zaten işleniyor, ikinci işleme başlatılmadı, toplantı: \(record.id, privacy: .public)")
-            return
+            return false
         }
         saveRecord(record: record, directory: directory)
         processingSteps[record.id] = .convertingAudio
@@ -445,6 +453,7 @@ final class PhoneRecorder {
             }
             endBackgroundTask(id: record.id)
         }
+        return true
     }
 
     // MARK: Arka plan
@@ -507,11 +516,17 @@ final class PhoneRecorder {
     }
 
     /// Sistem görevi başladı: toplantının işlenmesine bağlanır (ilerleme, süre dolunca iptal). İşleme görev başlamadan
-    /// bittiyse görev hemen tamamlanır.
+    /// bittiyse ya da toplantıya zaten bir görev bağlıysa yeni görev hemen tamamlanır (bağlı olanın yerine geçmez:
+    /// sahipsiz kalan görevin süresi dolunca süren işleme iptal edilirdi).
     private func attachContinuedTask(task: BGTask, meetingID: String) {
         guard let continued = task as? BGContinuedProcessingTask else {
             Self.logger.error("Beklenmeyen arka plan görevi türü, görev: \(task.identifier, privacy: .public)")
             task.setTaskCompleted(success: false)
+            return
+        }
+        guard continuedTasks[meetingID] == nil else {
+            Self.logger.warning("Toplantıya zaten sürdürülen işleme görevi bağlı, yeni görev bitiriliyor, toplantı: \(meetingID, privacy: .public), görev: \(task.identifier, privacy: .public)")
+            continued.setTaskCompleted(success: false)
             return
         }
         // Kapanış (mikrofon kapandı, oturum bitiyor) ya da işleme sürüyor.

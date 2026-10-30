@@ -140,7 +140,7 @@ struct SpeakerNamingSheet: View {
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 // Konuşma payı (Özet'teki "Kim ne kadar konuştu" ile aynı yazım).
-                Text(verbatim: "\(speakerLabel(speaker: share.key.speaker, person: person)) · %\(Int((share.fraction * 100).rounded()))")
+                Text(verbatim: "\(speakerLabel(speaker: share.key.speaker, person: person)) · \(share.fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale())))")
                     .appFont(size: 12, weight: .regular)
                     .monospacedDigit()
                     .foregroundStyle(Theme.muted)

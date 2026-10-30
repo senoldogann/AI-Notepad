@@ -3,7 +3,7 @@ import AINotepadUI
 import SwiftUI
 
 /// Kayıt sekmesi: boştayken tarih, büyük başlık, durağan pastel film gradyanlı kayıt kartı, görevler ve son toplantılar; kayıtta
-/// süre, ses dalgası, konuşmacılı canlı metin ve Türkçesi, "İşaretle" ve "Bitir"; bitince hazırlanma adımları.
+/// süre, ses dalgası, konuşmacılı canlı metin ve not dilindeki çevirisi, "İşaretle" ve "Bitir"; bitince hazırlanma adımları.
 struct RecordTab: View {
     let recorder: PhoneRecorder
     let store: PhoneStore
@@ -117,6 +117,8 @@ private struct RecordHeroCard: View {
     let recorder: PhoneRecorder
     /// Not ve çeviri dili (Ayarlar): canlı çevirinin dili adıyla geçer.
     @AppStorage(PhoneSettingsKey.noteLanguage) private var noteLanguage: String = defaultNoteLanguage(interfaceLanguages: Bundle.main.preferredLocalizations).rawValue
+    /// Motor (Ayarlar; ilk açılışta arka planda cihaz içine geçebilir): açıklama seçili motorun yaptığını söylesin.
+    @AppStorage(PhoneSettingsKey.engine) private var engine: String = PhoneEngine.cloud.rawValue
 
     var body: some View {
         VStack(spacing: 18) {
@@ -167,7 +169,7 @@ private struct RecordHeroCard: View {
                     .tracking(-0.3)
                     .foregroundStyle(Color.black.opacity(0.8))
                 Group {
-                    if phoneEngine() == .onDevice {
+                    if phoneStoredEngine(value: engine) == .onDevice {
                         Text("Cihaz içi: ücretsiz ve anahtarsız, ses telefondan çıkmaz; bitince notu yazar. Konuşmacılar ayrılmaz.")
                     } else {
                         Text("Odadaki herkes konuşmacılara ayrılır, \(phoneStoredNoteLanguage(value: noteLanguage).interfaceName) çevirisi canlı akar; bitince notu yazar.")
@@ -467,7 +469,8 @@ private struct ConsentCard: View {
     }
 }
 
-/// Bir konuşmacının ardışık cümleleri (sohbet gibi): rozet, ad ve saat; özgün metin (geçici kısım soluk) ve Türkçesi.
+/// Bir konuşmacının ardışık cümleleri (sohbet gibi): rozet, ad ve saat; özgün metin (geçici kısım soluk) ve not dilindeki
+/// çevirisi.
 private struct LiveBlockView: View {
     let block: SpeakerBlock
     let translations: [SegmentID: String]
@@ -488,8 +491,8 @@ private struct LiveBlockView: View {
                 Text("\(Text(finalText))\(Text(partialText).foregroundStyle(Theme.muted))")
                     .appFont(size: 17, weight: .regular)
                     .lineSpacing(4)
-                if !turkish.isEmpty {
-                    Text(turkish)
+                if !translation.isEmpty {
+                    Text(translation)
                         .appFont(size: 15, weight: .regular)
                         .foregroundStyle(Theme.muted)
                         .lineSpacing(3)
@@ -512,7 +515,7 @@ private struct LiveBlockView: View {
         return finalText.isEmpty || partial.isEmpty ? partial : " " + partial
     }
 
-    private var turkish: String {
+    private var translation: String {
         block.segments.compactMap { translations[$0.id] }.joined(separator: " ")
     }
 }

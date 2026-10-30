@@ -171,6 +171,9 @@ private struct QuickRecordView: View {
                     AccessoryWidgetBackground()
                     Image(systemName: "mic.fill").font(.system(size: 22, weight: .semibold))
                 }
+                // Yalnız simge var: VoiceOver simgenin adını değil eylemi okusun.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Toplantıyı kaydet"))
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     ZStack {

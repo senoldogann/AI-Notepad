@@ -62,7 +62,7 @@ struct PhoneOnboarding: View {
                 switch page {
                 case .welcome:
                     VStack(spacing: 10) {
-                        FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "35 dil; konuşmacılar ayrılır, \(phoneNoteLanguage().interfaceName) çevirisi altında akar.", palette: .sunset)
+                        FeatureTile(symbol: "captions.bubble.fill", title: "Canlı metin ve çeviri", text: "Konuşma yazıya dökülür, \(phoneNoteLanguage().interfaceName) çevirisi altında akar; anahtarlarınla 35 dil ve konuşmacı ayrımı.", palette: .sunset)
                         FeatureTile(symbol: "checklist", title: "Önce senin görevlerin", text: "Bitince not: görevler, kararlar ve özet.", palette: .rose)
                     }
                 case .profile:
