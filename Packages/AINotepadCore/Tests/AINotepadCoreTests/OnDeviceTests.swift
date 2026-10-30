@@ -115,8 +115,7 @@ import Testing
         #expect(fresh.status == .failed)
     }
 
-    // Arşiv sorusu: Fince toplantılar okunmaz ve model satırında yazılır; okunacak toplantı kalmazsa ya da cevap dili
-    // modelde yoksa açık hata.
+    // Arşiv sorusu: Fince toplantılar okunmaz; okunacak toplantı kalmazsa ya da cevap dili modelde yoksa açık hata.
     @Test func filtersArchiveForAsk() throws {
         let onDevice: LLMProvider = .onDevice(config)
         let records: [MeetingRecord] = [
@@ -126,7 +125,6 @@ import Testing
         let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: onDevice, outputLanguage: .turkish)
         #expect(readable.records.map(\.id) == ["en", "unknown"])
         #expect(readable.skippedLanguages == [.finnish])
-        #expect(askModelName(provider: onDevice, readable: readable).contains("Fince"))
         #expect(throws: OnDeviceLLMError.meetingLanguageUnsupported(languageName: "Fince")) {
             try onDeviceAskableArchive(records: [meeting(id: "fi", language: .finnish)], provider: onDevice, outputLanguage: .turkish)
         }
@@ -134,7 +132,6 @@ import Testing
             try onDeviceAskableArchive(records: records, provider: onDevice, outputLanguage: .estonian)
         }
         #expect(try onDeviceAskableArchive(records: records, provider: cloud, outputLanguage: .finnish).records.count == 4)
-        #expect(askModelName(provider: cloud, readable: OnDeviceReadableRecords(records: records, skippedLanguages: [])) == "Claude Haiku 5.5")
     }
 
     // Not başlamadan reddedilir: Fince toplantıda istek gitmez, toplantı açık mesajla "Hata"da kalır.

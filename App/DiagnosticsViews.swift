@@ -57,7 +57,9 @@ private func appDiagnostics(bundle: Bundle) -> DiagnosticsSection {
     ])
 }
 
-/// Sunucu bölümü: adres ve erişim denetiminin sonucu.
+#if !HOSTED_EDITION
+/// Sunucu bölümü (geliştirici sürümü): rapor sunucusunun adresi ve erişim denetiminin sonucu (HTTP durumu, gecikme).
+/// Abonelik sürümünde yerine yalnızca bağlantı durumu gösterilir (bkz. `hostedConnectionDiagnostics`).
 private func serverDiagnostics(base: Result<URL, any Error>, health: APIHealth?) -> DiagnosticsSection {
     let title: String = String(localized: "Sunucu")
     let url: URL
@@ -85,6 +87,7 @@ private func serverDiagnostics(base: Result<URL, any Error>, health: APIHealth?)
         DiagnosticsItem(label: String(localized: "Erişim"), value: result),
     ])
 }
+#endif
 
 /// Mikrofon izninin metni.
 private func microphoneText(permission: AVAudioApplication.recordPermission) -> String {
@@ -133,9 +136,13 @@ private func permissionDiagnostics(model: AppModel) -> DiagnosticsSection {
     ])
 }
 
-/// Canlı metin bölümü: motor ve modelin durumu.
+/// Canlı metin bölümü. Geliştirici sürümünde motor ve modelin durumu; abonelik sürümünde yalnızca nerede çalıştığı (bkz.
+/// `hostedLiveDiagnostics`).
 @MainActor
 private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
+    #if HOSTED_EDITION
+    return hostedLiveDiagnostics(model: model, account: .shared)
+    #else
     let status: String
     switch (model.liveEngine, model.modelStatus) {
     case (.deepgram, _):
@@ -149,12 +156,6 @@ private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
     case (_, .failed(let message)):
         status = String(localized: "Başarısız: \(redactedDiagnosticText(text: message, userNames: diagnosticsUserNames()))")
     }
-    #if HOSTED_EDITION
-    // Abonelik: motor her kayıtta sunucuya göre seçilir (bulut ya da Mac); "Mac modeli" Mac'teki konuşma modelidir.
-    return DiagnosticsSection(title: String(localized: "Canlı metin"), items: hostedLiveEngineDiagnostics(model: model, account: .shared) + [
-        DiagnosticsItem(label: String(localized: "Mac modeli"), value: status),
-    ])
-    #else
     return DiagnosticsSection(title: String(localized: "Canlı metin"), items: [
         DiagnosticsItem(label: String(localized: "Motor"), value: model.liveEngine.rawValue),
         DiagnosticsItem(label: String(localized: "Model"), value: status),
@@ -177,8 +178,9 @@ private func updateDiagnostics(updater: AppUpdater) -> DiagnosticsSection {
     ])
 }
 
-/// Son hatalar bölümü, ekranda (en çok 50): zaman ve alan. Günlük metni geliştirici içindir (Türkçe, teknik); ekranda
-/// gösterilmez, yalnızca kopyalanan tanılamaya girer (bkz. `errorDiagnosticsForSupport`).
+/// Son hatalar bölümü, ekranda (en çok 50): zaman ve kullanıcının anlayacağı alan. Kod ve günlük metni geliştirici
+/// içindir (Türkçe, teknik); ekranda gösterilmez, yalnızca geliştirici sürümünde kopyalanan tanılamaya girer (bkz.
+/// `errorDiagnosticsForSupport`).
 private func errorDiagnostics(errors: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection {
     let title: String = String(localized: "Son hatalar")
     switch errors {
@@ -198,8 +200,13 @@ private func pendingErrorDiagnostics() -> DiagnosticsSection {
     DiagnosticsSection(title: String(localized: "Son hatalar"), items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunuyor…"))])
 }
 
-/// Son hatalar bölümü, kopyalanan tanılamada (destek için): zaman, kod ve günlük metni (kişisel bilgiler ayıklanmış).
+/// Son hatalar bölümü, kopyalanan tanılamada (destek için). Abonelik sürümünde ekrandakiyle aynı (zaman ve alan): kod,
+/// günlük metni, istek kimliği, adres ve yanıt gövdesi altyapı ayrıntısıdır, dışarı çıkmaz. Geliştirici sürümünde
+/// (yalnızca sahibi) zaman, kod ve günlük metni (kişisel bilgiler ve jetonlar ayıklanmış).
 private func errorDiagnosticsForSupport(errors: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection {
+    #if HOSTED_EDITION
+    return errorDiagnostics(errors: errors)
+    #else
     let title: String = String(localized: "Son hatalar")
     switch errors {
     case .failure(let error):
@@ -213,6 +220,7 @@ private func errorDiagnosticsForSupport(errors: Result<[DiagnosticErrorEntry], a
             DiagnosticsItem(label: "\(entry.date.formatted(.iso8601)) \(entry.code)", value: entry.message)
         })
     }
+    #endif
 }
 
 /// Hatanın günlük kategorisinden (`kategori.düzey`) kullanıcının anlayacağı alan adı. Saf fonksiyondur.
@@ -259,16 +267,18 @@ private func probeAPI(base: Result<URL, any Error>) async -> APIHealth? {
     }
 }
 
-/// Tüm bölümler (sunucu denetimi ve son hatalar dahil); arayüz ve kopyalanan metin bunlardan üretilir.
+/// Tüm bölümler (sunucu denetimi ve son hatalar dahil); arayüz ve kopyalanan metin bunlardan üretilir. Abonelik
+/// sürümünde sunucu yerine yalnızca bağlantı durumu yer alır.
 @MainActor
 func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?, errors: DiagnosticsSection) -> [DiagnosticsSection] {
     let base: Result<URL, any Error> = Result { try diagnosticsAPIBase() }
     var sections: [DiagnosticsSection] = [appDiagnostics(bundle: .main)]
     #if HOSTED_EDITION
-    sections.append(hostedAccountDiagnostics(account: .shared))
+    sections += [hostedAccountDiagnostics(account: .shared), hostedConnectionDiagnostics(base: base, health: health)]
+    #else
+    sections.append(serverDiagnostics(base: base, health: health))
     #endif
     sections += [
-        serverDiagnostics(base: base, health: health),
         permissionDiagnostics(model: model),
         transcriptionDiagnostics(model: model),
         updateDiagnostics(updater: updater),
@@ -317,9 +327,10 @@ private struct DiagnosticsGrid: View {
     }
 }
 
-/// Ayarlar › Tanılama: sürüm, sistem, hesap, sunucuya erişim, izinler, canlı metin modeli, güncelleme ve son hatalar.
-/// Ses, metin, not, anahtar, jeton ve e-posta gösterilmez; hepsi yalnızca bu Mac'te, kullanıcı kopyalamadıkça hiçbir
-/// yere gitmez.
+/// Ayarlar › Tanılama: sürüm, sistem, hesap, bağlantı, izinler, canlı metin, güncelleme ve son hatalar. Ses, metin, not,
+/// anahtar, jeton ve e-posta gösterilmez; abonelik sürümünde altyapı ve kötüye kullanım önlemlerinin ayrıntısı da
+/// gösterilmez (bkz. HostedDiagnostics.swift). Kopyalanan metin ekrandakiyle aynı kurallara uyar; hepsi yalnızca bu
+/// Mac'te, kullanıcı kopyalamadıkça hiçbir yere gitmez.
 struct DiagnosticsSettings: View {
     let model: AppModel
     let updater: AppUpdater
@@ -336,7 +347,7 @@ struct DiagnosticsSettings: View {
         let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errorSection)
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Tanılama")) {
-                Text("Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.")
+                Text("Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, bağlantı, izinler, canlı metin, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.")
             } control: {
                 HStack(spacing: 8) {
                     if isRefreshing {

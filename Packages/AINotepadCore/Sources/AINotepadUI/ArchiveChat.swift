@@ -33,12 +33,10 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
     /// Akan (ya da bitmiş) cevap.
     public var answer: ArchiveAnswer
     public var finishedAt: Date?
-    /// Cevabı yazan model.
-    public var modelName: String?
 
     public init(
         id: UUID, question: String, scopeMeetingIDs: [String], scopeTitles: [String], recipeTitle: String?, startedAt: Date, phase: Phase, terms: [String], passages: [ArchivePassage],
-        answer: ArchiveAnswer, finishedAt: Date?, modelName: String?
+        answer: ArchiveAnswer, finishedAt: Date?
     ) {
         self.id = id
         self.question = question
@@ -51,7 +49,6 @@ public struct ArchiveExchange: Identifiable, Equatable, Sendable {
         self.passages = passages
         self.answer = answer
         self.finishedAt = finishedAt
-        self.modelName = modelName
     }
 }
 
@@ -70,7 +67,7 @@ public func askTurn(exchange: ArchiveExchange) -> AskConversationTurn? {
     return AskConversationTurn(
         id: exchange.id, question: exchange.question, scopeMeetingIDs: exchange.scopeMeetingIDs, scopeTitles: exchange.scopeTitles,
         recipeTitle: exchange.recipeTitle, startedAt: exchange.startedAt, finishedAt: finishedAt, terms: exchange.terms, readPassages: read,
-        answer: exchange.answer.text, sources: exchange.answer.sources, modelName: exchange.modelName
+        answer: exchange.answer.text, sources: exchange.answer.sources
     )
 }
 
@@ -79,7 +76,7 @@ public func archiveExchange(turn: AskConversationTurn) -> ArchiveExchange {
     ArchiveExchange(
         id: turn.id, question: turn.question, scopeMeetingIDs: turn.scopeMeetingIDs, scopeTitles: turn.scopeTitles, recipeTitle: turn.recipeTitle,
         startedAt: turn.startedAt, phase: .done, terms: turn.terms, passages: turn.readPassages,
-        answer: ArchiveAnswer(text: turn.answer, sources: turn.sources), finishedAt: turn.finishedAt, modelName: turn.modelName
+        answer: ArchiveAnswer(text: turn.answer, sources: turn.sources), finishedAt: turn.finishedAt
     )
 }
 
@@ -364,8 +361,8 @@ private struct FooterPill<Label: View>: View {
     }
 }
 
-/// Nasıl cevaplandı: arama terimleri, okunan toplantılar (adı ve günü; aynı adlı toplantılar ayrılsın) ve model, ince
-/// kartta küçük yazıyla.
+/// Nasıl cevaplandı: arama terimleri ve okunan toplantılar (adı ve günü; aynı adlı toplantılar ayrılsın), ince kartta
+/// küçük yazıyla. Cevabı yazan model gösterilmez.
 private struct ReasoningDetails: View {
     let exchange: ArchiveExchange
 
@@ -384,9 +381,6 @@ private struct ReasoningDetails: View {
             }
             if !titles.isEmpty {
                 row(label: "Okunan", value: titles.joined(separator: " · "))
-            }
-            if let model = exchange.modelName {
-                row(label: "Model", value: model)
             }
         }
         .padding(12)

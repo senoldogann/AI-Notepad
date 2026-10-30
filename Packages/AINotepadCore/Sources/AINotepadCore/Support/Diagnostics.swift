@@ -1,10 +1,10 @@
 import Foundation
 import OSLog
 
-// Uygulama içi tanılama (Ayarlar › Tanılama): sürüm, sistem, hesap, sunucuya erişim, izinler, model, güncelleme ve
+// Uygulama içi tanılama (Ayarlar › Tanılama): sürüm, sistem, hesap, bağlantı, izinler, canlı metin, güncelleme ve
 // son hatalar. Arayüz ve kopyalanan metin aynı bölümlerden üretilir. Ses, metin, not, anahtar, jeton ve e-posta
-// girmez; son hatalar uygulamanın kendi loglarından (yalnızca bu süreç, bellekte) okunur, yollar ve kullanıcı adları
-// silinir.
+// girmez; son hatalar uygulamanın kendi loglarından (yalnızca bu süreç, bellekte) okunur, yollar, kullanıcı adları ve
+// jetonlar silinir.
 
 /// Tanılamanın bir satırı: etiket ve değer.
 public struct DiagnosticsItem: Sendable, Equatable {
@@ -57,8 +57,8 @@ public enum APIHealth: Sendable, Equatable {
     case unreachable(reason: String)
 }
 
-/// Metinden kişisel ve gizli parçaları siler: dosya yolları, e-posta adresleri, bearer ve JWT biçimli jetonlar ve
-/// verilen kullanıcı adları (3 karakterden kısa adlar metni bozmasın diye atlanır); sonra `diagnosticMessageMaxLength`
+/// Metinden kişisel ve gizli parçaları siler: dosya yolları, e-posta adresleri, bearer ve JWT biçimli jetonlar, `sk-`
+/// ya da `sk_` ile başlayan API anahtarları (Anthropic, OpenAI uyumlu, ElevenLabs) ve verilen kullanıcı adları (3 karakterden kısa adlar metni bozmasın diye atlanır); sonra `diagnosticMessageMaxLength`
 /// karaktere kısaltır. Saf fonksiyondur.
 public func redactedDiagnosticText(text: String, userNames: [String]) -> String {
     var result: String = text
@@ -66,6 +66,7 @@ public func redactedDiagnosticText(text: String, userNames: [String]) -> String 
     result = result.replacing(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/, with: "‹e-posta›")
     result = result.replacing(/(?i:bearer)\s+\S+/, with: "Bearer ‹jeton›")
     result = result.replacing(/eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+/, with: "‹jeton›")
+    result = result.replacing(/\bsk[\-_][A-Za-z0-9_\-]{16,}/, with: "‹anahtar›")
     for name in userNames where name.count >= 3 {
         result = result.replacingOccurrences(of: name, with: "‹kullanıcı›", options: .caseInsensitive)
     }

@@ -188,16 +188,6 @@ public func onDeviceAskableArchive(records: [MeetingRecord], provider: LLMProvid
     return readable
 }
 
-/// "Nasıl cevaplandı"daki model satırı: model adı ve atlanan toplantı dilleri (cevap onları okumadı). Saf fonksiyondur.
-public func askModelName(provider: LLMProvider, readable: OnDeviceReadableRecords) -> String {
-    let name: String = llmModelDisplayName(provider: provider, tier: .smart)
-    guard !readable.skippedLanguages.isEmpty else {
-        return name
-    }
-    let languages: String = readable.skippedLanguages.map { meetingLanguageName(language: $0) }.joined(separator: ", ")
-    return String(localized: "\(name) · okunmadı: \(languages) toplantılar (cihaz içi model bu dilleri desteklemiyor)")
-}
-
 /// Cihaz içi mod seçilirken gösterilen uyarı: ana toplantı dili ya da not dili modelde yoksa ne olacağı ve ne
 /// yapılacağı; sorun yoksa nil. Saf fonksiyondur.
 public func onDeviceModeWarning(config: OnDeviceConfig, primaryLanguage: MeetingLanguage, outputLanguage: ShareLanguage) -> String? {

@@ -3,17 +3,18 @@ import Foundation
 import Testing
 
 @Suite struct DiagnosticsTests {
-    // Tanılamaya yol, e-posta, jeton ve kullanıcı adı girmez; mesaj kısa kalır.
+    // Tanılamaya yol, e-posta, jeton, API anahtarı ve kullanıcı adı girmez; mesaj kısa kalır.
     @Test func redactsPersonalAndSecretParts() {
         let text: String = "Dosya yazılamadı: /Users/ayse/Library/Application Support/AINotepad/x.json, ayse@ornek.com, "
-            + "Bearer abc.def, eyJhbGciOi.eyJzdWIiOjF9.c2ln, Ayşe Yılmaz"
+            + "Bearer abc.def, eyJhbGciOi.eyJzdWIiOjF9.c2ln, sk-ant-api03-AbCdEf0123456789xyz, sk_0123456789abcdef0123, Ayşe Yılmaz"
         let redacted: String = redactedDiagnosticText(text: text, userNames: ["ayse", "Ayşe Yılmaz", "a"])
         #expect(!redacted.contains("/Users"))
         #expect(!redacted.contains("ornek.com"))
         #expect(!redacted.contains("abc.def"))
         #expect(!redacted.contains("eyJ"))
+        #expect(!redacted.contains("sk-ant") && !redacted.contains("sk_0123"))
         #expect(!redacted.contains("Ayşe Yılmaz"))
-        #expect(redacted.contains("‹yol›") && redacted.contains("‹e-posta›") && redacted.contains("‹jeton›"))
+        #expect(redacted.contains("‹yol›") && redacted.contains("‹e-posta›") && redacted.contains("‹jeton›") && redacted.contains("‹anahtar›"))
         #expect(redactedDiagnosticText(text: String(repeating: "x", count: 500), userNames: []).count == diagnosticMessageMaxLength)
     }
 

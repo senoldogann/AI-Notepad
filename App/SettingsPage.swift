@@ -39,7 +39,7 @@ private enum SettingsSection: CaseIterable {
     case keys
     case connections
     case shortcuts
-    /// Sürüm, sistem, hesap, sunucuya erişim, izinler, model, güncelleme ve son hatalar (bkz. App/DiagnosticsViews.swift).
+    /// Sürüm, sistem, hesap, bağlantı, izinler, canlı metin, güncelleme ve son hatalar (bkz. App/DiagnosticsViews.swift).
     case diagnostics
 
     /// Sekme çubuğundaki sekmeler: abonelik sürümünde LLM ve Anahtarlar yok (model ve anahtar sunucudadır).

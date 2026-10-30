@@ -1,7 +1,8 @@
 import Foundation
 
 /// Sor sohbetinde cevaplanmış bir soru: soru, cevap, kaynakları ve nasıl cevaplandığı (arama terimleri, okunan
-/// parçalar, model). Okunan parçalar metinsiz saklanır (yalnız hangi toplantıdan kaç parça okunduğu gösterilir).
+/// parçalar). Okunan parçalar metinsiz saklanır (yalnız hangi toplantıdan kaç parça okunduğu gösterilir). Eski
+/// sürümlerin yazdığı `modelName` alanı okunurken yok sayılır (bilinmeyen anahtar).
 public struct AskConversationTurn: Sendable, Equatable, Codable, Identifiable {
     public let id: UUID
     public let question: String
@@ -16,11 +17,10 @@ public struct AskConversationTurn: Sendable, Equatable, Codable, Identifiable {
     public let readPassages: [ArchivePassage]
     public let answer: String
     public let sources: [ArchivePassage]
-    public let modelName: String?
 
     public init(
         id: UUID, question: String, scopeMeetingIDs: [String], scopeTitles: [String], recipeTitle: String?, startedAt: Date, finishedAt: Date,
-        terms: [String], readPassages: [ArchivePassage], answer: String, sources: [ArchivePassage], modelName: String?
+        terms: [String], readPassages: [ArchivePassage], answer: String, sources: [ArchivePassage]
     ) {
         self.id = id
         self.question = question
@@ -33,7 +33,6 @@ public struct AskConversationTurn: Sendable, Equatable, Codable, Identifiable {
         self.readPassages = readPassages
         self.answer = answer
         self.sources = sources
-        self.modelName = modelName
     }
 }
 

@@ -642,7 +642,7 @@ func demoAskConversation(now: Date) -> AskConversation {
     let turn: AskConversationTurn = AskConversationTurn(
         id: UUID(uuid: (0x0C, 0x9B, 0x6E, 0x3D, 0x7F, 0x21, 0x4E, 0x8A, 0xA1, 0xD4, 0x5B, 0x3C, 0x2E, 0x9F, 0x8A, 0x71)), question: question, scopeMeetingIDs: [], scopeTitles: [], recipeTitle: nil,
         startedAt: askedAt, finishedAt: askedAt.addingTimeInterval(6), terms: ["budget", "paid ads", "hiring", "pricing"], readPassages: sources,
-        answer: answer, sources: sources, modelName: nil
+        answer: answer, sources: sources
     )
     return askConversation(existing: nil, id: demoAskConversationID, turns: [turn], now: askedAt.addingTimeInterval(6))
 }

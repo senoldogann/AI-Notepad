@@ -660,16 +660,6 @@
         }
       }
     },
-    "%@ · okunmadı: %@ toplantılar (cihaz içi model bu dilleri desteklemiyor)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · not read: %@ meetings (the on-device model doesn't support these languages)"
-          }
-        }
-      }
-    },
     "%@ şu an yanıt veremedi. Biraz sonra yeniden dene.": {
       "extractionState": "manual",
       "localizations": {
@@ -2412,16 +2402,6 @@
         }
       }
     },
-    "Apple Intelligence (cihaz içi)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Intelligence (on-device)"
-          }
-        }
-      }
-    },
     "Apple Intelligence güvenlik denetimi bu metni işlemedi. Kendi anahtarınla bir sağlayıcı seçip yeniden dene.": {
       "localizations": {
         "en": {
@@ -2681,17 +2661,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add a channel in Settings › Connections"
-          }
-        }
-      }
-    },
-    "Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, sunucuya erişim, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The info from Settings › Diagnostics (account status, permissions, server reachability, recent errors) is added to the end of your message; no audio, transcripts, notes, keys or tokens."
           }
         }
       }
@@ -4345,26 +4314,6 @@
         }
       }
     },
-    "Bulut canlı metni için jeton alınamadı: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't get access for the cloud live transcript: %@"
-          }
-        }
-      }
-    },
-    "Bulut canlı metni kayıt sırasında durdu: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The cloud live transcript stopped during the recording: %@"
-          }
-        }
-      }
-    },
     "Bulut canlı metni şu an kullanılamıyor; canlı metin bu Mac'te üretiliyor.": {
       "extractionState": "manual",
       "localizations": {
@@ -4587,17 +4536,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preparing answer"
-          }
-        }
-      }
-    },
-    "Cihaz doğrulaması": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Device verification"
           }
         }
       }
@@ -6655,26 +6593,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account"
-          }
-        }
-      }
-    },
-    "Hesap durumu okunamadı (sunucuya ulaşılamıyor)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't read the account status (the server can't be reached)"
-          }
-        }
-      }
-    },
-    "Hesap durumu okunuyor": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reading the account status"
           }
         }
       }
@@ -11008,17 +10926,6 @@
         }
       }
     },
-    "Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, sunucuya erişim, izinler, model, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Useful when reporting a problem: version, system, account status, server reachability, permissions, model, updates and recent errors. No audio, transcripts, notes, keys or tokens; nothing leaves this Mac unless you copy it."
-          }
-        }
-      }
-    },
     "Sor… (@ toplantı, / tarif)": {
       "localizations": {
         "en": {
@@ -11047,36 +10954,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server doesn't support this yet (it's being updated). The meeting wasn't processed; try \"Reprocess\" again in a little while."
-          }
-        }
-      }
-    },
-    "Sunucu bulut canlı metnine izin verdi": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server allowed the cloud live transcript"
-          }
-        }
-      }
-    },
-    "Sunucu bulut canlı metnine izin veriyor": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server allows the cloud live transcript"
-          }
-        }
-      }
-    },
-    "Sunucu bulut canlı metnini kapattı ya da ayrılan kapasite doldu": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The server turned off the cloud live transcript or its capacity is used up"
           }
         }
       }
@@ -13497,17 +13374,6 @@
         }
       }
     },
-    "hata yok": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "no errors"
-          }
-        }
-      }
-    },
     "https adresi (http yalnızca bu bilgisayardaki sunucu için: localhost, 127.0.0.1)": {
       "localizations": {
         "en": {
@@ -13718,17 +13584,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "no chat model installed"
-          }
-        }
-      }
-    },
-    "son hata: %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "last error: %@"
           }
         }
       }
@@ -16289,6 +16144,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "When the time is up, audio files are deleted; the transcript and note stay. If iCloud sync is on, audio from meetings recorded on iPhone is also deleted after this period."
+          }
+        }
+      }
+    },
+    "Bağlantı": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
+          }
+        }
+      }
+    },
+    "Çalıştığı yer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs on"
+          }
+        }
+      }
+    },
+    "Ulaşılamıyor; internet bağlantını denetleyip Yenile'ye bas": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not reachable; check your internet connection and press Refresh"
+          }
+        }
+      }
+    },
+    "Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, bağlantı, izinler, canlı metin, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Useful when reporting a problem: version, system, account status, connection, permissions, live transcript, updates and recent errors. No audio, transcripts, notes, keys or tokens; nothing leaves this Mac unless you copy it."
+          }
+        }
+      }
+    },
+    "Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, bağlantı, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The info from Settings › Diagnostics (account status, permissions, connection, recent errors) is added to the end of your message; no audio, transcripts, notes, keys or tokens."
           }
         }
       }

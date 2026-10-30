@@ -11,28 +11,22 @@ let hostedLocalEngine: LiveEngine = .whisperKit
 
 private let seamsLogger: Logger = Logger(subsystem: "com.senoldogan.AINotepad", category: "HostedSeams")
 
-/// Abonelik sürümünde canlı metnin motoru ve nedeni (Ayarlar › Tanılama).
-struct HostedLiveStatus: Equatable {
-    let engine: HostedLiveEngine
-    let reason: String
-}
-
-/// Kaydın canlı motoru: hibrit oturumun başlangıcı ve tanılamadaki durumu.
+/// Kaydın canlı motoru: hibrit oturumun başlangıcı ve tanılamada gösterilen motor (bulut ya da Mac).
 struct HostedLiveChoice {
     let start: HybridLiveStart
-    let status: HostedLiveStatus
+    let engine: HostedLiveEngine
 }
 
 /// Kaydın canlı motorunu seçer (toplantı oturumu açıldıktan sonra): sunucu `liveEngine: deepgram` diyorsa ilk jeton
 /// istenir; alınırsa Deepgram (model ve adres seçenekleri jetondan, sonraki her bağlantı yeni jeton alır; ilk jeton
 /// kullanılmadan atılır, yalnızca hakkı ve seçenekleri doğrular). Sunucu Mac'i önerirse, hak durumu bilinmiyorsa ya da
-/// jeton alınamazsa (bütçe, ağ, sunucu) Mac'te; neden tanılamada görünür. Jeton saklanmaz ve loglanmaz.
+/// jeton alınamazsa (bütçe, ağ, sunucu) Mac'te. Tanılamada yalnızca motor görünür (neden ve sağlayıcı yazılmaz). Jeton
+/// saklanmaz ve loglanmaz.
 @MainActor
 func hostedLiveChoice(language: MeetingLanguage, keyterms: [String]) async -> HostedLiveChoice {
-    let expected: HostedLiveStatus = hostedExpectedLiveStatus(account: .shared)
-    guard expected.engine == .deepgram else {
+    guard hostedExpectedLiveEngine(account: .shared) == .deepgram else {
         recordFeatureUsage(feature: .onDeviceLive)
-        return HostedLiveChoice(start: .local, status: expected)
+        return HostedLiveChoice(start: .local, engine: .whisperKit)
     }
     let client: HostedClient
     let meetingID: String
@@ -47,10 +41,7 @@ func hostedLiveChoice(language: MeetingLanguage, keyterms: [String]) async -> Ho
     } catch {
         seamsLogger.warning("Deepgram jetonu alınamadı, canlı metin Mac'te, hata: \(String(describing: error), privacy: .private)")
         recordFeatureUsage(feature: .onDeviceLive)
-        return HostedLiveChoice(
-            start: .local,
-            status: HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Bulut canlı metni için jeton alınamadı: \(userFacingMessage(error: error))"))
-        )
+        return HostedLiveChoice(start: .local, engine: .whisperKit)
     }
     let source: DeepgramLiveSource = DeepgramLiveSource(
         language: language, keyterms: keyterms, options: hostedDeepgramListenOptions(grant: grant),
@@ -65,28 +56,18 @@ func hostedLiveChoice(language: MeetingLanguage, keyterms: [String]) async -> Ho
     ) { () async throws -> String in
         try await client.deepgramGrant(meetingID: meetingID).accessToken
     }
-    return HostedLiveChoice(start: .deepgram(source), status: HostedLiveStatus(engine: .deepgram, reason: String(localized: "Sunucu bulut canlı metnine izin verdi")))
+    return HostedLiveChoice(start: .deepgram(source), engine: .deepgram)
 }
 
-/// Sunucunun önerdiği canlı motor (son okunan hak durumundan): `deepgram` ise bulut, değilse Mac ve nedeni.
+/// Sunucunun önerdiği canlı motor (son okunan hak durumundan): giriş yapılmış ve sunucu `deepgram` diyorsa bulut,
+/// değilse (hak durumu okunamadı, okunuyor, giriş yok, hesap kullanılamıyor dahil) Mac.
 @MainActor
-func hostedExpectedLiveStatus(account: HostedAccount) -> HostedLiveStatus {
+func hostedExpectedLiveEngine(account: HostedAccount) -> HostedLiveEngine {
     switch account.state {
     case .signedIn(let entitlements):
-        switch hostedLiveEngine(entitlements: entitlements) {
-        case .deepgram:
-            return HostedLiveStatus(engine: .deepgram, reason: String(localized: "Sunucu bulut canlı metnine izin veriyor"))
-        case .whisperKit:
-            return HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Sunucu bulut canlı metnini kapattı ya da ayrılan kapasite doldu"))
-        }
-    case .signedInStatusUnknown:
-        return HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Hesap durumu okunamadı (sunucuya ulaşılamıyor)"))
-    case .loading:
-        return HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Hesap durumu okunuyor"))
-    case .signedOut:
-        return HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Giriş yapılmamış"))
-    case .unavailable:
-        return HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Hesap kullanılamıyor"))
+        hostedLiveEngine(entitlements: entitlements)
+    case .signedInStatusUnknown, .loading, .signedOut, .unavailable:
+        .whisperKit
     }
 }
 

@@ -1,8 +1,12 @@
 import AINotepadCore
 import Foundation
 
-/// Tanılamanın hesap bölümü (abonelik sürümü): oturum durumu, plan, deneme hakkı ya da abonelik ve kullanım. Jeton,
-/// e-posta ve kullanıcı kimliği yazılmaz.
+// Abonelik sürümünün tanılaması yalnızca kullanıcıya ve desteğe yarayan bilgiyi gösterir: altyapı (sunucu adresi,
+// HTTP durumu, sağlayıcı ve model adları) ve kötüye kullanım önlemleri (cihaz doğrulaması, canlı metin politikası)
+// ekranda da kopyalanan metinde de yazılmaz.
+
+/// Tanılamanın hesap bölümü (abonelik sürümü): oturum durumu (okunamıyorsa hesap sayfasındaki kullanıcı mesajı), plan,
+/// deneme hakkı ya da abonelik ve kullanım. Jeton, e-posta, kullanıcı kimliği ve cihaz doğrulaması yazılmaz.
 @MainActor
 func hostedAccountDiagnostics(account: HostedAccount) -> DiagnosticsSection {
     let title: String = String(localized: "Hesap")
@@ -23,9 +27,9 @@ func hostedAccountDiagnostics(account: HostedAccount) -> DiagnosticsSection {
             DiagnosticsItem(label: String(localized: "Neden"), value: redactedDiagnosticText(text: message, userNames: diagnosticsUserNames())),
         ])
     case .signedIn(let entitlements):
-        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: stateLabel, value: String(localized: "Giriş yapıldı"))]
-            + hostedPlanDiagnostics(entitlements: entitlements)
-            + [DiagnosticsItem(label: String(localized: "Cihaz doğrulaması"), value: HostedDeviceCheck.lastFailure.map { String(localized: "son hata: \($0)") } ?? String(localized: "hata yok"))])
+        return DiagnosticsSection(
+            title: title, items: [DiagnosticsItem(label: stateLabel, value: String(localized: "Giriş yapıldı"))] + hostedPlanDiagnostics(entitlements: entitlements)
+        )
     }
 }
 
@@ -62,22 +66,33 @@ private func hostedPlanDiagnostics(entitlements: HostedEntitlements) -> [Diagnos
     }
 }
 
-/// Canlı metnin motoru ve nedeni: bu açılışta kayıt yapıldıysa son kaydınki (Mac'e geçiş dahil), yoksa sunucunun
-/// önerisi. Jeton yazılmaz.
+/// Canlı metin bölümü (abonelik sürümü): yalnızca nerede çalıştığı, bulut ya da bu Mac. Bu açılışta kayıt yapıldıysa son
+/// kaydınki (Mac'e geçiş dahil), yoksa sunucunun önerisi. Seçimin nedeni, sağlayıcı ve model adları yazılmaz.
 @MainActor
-func hostedLiveEngineDiagnostics(model: AppModel, account: HostedAccount) -> [DiagnosticsItem] {
-    let status: HostedLiveStatus = model.hostedLiveStatus ?? hostedExpectedLiveStatus(account: account)
-    let engine: String
-    switch status.engine {
+func hostedLiveDiagnostics(model: AppModel, account: HostedAccount) -> DiagnosticsSection {
+    let place: String
+    switch model.hostedLiveEngineInUse ?? hostedExpectedLiveEngine(account: account) {
     case .deepgram:
-        engine = String(localized: "Bulut")
+        place = String(localized: "Bulut")
     case .whisperKit:
-        engine = String(localized: "Bu Mac'te")
+        place = String(localized: "Bu Mac'te")
     }
-    return [
-        DiagnosticsItem(label: String(localized: "Motor"), value: engine),
-        DiagnosticsItem(label: String(localized: "Neden"), value: redactedDiagnosticText(text: status.reason, userNames: diagnosticsUserNames())),
-    ]
+    return DiagnosticsSection(title: String(localized: "Canlı metin"), items: [DiagnosticsItem(label: String(localized: "Çalıştığı yer"), value: place)])
+}
+
+/// Bağlantı bölümü (abonelik sürümü): yalnızca hizmete ulaşılıp ulaşılamadığı. Sunucu adresi, HTTP durumu, gecikme ve
+/// ham hata yazılmaz; adres okunamıyorsa nedeni hesap bölümünde görünür. Saf fonksiyondur.
+func hostedConnectionDiagnostics(base: Result<URL, any Error>, health: APIHealth?) -> DiagnosticsSection {
+    let value: String
+    switch (base, health) {
+    case (.failure, _), (.success, .unreachable?), (.success, .unhealthy?):
+        value = String(localized: "Ulaşılamıyor; internet bağlantını denetleyip Yenile'ye bas")
+    case (.success, .none):
+        value = String(localized: "Denetleniyor…")
+    case (.success, .reachable?):
+        value = String(localized: "Bağlı")
+    }
+    return DiagnosticsSection(title: String(localized: "Bağlantı"), items: [DiagnosticsItem(label: String(localized: "Durum"), value: value)])
 }
 
 /// Tanılamada denetlenen sunucu: hesabın sunucusu.
