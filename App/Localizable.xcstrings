@@ -16094,6 +16094,72 @@
           }
         }
       }
+    },
+    "Cevabı kopyala": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy answer"
+          }
+        }
+      }
+    },
+    "Enter gönderir · Shift+Enter yeni satır · @ toplantı seç": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter sends · Shift+Enter new line · @ pick a meeting"
+          }
+        }
+      }
+    },
+    "Etiketlenen toplantılar": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagged meetings"
+          }
+        }
+      }
+    },
+    "Toplantı önerileri": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meeting suggestions"
+          }
+        }
+      }
+    },
+    "Soru yalnız bu toplantıya sorulur": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The question is asked about this meeting only"
+          }
+        }
+      }
+    },
+    "Etiketlenen toplantılardan biri artık yok (silinmiş ya da taşınmış); etiketleri kaldırıp yeniden seç.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One of the tagged meetings no longer exists (deleted or moved); remove the tags and pick again."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

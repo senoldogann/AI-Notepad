@@ -52,6 +52,23 @@ struct AskPage: View {
 
     private var chat: some View {
         VStack(spacing: 0) {
+            // "Yeni sohbet" sabit bir üst satırda: kaydırılan sohbetin üstüne binmez (önceden köşede yüzüyordu ve sağa
+            // hizalı soru balonunu örtüyordu).
+            if hasCornerButtons {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    Button("Yeni sohbet", systemImage: "square.and.pencil") {
+                        model.clearArchiveConversation()
+                        mentioned = []
+                        focusRequest += 1
+                    }
+                    .controlSize(.small)
+                    .hoverHint("Önceki cevaplar bağlam olmaz; bu sohbet geçmişte kalır", alignment: .trailing, edge: .bottom)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+            }
             ScrollViewReader { (proxy: ScrollViewProxy) in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 34) {
@@ -77,8 +94,7 @@ struct AskPage: View {
                     }
                     .animation(.smooth(duration: 0.35), value: model.archiveExchanges.map(\.id))
                     .padding(.horizontal, 40)
-                    // Sağ üstteki "Yeni sohbet" düğmesi görünürken ilk soru balonu onun altında kalmasın.
-                    .padding(.top, hasCornerButtons ? 76 : 28)
+                    .padding(.top, hasCornerButtons ? 12 : 28)
                     .padding(.bottom, 16)
                     .frame(maxWidth: 780, alignment: .leading)
                     .frame(maxWidth: .infinity)
@@ -130,20 +146,6 @@ struct AskPage: View {
             .frame(maxWidth: 780)
         }
         .frame(maxWidth: .infinity)
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 8) {
-                if !model.archiveExchanges.isEmpty {
-                    Button("Yeni sohbet", systemImage: "square.and.pencil") {
-                        model.clearArchiveConversation()
-                        mentioned = []
-                        focusRequest += 1
-                    }
-                    .controlSize(.small)
-                    .hoverHint("Önceki cevaplar bağlam olmaz; bu sohbet geçmişte kalır", alignment: .trailing, edge: .bottom)
-                }
-            }
-            .padding(16)
-        }
         .onChange(of: question) { (_: String, _: String) in
             highlighted = 0
             resetDismissedSuggestions()
@@ -167,7 +169,7 @@ struct AskPage: View {
         #endif
     }
 
-    /// Sağ üst köşede "Yeni sohbet" düğmesi var mı.
+    /// Üst satırda "Yeni sohbet" düğmesi var mı.
     private var hasCornerButtons: Bool {
         !model.archiveExchanges.isEmpty
     }
