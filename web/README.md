@@ -23,7 +23,7 @@ yalnızca toplu sayfa görüntüleme, yönlendiren site, ülke ve cihaz türü s
 | `/mcp` | Uygulamanın yerel MCP sunucusu: araçlar, bağlama, yapılandırma |
 | `/sign-in` | Apple ve Google ile giriş; Apple dönüş adresi; Mac uygulaması `?app=1&nonce=<64 hex>` ile açar |
 | `/invite` | Davet bağlantısı (`?code=`; sunucu `inviteUrl` üretir): kod `localStorage`'da (`gistsmith.invite`) saklanır, hesap sayfası abone olurken doğrulayıp ödemeye taşır |
-| `/account` | Hesap (`?payment=done`: Stripe Checkout dönüşü; Müşteri Portalı dönüşü `/account`) |
+| `/account` | Hesap (`?plan=…&checkout=1`: fiyat sayfasından seçilen plan ve ödemeye devam niyeti — giriş bitince Checkout açılır; `?payment=done`: Stripe Checkout dönüşü; Müşteri Portalı dönüşü `/account`) |
 | `/contact` | İletişim formu |
 | `/admin` | Yönetim paneli (menüde ve site haritasında yok, `noindex`) |
 | `/privacy`, `/terms` | Yasal metinler |

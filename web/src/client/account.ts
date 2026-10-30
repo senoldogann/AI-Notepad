@@ -1,8 +1,10 @@
 // Hesap sayfası: `/v1/me`'den tek plan kartı (plan adı ve durum etiketi, tek durum satırı, denemede kalan toplantı ya da
 // abonede aylık saat ölçeri ve duruma uyan eylem: Abone ol, Aboneliği yönet ya da ücretsiz erişimde hiçbiri). Abone
 // olurken plan seçimi (yıllık seçili) ve davet kodu (`POST /v1/referral/validate`) Checkout'a taşınır; abonenin davet
-// kartı `GET /v1/referral`'dan; çıkış ve onaylı hesap silme (`DELETE /v1/me`). Adresteki `?plan=` ve `?code=` (fiyat ve
-// davet sayfalarından) girişten önce saklanır; oturum yoksa giriş sayfasına geçilir.
+// kartı `GET /v1/referral`'dan; çıkış ve onaylı hesap silme (`DELETE /v1/me`). Adresteki `?plan=`, `?code=` ve
+// `?checkout=1` (fiyat ve davet sayfalarından) girişten önce saklanır; oturum yoksa giriş sayfasına geçilir. Plan
+// seçimi tarayıcıda kalıcıdır (giriş başka bir sekmede bitse de kaybolmaz); `?checkout=1` niyeti giriş bitince hesap
+// sayfasını doğrudan Stripe Checkout'a gönderir.
 import {
   ApiRequestError,
   type Entitlements,
@@ -15,7 +17,17 @@ import {
   parseReferral,
   parseValidatedReferralCode,
 } from "./api";
-import { forgetInviteCode, storeInviteCode, storePlan, storedInviteCode, storedPlan } from "./checkout-choice";
+import {
+  checkoutIntended,
+  forgetCheckoutIntent,
+  forgetInviteCode,
+  forgetPlan,
+  storeCheckoutIntent,
+  storeInviteCode,
+  storePlan,
+  storedInviteCode,
+  storedPlan,
+} from "./checkout-choice";
 import { type ClientCopy, clientCopy, fill } from "./copy";
 import { dataValue, element, errorText, hideNotice, showNotice } from "./dom";
 import { SignedOutError, authorizedSend, claimTabSession, clearSession, hasSession, signOut } from "./session";
@@ -551,13 +563,18 @@ function rememberQueryChoices(params: URLSearchParams): boolean {
   const plan: BillingPlan | null = billingPlanOf(params.get("plan"));
   const rawCode: string | null = params.get("code");
   const code: string | null = rawCode === null ? null : normalizedInviteCode(rawCode);
+  const checkout: boolean = params.get("checkout") === "1";
   if (plan !== null) {
     storePlan(plan);
   }
   if (code !== null) {
     storeInviteCode(code);
   }
-  return params.has("plan") || params.has("code");
+  if (checkout) {
+    // Fiyat sayfasındaki plan düğmesi: seçim yapıldı, ödeme sayfasına gidilecek (giriş gerekirse sonra).
+    storeCheckoutIntent();
+  }
+  return params.has("plan") || params.has("code") || checkout;
 }
 
 /** Düğmeye uzun süren bir işlem bağlar: süre boyunca düğme kapalı, hata bildirimde. */
@@ -661,8 +678,10 @@ async function main(): Promise<void> {
     history.replaceState(null, "", window.location.pathname);
   }
   if (paymentDone) {
-    // Ödeme tamamlandı: davet kodu kullanıldı (ya da artık gerekmiyor).
+    // Ödeme tamamlandı: davet kodu kullanıldı (ya da artık gerekmiyor), seçilen plan aboneliğe dönüştü.
     forgetInviteCode();
+    forgetPlan();
+    forgetCheckoutIntent();
   }
   await claimTabSession();
   if (!hasSession()) {
@@ -704,6 +723,14 @@ async function main(): Promise<void> {
     }
     if (me.plan === "subscription") {
       await loadReferral(text, notice);
+    }
+    // Fiyat sayfasından gelen ziyaretçi planını seçti ve giriş yaptı: artık doğrudan Ödeme sayfasına geçilir
+    // (niyet yalnızca seçimin yapıldığı sekmede tutulur ve bir kez kullanılır).
+    if (checkoutIntended()) {
+      forgetCheckoutIntent();
+      if (view.canSubscribe) {
+        await subscribe(form, text);
+      }
     }
   } catch (error: unknown) {
     if (error instanceof SignedOutError) {

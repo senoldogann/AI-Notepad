@@ -735,6 +735,50 @@ async function checkAccount(context: BrowserContext, siteOrigin: string, apiBase
     await cleanup.close();
   }
 
+  // Fiyat sayfasından plan seçen oturumsuz ziyaretçi: seçim bu tarayıcıda durur (giriş başka sekmede bitse de), giriş
+  // bitince hesap sayfası ek bir düğme beklemeden Checkout'u seçilen planla açar.
+  {
+    const visitor: SeededSession = seedSession();
+    const visitorSession: SessionBody = await refreshSession(apiBase, visitor.refreshToken);
+    const choose: Page = await context.newPage();
+    const chooseErrors: string[] = watchConsole(choose);
+    await choose.goto(`${siteOrigin}/pricing`);
+    await choose.locator("a[href='/account?plan=monthly&checkout=1']").click();
+    await choose.waitForURL(`${siteOrigin}/sign-in`, { timeout: 10_000 }).catch((): void => undefined);
+
+    // Giriş başka bir sekmede biter: plan seçimi yine de durur (yıllık varsayılan yerine aylık seçili gelir).
+    const { page: otherTab, errors: otherErrors }: SessionPage = await openWithSession(context, siteOrigin, "/account", visitorSession, Date.now() + visitorSession.expiresIn * 1000);
+    await otherTab.locator("#account-content:not(.hidden)").waitFor({ timeout: 10_000 }).catch((): void => undefined);
+    const keptPlan: boolean = await otherTab.locator('#plan-choice input[name="plan"][value="monthly"]').isChecked().catch((): boolean => false);
+    check(
+      "fiyat sayfasında seçilen plan girişten sonra (başka sekmede) korunur",
+      keptPlan && otherTab.url() === `${siteOrigin}/account` && otherErrors.length === 0,
+      JSON.stringify({ url: otherTab.url(), keptPlan, errors: otherErrors }),
+    );
+    await otherTab.close();
+
+    // Aynı sekme: giriş bitince niyet yerine gelir, seçilen planla doğrudan Checkout açılır.
+    await choose.evaluate(
+      ({ stored }: { stored: string }): void => {
+        sessionStorage.setItem("gistsmith.session", stored);
+      },
+      { stored: JSON.stringify({ accessToken: visitorSession.accessToken, refreshToken: visitorSession.refreshToken, accessExpiresAt: Date.now() + visitorSession.expiresIn * 1000 }) },
+    );
+    await choose.goto(`${siteOrigin}/account`);
+    await choose.waitForURL("https://checkout.stripe.com/**", { timeout: 15_000 }).catch((): void => undefined);
+    check(
+      "fiyat sayfasından gelen ziyaretçi giriş bitince Checkout'u seçtiği planla açar (ek düğme yok)",
+      captures.checkoutBodies.at(-1) === JSON.stringify({ plan: "monthly" }) && choose.url().startsWith("https://checkout.stripe.com/") && chooseErrors.length === 0,
+      JSON.stringify({ url: choose.url(), body: captures.checkoutBodies.at(-1), errors: chooseErrors }),
+    );
+    await choose.close();
+    // Kayıtlı plan sonraki sayfaları etkilemesin.
+    const planCleanup: Page = await context.newPage();
+    await planCleanup.goto(`${siteOrigin}/privacy`);
+    await planCleanup.evaluate((): void => window.localStorage.removeItem("gistsmith.plan"));
+    await planCleanup.close();
+  }
+
   // Webhook'un yazdığı etkin abonelik: `?payment=done` bildirimi, Yönet düğmesi, saat kartı.
   const periodEnd: number = Date.now() + 30 * 86_400_000;
   localSql(

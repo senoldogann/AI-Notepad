@@ -335,8 +335,14 @@ const linkTermsUrl: string = "https://link.com/terms#sold-through-link-terms";
         or remove the code.
       </li>
       <li>
-        <strong>Chosen plan</strong> (<code>sessionStorage</code>, key <code>gistsmith.plan</code>): the plan (monthly or
-        yearly) you picked on the pricing page, so it is still selected after you sign in; removed when the tab closes.
+        <strong>Chosen plan</strong> (<code>localStorage</code>, key <code>gistsmith.plan</code>): the plan (monthly or
+        yearly) you picked on the pricing page, so it is still selected after you sign in, even in another tab or on a
+        later visit; removed once you subscribe.
+      </li>
+      <li>
+        <strong>Continue to checkout</strong> (<code>sessionStorage</code>, key <code>gistsmith.checkout</code>): a mark
+        that you picked a plan on the pricing page and want to go on to payment, kept only in that browser tab until the
+        payment page opens or the tab closes.
       </li>
       <li>
         <strong>Tab identifier</strong> (<code>sessionStorage</code>, key <code>gistsmith.tab</code>): a random value that

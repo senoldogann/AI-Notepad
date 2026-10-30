@@ -1,8 +1,9 @@
 ---
 // Fiyat sayfası: iki plan (aylık 5,99 $, yıllık 49 $; vergiler dahil; yıllık önerilen), davet sayfasına bağlantı, neler
 // dahil (yalnızca özellikler), sınırlar (deneme, aylık saat, toplantı süresi, iptal), ödeme ve vergiler (satıcı Link) ve
-// SSS. Her bilgi sayfada bir kez geçer. Plan düğmeleri hesap sayfasına seçilen planla gider (`/account?plan=…`); hesap
-// sayfası oturum yoksa önce girişe yönlendirir.
+// SSS. Her bilgi sayfada bir kez geçer. Plan düğmeleri hesap sayfasına seçilen planla ve "ödemeye devam et" niyetiyle
+// gider (`/account?plan=…&checkout=1`); hesap sayfası oturum yoksa önce girişe yönlendirir, giriş bitince seçilen planla
+// doğrudan Stripe Checkout açılır.
 import Base from "../layouts/Base.astro";
 import Faq from "../components/Faq.astro";
 import Film from "../components/Film.astro";
@@ -60,7 +61,7 @@ const [noteBefore, noteAfter]: readonly [string, string] = ((): readonly [string
                 <p class="small muted">{option.detail}</p>
                 <a
                   class:list={["button", "button--block", featured ? "button--primary" : "button--secondary"]}
-                  href={`${routes.account}?plan=${option.plan}`}
+                  href={`${routes.account}?plan=${option.plan}&checkout=1`}
                 >
                   {option.cta}
                 </a>
