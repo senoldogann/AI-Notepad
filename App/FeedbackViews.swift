@@ -134,7 +134,7 @@ private struct FeedbackSheet: View {
                 .toggleStyle(.checkbox)
                 .appFont(size: 13, weight: .regular)
             if includeFullDiagnostics {
-                Text("Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, sunucuya erişim, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.")
+                Text("Ayarlar › Tanılama'daki bilgi (hesap durumu, izinler, bağlantı, son hatalar) mesajın sonuna eklenir; ses, metin, not, anahtar ve jeton eklenmez.")
                     .appFont(size: 12, weight: .regular)
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

@@ -97,7 +97,7 @@ private func archive() -> [MeetingRecord] {
         let turn: AskConversationTurn = AskConversationTurn(
             id: UUID(), question: "Kim ne üstlendi?", scopeMeetingIDs: ["a", "b"], scopeTitles: ["Haftalık ekip toplantısı", "Bütçe planlaması"],
             recipeTitle: nil, startedAt: Date(timeIntervalSince1970: 1_792_000_000), finishedAt: Date(timeIntervalSince1970: 1_792_000_006),
-            terms: [], readPassages: [], answer: "Mikko [1].", sources: [source], modelName: "Claude"
+            terms: [], readPassages: [], answer: "Mikko [1].", sources: [source]
         )
         let conversation: AskConversation = askConversation(existing: nil, id: UUID(), turns: [turn], now: Date(timeIntervalSince1970: 1_792_000_006))
         try saveAskConversation(conversation: conversation, directory: directory)
@@ -106,6 +106,13 @@ private func archive() -> [MeetingRecord] {
         #expect(loaded.conversations == [conversation])
         #expect(loaded.conversations.first?.turns.first?.scopeMeetingIDs == ["a", "b"])
         #expect(loaded.conversations.first?.turns.first?.scopeTitles == ["Haftalık ekip toplantısı", "Bütçe planlaması"])
+        // Eski sürümlerin yazdığı `modelName` alanı okumayı bozmaz.
+        let file: URL = directory.appending(path: "\(conversation.id.uuidString).json")
+        let saved: String = try String(contentsOf: file, encoding: .utf8)
+        let legacy: String = saved.replacingOccurrences(of: "\"answer\":", with: "\"modelName\":\"Claude Haiku 5.5\",\"answer\":")
+        #expect(legacy.contains("modelName"))
+        try legacy.write(to: file, atomically: true, encoding: .utf8)
+        #expect(try loadAskConversations(directory: directory).conversations == [conversation])
     }
 }
 

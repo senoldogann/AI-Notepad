@@ -79,28 +79,25 @@ final class PhoneAsk {
             // Etiketli toplantı silinmişse soru tüm arşive genişletilmez; soru ve neden sohbette görünür.
             exchanges.append(ArchiveExchange(
                 id: id, question: trimmed, scopeMeetingIDs: meetingIDs, scopeTitles: [], recipeTitle: recipeTitle, startedAt: Date(),
-                phase: .failed(userFacingMessage(error: error)), terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: Date(),
-                modelName: nil
+                phase: .failed(userFacingMessage(error: error)), terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: Date()
             ))
             return
         }
         exchanges.append(ArchiveExchange(
             id: id, question: trimmed, scopeMeetingIDs: scoped.map(\.id), scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
-            terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
+            terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil
         ))
         isAnswering = true
         let records: [MeetingRecord] = store.meetings
         task = Task { [weak self] in
             do {
                 let provider: LLMProvider = try await phoneLLMProvider()
-                self?.update(id: id) { $0.modelName = llmModelDisplayName(provider: provider, tier: .smart) }
                 let onProgress: ArchiveProgressHandler = { [weak self] (progress: ArchiveProgress) -> Void in
                     await self?.apply(progress: progress, id: id)
                 }
                 if scoped.isEmpty {
-                    // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz; model satırında hangileri yazılır.
+                    // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz.
                     let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: provider, outputLanguage: phoneNoteLanguage())
-                    self?.update(id: id) { $0.modelName = askModelName(provider: provider, readable: readable) }
                     _ = try await askArchive(
                         question: trimmed, history: history, records: readable.records, userName: phoneUserName(), language: phoneNoteLanguage(), llm: provider,
                         maxChars: noteLimits(provider: provider).archiveChars, now: Date(), onProgress: onProgress

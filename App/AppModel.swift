@@ -78,9 +78,9 @@ final class AppModel {
 
     #if HOSTED_EDITION
     var modelStatus: ModelStatus = .notLoaded
-    /// Abonelik: canlı metnin motoru ve nedeni (son kaydın başında seçilen, Mac'e geçişte güncellenen); bu açılışta
-    /// kayıt yapılmadıysa nil (tanılama sunucunun önerisini gösterir).
-    var hostedLiveStatus: HostedLiveStatus?
+    /// Abonelik: canlı metnin motoru (son kaydın başında seçilen, Mac'e geçişte güncellenen); bu açılışta kayıt
+    /// yapılmadıysa nil (tanılama sunucunun önerisini gösterir).
+    var hostedLiveEngineInUse: HostedLiveEngine?
     #else
     var modelStatus: ModelStatus = .loading
     #endif
@@ -1044,8 +1044,8 @@ final class AppModel {
         let choice: HostedLiveChoice = await hostedLiveChoice(
             language: liveLanguage, keyterms: keytermsWithAttendees(attendees: linkedMeeting?.attendees ?? [], keyterms: recognitionKeyterms, limit: 30)
         )
-        hostedLiveStatus = choice.status
-        Self.logger.info("Canlı motor seçildi, motor: \(choice.status.engine.rawValue, privacy: .public)")
+        hostedLiveEngineInUse = choice.engine
+        Self.logger.info("Canlı motor seçildi, motor: \(choice.engine.rawValue, privacy: .public)")
         handle = runHybridLiveSession(
             config: HybridLiveSessionConfig(
                 speakers: startedSpeakers,
@@ -1299,7 +1299,7 @@ final class AppModel {
             // yazıya dökülür ("Diğerleri" son geçişten zaten geçer). Ses kaydı kesilmedi.
             meStreamFailed = meStreamFailed || startedSpeakers.contains(.me)
             #if HOSTED_EDITION
-            hostedLiveStatus = HostedLiveStatus(engine: .whisperKit, reason: String(localized: "Bulut canlı metni kayıt sırasında durdu: \(message)"))
+            hostedLiveEngineInUse = .whisperKit
             #endif
             errorMessages = appendUnique(messages: errorMessages, message: String(localized: "Bulut canlı metni durdu; canlı metin bu Mac'te sürüyor, kayıt kesilmedi. (\(message))"))
         case .diarizationFailed(let message):
@@ -2352,28 +2352,25 @@ final class AppModel {
             Self.logger.error("Etiketli toplantı bulunamadı, hata: \(String(describing: error), privacy: .private)")
             archiveExchanges.append(ArchiveExchange(
                 id: id, question: trimmed, scopeMeetingIDs: meetingIDs, scopeTitles: [], recipeTitle: recipeTitle, startedAt: Date(),
-                phase: .failed(userFacingMessage(error: error)), terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: Date(),
-                modelName: nil
+                phase: .failed(userFacingMessage(error: error)), terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: Date()
             ))
             return
         }
         archiveExchanges.append(ArchiveExchange(
             id: id, question: trimmed, scopeMeetingIDs: scoped.map(\.id), scopeTitles: scoped.map { $0.note?.title ?? $0.title }, recipeTitle: recipeTitle, startedAt: Date(), phase: .understanding,
-            terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil, modelName: nil
+            terms: [], passages: [], answer: ArchiveAnswer(text: "", sources: []), finishedAt: nil
         ))
         let records: [MeetingRecord] = meetings
         let userName: String = UserDefaults.standard.string(forKey: SettingsKey.userName) ?? ""
         archiveTask = Task { [weak self] in
             do {
                 let provider: LLMProvider = try await resolveLLMProvider()
-                self?.updateExchange(id: id) { $0.modelName = llmModelDisplayName(provider: provider, tier: .smart) }
                 let onProgress: ArchiveProgressHandler = { [weak self] (progress: ArchiveProgress) -> Void in
                     await self?.apply(progress: progress, id: id)
                 }
                 if scoped.isEmpty {
-                    // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz; model satırında hangileri yazılır.
+                    // Cihaz içi modelde dili desteklenmeyen toplantılar okunmaz.
                     let readable: OnDeviceReadableRecords = try onDeviceAskableArchive(records: records, provider: provider, outputLanguage: selectedNoteLanguage())
-                    self?.updateExchange(id: id) { $0.modelName = askModelName(provider: provider, readable: readable) }
                     _ = try await AINotepadCore.askArchive(
                         question: trimmed, history: history, records: readable.records, userName: userName, language: selectedNoteLanguage(), llm: provider,
                         maxChars: noteLimits(provider: provider).archiveChars, now: Date(), onProgress: onProgress
