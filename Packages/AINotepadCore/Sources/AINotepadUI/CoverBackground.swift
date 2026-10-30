@@ -30,11 +30,13 @@ public struct CoverImage: View {
     }
 }
 
-/// Koyu temada kapağın karartması (0...1): pastel kapak siyah zeminde parlamasın, rengini yine korusun.
-let darkCoverDimming: Double = 0.34
+/// Koyu temada kapağın karartması (0...1): pastel kapak siyah zeminde göz almasın; hafif tutulur, çünkü siyah örtü
+/// pastel renkleri griye, çamura çeker.
+let darkCoverDimming: Double = 0.12
 
-/// Koyu temada kapağın doygunluğu (1: değişmez).
-let darkCoverSaturation: Double = 0.85
+/// Koyu temada kapağın doygunluğu (1: değişmez): karartmanın soldurduğu rengi geri verir, kapak koyu zeminde canlı
+/// ve ışıklı kalır.
+let darkCoverSaturation: Double = 1.1
 
 public extension View {
     /// Kapağı koyu temada kısar (bkz. `DarkCoverDimming`).
@@ -43,8 +45,8 @@ public extension View {
     }
 }
 
-/// Kapağı koyu temada kısar: durgun bir karartma ve biraz daha az doygunluk (canlandırılmaz; açık temada kapak olduğu
-/// gibi kalır). Yalnız büyük kapaklarda (toplantı kapakları, ana sayfadaki kayıt kartı): marka kutuları ve gradyan
+/// Kapağı koyu temada kısar: hafif, durgun bir karartma ve biraz daha fazla doygunluk (canlandırılmaz; açık temada
+/// kapak olduğu gibi kalır). Yalnız büyük kapaklarda (toplantı kapakları, ana sayfadaki kayıt kartı): marka kutuları ve gradyan
 /// panolarındaki koyu simge ve yazılar karartmayla okunmaz olurdu.
 private struct DarkCoverDimming: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme: ColorScheme

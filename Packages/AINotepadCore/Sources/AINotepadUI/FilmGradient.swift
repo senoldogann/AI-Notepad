@@ -1,8 +1,8 @@
 import CoreGraphics
 import SwiftUI
 
-/// Film gradyanının renk ailesi (ElevenLabs gradyanları gibi: açık, pastel, fotoğrafik ışık). Her ailede pastel zemin
-/// ve bulutlar; koyu gölge yok, ışık krem beyazı.
+/// Film gradyanının renk ailesi (ElevenLabs gradyanları gibi: açık, canlı pastel, fotoğrafik ışık). Her ailede doygun
+/// pastel zemin ve bulutlar; koyu gölge ve gri ton yok, ışık krem beyazı.
 public enum FilmPalette: CaseIterable, Sendable {
     case sunset
     case coral
@@ -14,12 +14,12 @@ public enum FilmPalette: CaseIterable, Sendable {
     /// Zemin, sonra bulutlar: açık ton, krem ışık, karşıt pastel, derin (ama yine açık) ton.
     var colors: (base: Color, clouds: [Color]) {
         switch self {
-        case .sunset: (rgb(0xF0AE92), [rgb(0xF7CDB8), rgb(0xFFF3E6), rgb(0xC9A3E0), rgb(0xE9896A)])
-        case .coral: (rgb(0xF0C49B), [rgb(0xF7DCC0), rgb(0xFFF6E8), rgb(0xF2A7B4), rgb(0xE0A36F)])
-        case .ocean: (rgb(0xA9BCEE), [rgb(0xCBD6F6), rgb(0xF4F1FF), rgb(0xE9B9D6), rgb(0x8EA3E6)])
-        case .mint: (rgb(0xA9CDB8), [rgb(0xCCE3D4), rgb(0xF6F7EA), rgb(0xE9D7A8), rgb(0x7FB096)])
-        case .rose: (rgb(0xEBA7B5), [rgb(0xF6CBD4), rgb(0xFFF1EC), rgb(0xB9C9F0), rgb(0xDE8AA3)])
-        case .violet: (rgb(0xC7B3EC), [rgb(0xDED1F5), rgb(0xFFF4EE), rgb(0xF4C0A8), rgb(0xA98BDB)])
+        case .sunset: (rgb(0xF89870), [rgb(0xFFC2A4), rgb(0xFFF3E6), rgb(0xC68FE8), rgb(0xF27A52)])
+        case .coral: (rgb(0xF8B87D), [rgb(0xFFD8AF), rgb(0xFFF6E8), rgb(0xFA8DA0), rgb(0xE89954)])
+        case .ocean: (rgb(0x92ADF6), [rgb(0xC0CFFE), rgb(0xF4F1FF), rgb(0xF1ABD5), rgb(0x6E8DEE)])
+        case .mint: (rgb(0x8FD8B2), [rgb(0xC2EDD6), rgb(0xF6F7EA), rgb(0xF4D88C), rgb(0x55BB8A)])
+        case .rose: (rgb(0xF390A5), [rgb(0xFEC0CD), rgb(0xFFF1EC), rgb(0xA8BFF8), rgb(0xE66C90)])
+        case .violet: (rgb(0xBEA1F4), [rgb(0xDBC9FD), rgb(0xFFF4EE), rgb(0xFCB18E), rgb(0x9A6FE3)])
         }
     }
 }
@@ -110,7 +110,7 @@ public func filmPalette(seed: String) -> FilmPalette {
 }
 
 /// Film gradyanı (ElevenLabs gradyanlarının görünümü): pastel zeminde büyük, çok bulanık renk bulutları ya da çapraz
-/// ışık süzmeleri, krem ışık, ince film greni ve çok hafif sıcak kenar kararması.
+/// ışık süzmeleri, krem ışık ve ince film greni; soluklaştırma ya da kenar kararması yok (renkler griye çalmaz).
 /// Durgundur: akan sürüm her karede ekran dışı yüzey açıp sistemi yoruyordu (boşta bile yüksek işlemci).
 public struct FilmGradient: View {
     let seed: String
@@ -130,7 +130,7 @@ public struct FilmGradient: View {
 /// çözünürlük kaybı görünmez (16 kat daha ucuz).
 let cloudDownscale: CGFloat = 4
 
-/// Katmanlar: bulanık bulutlar → soluklaştırma → gren → kenar kararması.
+/// Katmanlar: bulanık bulutlar → gren.
 private struct FilmLayers: View {
     let seed: String
     let palette: FilmPalette
@@ -177,11 +177,7 @@ private struct FilmLayers: View {
                 .scaleEffect(cloudDownscale, anchor: .topLeading)
             }
             FilmGrain()
-            // Fotoğraf objektifi gibi çok hafif, sıcak kenar kararması.
-            RadialGradient(colors: [.clear, rgb(0x5A3A2A).opacity(0.12)], center: .center, startRadius: 60, endRadius: 720)
-                .blendMode(.multiply)
         }
-        .saturation(0.94)
         .drawingGroup()
         .allowsHitTesting(false)
     }
@@ -193,7 +189,7 @@ struct FilmGrain: View {
         Rectangle()
             .fill(ImagePaint(image: Image(decorative: filmGrainImage, scale: 2)))
             .blendMode(.overlay)
-            .opacity(0.42)
+            .opacity(0.3)
             .allowsHitTesting(false)
     }
 }
