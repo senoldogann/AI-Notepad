@@ -1,30 +1,11 @@
 import AINotepadCore
 import AINotepadUI
-import AppKit
 import SwiftUI
 
 // Abonelik sürümünün kullanım göstergeleri: Ayarlar › Hesap'taki kullanım kartı, kenar çubuğundaki küçük gösterge,
 // ana penceredeki kullanım bildirimleri ve kayıt panelinde kısaltılmış toplantının kalan dakikası. Görünüm sakin ve
-// durağandır (hareketli bulanık gradyan yok); ölçer rengi sitedeki ölçerle aynı.
-
-/// Açık ve koyu görünüme göre renk (onaltılık RGB).
-private func adaptiveColor(light: UInt32, dark: UInt32) -> Color {
-    Color(nsColor: NSColor(name: nil) { (appearance: NSAppearance) -> NSColor in
-        let isDark: Bool = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let value: UInt32 = isDark ? dark : light
-        return NSColor(
-            srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255, blue: CGFloat(value & 0xFF) / 255, alpha: 1
-        )
-    })
-}
-
-/// Ölçerin sıcak dolgusu (sitedeki `.meter`: #e9896a → #c9a3e0).
-private let meterWarmStart: Color = adaptiveColor(light: 0xE9896A, dark: 0xF0AE92)
-private let meterWarmEnd: Color = adaptiveColor(light: 0xC9A3E0, dark: 0xD7BCEB)
-/// %80 ve üstü (sitedeki `--warn`).
-private let meterWarn: Color = adaptiveColor(light: 0x9A5B00, dark: 0xF2B863)
-/// Sınır doldu (sitedeki `--danger`).
-private let meterFull: Color = adaptiveColor(light: 0xB42318, dark: 0xFF8A7A)
+// durağandır (hareketli bulanık gradyan yok). Ölçerin olağan dolgusu nötrdür; renk yalnızca gerçek durumda, uyarılarla
+// aynı renkle (`NoticeSeverity`) gelir.
 
 /// Ayın sıfırlanma günü, ör. "1 Kasım" (sunucu ayı UTC'ye göre sayar; gün UTC'de yazılır). Saf fonksiyondur.
 func hostedResetDayText(now: Date) -> String {
@@ -63,7 +44,41 @@ private func percentText(fraction: Double) -> String {
     fraction.formatted(.percent.precision(.fractionLength(0)).locale(interfaceLocale()))
 }
 
-/// Yuvarlak uçlu kullanım ölçeri: sakin zemin üstünde sıcak dolgu; %80'de uyarı, %100'de dolu rengi.
+/// Kalan deneme toplantısına göre düzey: 1 kaldıysa dikkat, bittiyse dolu. Saf fonksiyondur.
+func hostedTrialLevel(left: Int) -> HostedUsageLevel {
+    switch left {
+    case ...0: .full
+    case 1: .warning
+    default: .normal
+    }
+}
+
+/// Kullanım düzeyinin rengi (ölçer dolgusu ve yanındaki metin): olağan durumda nötr ve soluk; dikkat ve dolu
+/// durumunda uyarılarla aynı renk. Saf fonksiyondur.
+@MainActor
+private func usageLevelColor(level: HostedUsageLevel) -> Color {
+    switch level {
+    case .normal: Theme.muted
+    case .warning: NoticeSeverity.attention.tint
+    case .full: NoticeSeverity.error.tint
+    }
+}
+
+/// Uzun açıklama için bilgi simgesi: üstüne gelince ipucu (Ayarlar'daki bağlantı başlıklarıyla aynı).
+private struct HostedInfoHint: View {
+    let text: LocalizedStringKey
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .appFont(size: 12, weight: .regular)
+            .foregroundStyle(Theme.muted)
+            .hoverHint(text, alignment: .leading, edge: .bottom)
+            .accessibilityElement()
+            .accessibilityLabel(Text(text))
+    }
+}
+
+/// Yuvarlak uçlu kullanım ölçeri: sakin zemin üstünde nötr dolgu; %80'de dikkat, %100'de hata rengi.
 struct HostedUsageMeter: View {
     let fraction: Double
     let height: CGFloat
@@ -75,7 +90,7 @@ struct HostedUsageMeter: View {
                 Capsule().strokeBorder(Theme.line.opacity(0.6), lineWidth: 0.5)
                 if fraction > 0 {
                     Capsule()
-                        .fill(fill)
+                        .fill(usageLevelColor(level: hostedUsageLevel(fraction: fraction)))
                         .frame(width: max(height, proxy.size.width * fraction))
                 }
             }
@@ -85,20 +100,10 @@ struct HostedUsageMeter: View {
         .accessibilityLabel(Text("Kullanım"))
         .accessibilityValue(Text(verbatim: percentText(fraction: fraction)))
     }
-
-    private var fill: AnyShapeStyle {
-        switch hostedUsageLevel(fraction: fraction) {
-        case .normal:
-            AnyShapeStyle(LinearGradient(colors: [meterWarmStart, meterWarmEnd], startPoint: .leading, endPoint: .trailing))
-        case .warning:
-            AnyShapeStyle(meterWarn)
-        case .full:
-            AnyShapeStyle(meterFull)
-        }
-    }
 }
 
-/// Deneme toplantıları: her toplantı bir parça; kalanlar dolu, kullanılanlar boş.
+/// Deneme toplantıları: her toplantı bir parça; kalanlar dolu, kullanılanlar boş. Dolgu nötr; 1 toplantı kaldıysa
+/// dikkat rengi, deneme bittiyse boş parçaların çerçevesi hata renginde.
 struct HostedTrialSegments: View {
     let left: Int
     let total: Int
@@ -108,13 +113,13 @@ struct HostedTrialSegments: View {
         HStack(spacing: height) {
             ForEach(0..<max(total, 1), id: \.self) { (index: Int) in
                 Capsule()
-                    .fill(index < left ? AnyShapeStyle(LinearGradient(colors: [meterWarmStart, meterWarmEnd], startPoint: .leading, endPoint: .trailing)) : AnyShapeStyle(Theme.soft))
-                    .overlay(Capsule().strokeBorder(Theme.line.opacity(0.6), lineWidth: 0.5))
+                    .fill(index < left ? usageLevelColor(level: hostedTrialLevel(left: left)) : Theme.soft)
+                    .overlay(Capsule().strokeBorder(left == 0 ? NoticeSeverity.error.tint.opacity(0.6) : Theme.line.opacity(0.6), lineWidth: 0.5))
                     .frame(height: height)
             }
         }
         .accessibilityElement()
-        .accessibilityLabel(Text(verbatim: hostedTrialText(left: left, total: total)))
+        .accessibilityLabel(Text(verbatim: hostedTrialLeftText(left: left)))
     }
 }
 
@@ -147,24 +152,27 @@ struct HostedUsageCard: View {
     private var subscriber: some View {
         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(verbatim: hostedMonthlyUsageText(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap))
                     .appFont(size: 17, weight: .medium)
+                    .monospacedDigit()
                     .foregroundStyle(Theme.ink)
+                HostedInfoHint(text: "Adil kullanım sınırı: bu ay kaydedilen toplantıların toplam süresi. Ay başında sıfırlanır; sınır dolunca yeni kayıt başlatılamaz.")
                 Spacer(minLength: 8)
                 Text(verbatim: percentText(fraction: fraction))
                     .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(hostedUsageLevel(fraction: fraction) == .normal ? Theme.muted : (fraction >= 1 ? meterFull : meterWarn))
+                    .monospacedDigit()
+                    .foregroundStyle(usageLevelColor(level: hostedUsageLevel(fraction: fraction)))
             }
             HostedUsageMeter(fraction: fraction, height: 10)
-            Text("Adil kullanım sınırı; ay başında sıfırlanır (\(hostedResetDayText(now: Date()))).")
+            Text("Sıfırlanma: \(hostedResetDayText(now: Date()))")
                 .appFont(size: 12, weight: .regular)
+                .monospacedDigit()
                 .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
             if fraction >= 1 {
                 Text("Bu ayki sınır doldu: yeni kayıt başlatılamaz. Notların ve toplantıların erişilebilir kalır.")
                     .appFont(size: 12, weight: .medium)
-                    .foregroundStyle(meterFull)
+                    .foregroundStyle(NoticeSeverity.error.tint)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -172,20 +180,18 @@ struct HostedUsageCard: View {
             let aiFraction: Double = hostedUsageFraction(used: Double(used), cap: Double(cap))
             Divider().overlay(Theme.line)
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("Toplantı dışı yapay zekâ")
                         .appFont(size: 13, weight: .medium)
                         .foregroundStyle(Theme.ink)
+                    HostedInfoHint(text: "Sor, notu yeniden yazma, paylaşım çevirisi ve görev araçları bu paydan düşer; toplantı sırasındakiler düşmez.")
                     Spacer(minLength: 8)
                     Text(verbatim: percentText(fraction: aiFraction))
                         .appFont(size: 12, weight: .medium)
-                        .foregroundStyle(Theme.muted)
+                        .monospacedDigit()
+                        .foregroundStyle(usageLevelColor(level: hostedUsageLevel(fraction: aiFraction)))
                 }
                 HostedUsageMeter(fraction: aiFraction, height: 6)
-                Text("Sor, notu yeniden yazma, paylaşım çevirisi ve görev araçları bu paydan düşer; toplantı sırasındakiler düşmez.")
-                    .appFont(size: 12, weight: .regular)
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -193,14 +199,16 @@ struct HostedUsageCard: View {
     @ViewBuilder
     private func trial(left: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("Ücretsiz deneme")
                     .appFont(size: 17, weight: .medium)
                     .foregroundStyle(Theme.ink)
+                HostedInfoHint(text: "Deneme ilk toplantıyla başlar: \(hostedTrialTermsText(entitlements: entitlements)), hangisi önce dolarsa.")
                 Spacer(minLength: 8)
-                Text(verbatim: hostedTrialText(left: left, total: total))
+                Text(verbatim: hostedTrialLeftText(left: left))
                     .appFont(size: 13, weight: .medium)
-                    .foregroundStyle(Theme.muted)
+                    .monospacedDigit()
+                    .foregroundStyle(usageLevelColor(level: hostedTrialLevel(left: left)))
             }
             HostedTrialSegments(left: left, total: total, height: 8)
             Group {
@@ -209,9 +217,14 @@ struct HostedUsageCard: View {
                 } else if left == 0 {
                     Text("Deneme bitti; yeni toplantılar için abone ol. Toplantıların ve notların bu Mac'te kalır.")
                 } else if let endsAt = entitlements.trialEndsAt {
-                    Text("Deneme \(endsAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))) tarihinde biter (\(hostedTrialTermsText(entitlements: entitlements)), hangisi önce dolarsa).")
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("Bitiş")
+                        Text(verbatim: endsAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale())))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.ink)
+                    }
                 } else {
-                    Text("Deneme ilk toplantıyla başlar: \(hostedTrialTermsText(entitlements: entitlements)), hangisi önce dolarsa.")
+                    Text("İlk toplantıyla başlar")
                 }
             }
             .appFont(size: 12, weight: .regular)
@@ -275,21 +288,23 @@ struct HostedSidebarUsage: View {
                     case .trial(let left, let total):
                         Text(verbatim: left == 0 && account.isTrialRefusedOnThisMac ? String(localized: "Bu Mac'te deneme kullanıldı") : hostedTrialLeftText(left: left))
                             .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(left == 0 ? meterFull : Theme.muted)
+                            .monospacedDigit()
+                            .foregroundStyle(usageLevelColor(level: hostedTrialLevel(left: left)))
                         HostedTrialSegments(left: left, total: total, height: 4)
                     case .expired:
                         Text("Abonelik sona erdi")
                             .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(meterFull)
+                            .foregroundStyle(NoticeSeverity.error.tint)
                     case .paymentOverdue:
                         Text("Ödeme alınamadı")
                             .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(meterFull)
+                            .foregroundStyle(NoticeSeverity.error.tint)
                     case .subscribed, .complimentary, .ending, .grace:
                         let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
                         Text(verbatim: hostedCompactHoursText(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap))
                             .appFont(size: 12, weight: .regular)
-                            .foregroundStyle(Theme.muted)
+                            .monospacedDigit()
+                            .foregroundStyle(usageLevelColor(level: hostedUsageLevel(fraction: fraction)))
                         HostedUsageMeter(fraction: fraction, height: 4)
                     }
                 }
@@ -311,7 +326,7 @@ struct HostedUsageBanner: View {
     let onOpenAccount: @MainActor () -> Void
 
     var body: some View {
-        NoticeBar(severity: isUrgent ? .error : .attention, title: Text(title), detail: Text(verbatim: subtitle), onDismiss: { account.dismissNotice() }) {
+        NoticeBar(severity: isUrgent ? .error : .attention, title: Text(verbatim: title), detail: Text(verbatim: subtitle), onDismiss: { account.dismissNotice() }) {
             switch notice {
             case .trialOneLeft, .trialEnded:
                 Button("Abone ol") {
@@ -334,12 +349,17 @@ struct HostedUsageBanner: View {
         notice == .monthlyFull || notice == .trialEnded
     }
 
-    private var title: LocalizedStringKey {
+    private var title: String {
         switch notice {
-        case .monthlyWarning: "Bu ayki kullanımının yüzde 80'i doldu"
-        case .monthlyFull: "Bu ayki kullanım sınırına ulaştın"
-        case .trialOneLeft: "Ücretsiz denemende 1 toplantı kaldı"
-        case .trialEnded: "Ücretsiz denemen bitti"
+        case .monthlyWarning:
+            guard case .signedIn(let entitlements) = account.state else {
+                return String(localized: "Bu ayki kullanım sınırına yaklaştın")
+            }
+            let fraction: Double = hostedUsageFraction(used: entitlements.monthlyHoursUsed, cap: entitlements.monthlyHoursCap)
+            return String(localized: "Bu ayki kullanım sınırına yaklaştın: \(percentText(fraction: fraction))")
+        case .monthlyFull: return String(localized: "Bu ayki kullanım sınırına ulaştın")
+        case .trialOneLeft: return String(localized: "Ücretsiz denemende 1 toplantı kaldı")
+        case .trialEnded: return String(localized: "Ücretsiz denemen bitti")
         }
     }
 
@@ -372,8 +392,8 @@ struct HostedMeetingLimitStrip: View {
         TimelineView(.periodic(from: .now, by: 15)) { (context: TimelineViewDefaultContext) in
             NoticeBar(
                 severity: .attention,
-                title: Text("Aylık sınırına göre bu toplantıya \(hostedMinutesLeft(deadline: deadline, now: context.date)) dakika kaldı; kayıt \(deadline.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))) itibarıyla biter."),
-                detail: nil,
+                title: Text("Bu toplantıya \(hostedMinutesLeft(deadline: deadline, now: context.date)) dakika kaldı").monospacedDigit(),
+                detail: Text("Aylık sınırına göre kayıt \(deadline.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(interfaceLocale()))) itibarıyla biter.").monospacedDigit(),
                 onDismiss: nil
             ) {
                 EmptyView()

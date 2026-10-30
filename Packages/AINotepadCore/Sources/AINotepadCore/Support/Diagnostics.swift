@@ -6,14 +6,26 @@ import OSLog
 // girmez; son hatalar uygulamanın kendi loglarından (yalnızca bu süreç, bellekte) okunur, yollar, kullanıcı adları ve
 // jetonlar silinir.
 
-/// Tanılamanın bir satırı: etiket ve değer.
+/// Tanılama değerinin durumu: ekranda kötü değer uyarı renginde simgeyle gösterilir; kopyalanan metne yansımaz.
+public enum DiagnosticsStatus: Sendable, Equatable {
+    /// Olağan değer; renksiz.
+    case plain
+    /// Dikkat (reddedilen izin, bilinmeyen durum).
+    case attention
+    /// Hata (ulaşılamayan sunucu, başarısız işlem).
+    case error
+}
+
+/// Tanılamanın bir satırı: etiket, değer ve değerin durumu.
 public struct DiagnosticsItem: Sendable, Equatable {
     public let label: String
     public let value: String
+    public let status: DiagnosticsStatus
 
-    public init(label: String, value: String) {
+    public init(label: String, value: String, status: DiagnosticsStatus) {
         self.label = label
         self.value = value
+        self.status = status
     }
 }
 

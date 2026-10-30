@@ -291,7 +291,7 @@ struct HostedUpsellSheet: View {
             guard case .signedIn(let entitlements) = account.state, case .trial(let left, _) = hostedPlanStatus(entitlements: entitlements) else {
                 return String(localized: "Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
             }
-            return String(localized: "Ücretsiz denemende \(left) toplantı kaldı. Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
+            return String(localized: "Ücretsiz deneme: \(hostedTrialLeftText(left: left)). Abone olunca her toplantının notu böyle kendiliğinden hazırlanır.")
         case .trialEnding:
             return String(localized: "Kesintisiz devam etmek için bir plan seç. Toplantıların ve notların bu Mac'te kalır.")
         case .trialEnded:
@@ -299,7 +299,12 @@ struct HostedUpsellSheet: View {
         case .subscriptionRequired:
             return subscriptionRequiredReason
         case .planChoice:
-            return String(localized: "Canlı metin, hazır not ve görevler; ayda 10 saate kadar kayıt. İstediğin zaman iptal edebilirsin.")
+            // Saat sınırı sunucudan gelir; hak durumu bilinmiyorsa sayı yazılmaz.
+            guard case .signedIn(let entitlements) = account.state else {
+                return String(localized: "Canlı metin, hazır not ve görevler. İstediğin zaman iptal edebilirsin.")
+            }
+            let hours: String = entitlements.monthlyHoursCap.formatted(.number.precision(.fractionLength(0...1)).locale(interfaceLocale()))
+            return String(localized: "Canlı metin, hazır not ve görevler; ayda \(hours) saate kadar kayıt. İstediğin zaman iptal edebilirsin.")
         }
     }
 
@@ -386,6 +391,7 @@ struct HostedPlanPicker: View {
                 }
                 Text(verbatim: hostedPlanPriceText(plan: plan))
                     .appFont(size: 18, weight: .medium)
+                    .monospacedDigit()
                     .foregroundStyle(Theme.ink)
                     .padding(.top, 2)
                 Text(verbatim: caption(plan: plan))
@@ -441,6 +447,7 @@ struct HostedTrialValueTiles: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: number)
                 .appFont(size: 24, weight: .medium)
+                .monospacedDigit()
                 .foregroundStyle(Theme.ink)
             Text(label)
                 .appFont(size: 11, weight: .regular)

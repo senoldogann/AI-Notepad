@@ -410,6 +410,7 @@ private struct Sidebar: View {
                 if let badge {
                     Text("\(badge)")
                         .appFont(size: 11, weight: .medium)
+                        .monospacedDigit()
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
@@ -1282,23 +1283,28 @@ private struct MeetingCover: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .padding(.top, 10)
-            Text(coverSubtitle(mine: mine))
+            coverSubtitle(mine: mine)
                 .appFont(size: 12, weight: .regular)
-                .foregroundStyle(record.status == .failed ? NoticeSeverity.error.tint : Theme.muted)
+                .foregroundStyle(Theme.muted)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func coverSubtitle(mine: Int) -> String {
+    /// "tarih · durum" ya da "tarih · görev sayısı"; hata durumunda yalnızca durum kısmı hata renginde.
+    private func coverSubtitle(mine: Int) -> Text {
         let date: String = record.startedAt.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))
         if isProcessing || record.status == .processing {
-            return date + " · " + String(localized: "İşleniyor")
+            return Text(verbatim: date + " · " + String(localized: "İşleniyor"))
         }
         if record.status == .failed {
-            return date + " · " + String(localized: "Hata")
+            var line: AttributedString = AttributedString(date + " · ")
+            var status: AttributedString = AttributedString(String(localized: "Hata"))
+            status.foregroundColor = NoticeSeverity.error.tint
+            line += status
+            return Text(line)
         }
-        return mine > 0 ? date + " · " + String(localized: "\(mine) görev") : date
+        return Text(verbatim: mine > 0 ? date + " · " + String(localized: "\(mine) görev") : date)
     }
 }
 
@@ -1327,16 +1333,15 @@ private struct TasksPage: View {
                     PillPicker(selection: $showsDone, options: [
                         (false, "Açık · \(all.count - doneCount)"), (true, "Tamamlanan · \(doneCount)"),
                     ])
+                    .monospacedDigit()
                     .fixedSize()
                 }
                 if groups.isEmpty {
                     if showsDone {
-                        EmptyStateHero(
+                        EmptyStateCard(
                             symbol: "checkmark.circle", title: "Tamamlanan görev yok",
-                            message: "Bir görevin dairesine tıklayınca buraya taşınır; bitirdiklerin burada birikir.", palette: .sunset, steps: []
-                        ) {
-                            EmptyView()
-                        }
+                            message: "Bir görevin dairesine tıklayınca buraya taşınır; bitirdiklerin burada birikir."
+                        )
                     } else if doneCount > 0 {
                         EmptyStateHero(
                             symbol: "party.popper.fill", title: "Açık görevin kalmadı",
@@ -1454,32 +1459,30 @@ private struct MeetingsSplit: View {
                         // Toplantı değişince ad alanları gibi durumlar sıfırlansın.
                         .id(record.id)
                         .transition(.opacity)
-                } else {
+                } else if model.meetings.isEmpty {
                     ScrollView {
-                        if model.meetings.isEmpty {
-                            EmptyStateHero(
-                                symbol: "waveform", title: "Henüz toplantı yok",
-                                message: "Kaydı başlat ya da bir ses/video dosyasını soldaki listeye sürükle; bitince notu, görevleri ve konuşmacılı transkripti burada görürsün.",
-                                palette: .sunset,
-                                steps: [
-                                    EmptyStateStep(symbol: "record.circle", title: "Kaydı başlat"),
-                                    EmptyStateStep(symbol: "square.and.arrow.down", title: "ya da dosya sürükle"),
-                                    EmptyStateStep(symbol: "doc.text", title: "Not burada"),
-                                ]
-                            ) {
-                                EmptyView()
-                            }
-                        } else {
-                            EmptyStateHero(
-                                symbol: "doc.text.magnifyingglass", title: "Bir toplantı seç",
-                                message: "Notu, görevleri, konu akışını ve konuşmacılı transkripti burada görürsün.", palette: .sunset, steps: []
-                            ) {
-                                EmptyView()
-                            }
+                        EmptyStateHero(
+                            symbol: "waveform", title: "Henüz toplantı yok",
+                            message: "Kaydı başlat ya da bir ses/video dosyasını soldaki listeye sürükle; bitince notu, görevleri ve konuşmacılı transkripti burada görürsün.",
+                            palette: .sunset,
+                            steps: [
+                                EmptyStateStep(symbol: "record.circle", title: "Kaydı başlat"),
+                                EmptyStateStep(symbol: "square.and.arrow.down", title: "ya da dosya sürükle"),
+                                EmptyStateStep(symbol: "doc.text", title: "Not burada"),
+                            ]
+                        ) {
+                            EmptyView()
                         }
                     }
                     .scrollIndicators(.hidden)
                     .padding(.top, 40)
+                    .transition(.opacity)
+                } else {
+                    // Seçim yokken küçük yer tutucu: büyük sahne yalnızca hiç toplantı yokken.
+                    EmptyStatePlaceholder(
+                        symbol: "doc.text.magnifyingglass", title: "Bir toplantı seç",
+                        message: "Notu, görevleri, konu akışını ve konuşmacılı transkripti burada görürsün."
+                    )
                     .transition(.opacity)
                 }
             }
@@ -1528,7 +1531,7 @@ private struct SidebarFolders: View {
                         Text(folder.name).appFont(size: 13, weight: isSelected ? .medium : .regular).lineLimit(1)
                         Spacer(minLength: 0)
                         if folder.count > 0 {
-                            Text("\(folder.count)").appFont(size: 11, weight: .medium).foregroundStyle(Theme.muted)
+                            Text("\(folder.count)").appFont(size: 11, weight: .medium).monospacedDigit().foregroundStyle(Theme.muted)
                         }
                     }
                     .foregroundStyle(Theme.ink)

@@ -33,7 +33,7 @@ import Testing
     @Test func diagnosticsFitFeedbackLimit() throws {
         let report: ReportRequest = try feedbackReport(message: "Merhaba", email: "", diagnostics: nil)
         let long: String = diagnosticsText(
-            sections: [DiagnosticsSection(title: "Uygulama", items: (0..<500).map { DiagnosticsItem(label: "satır \($0)", value: "değer") })],
+            sections: [DiagnosticsSection(title: "Uygulama", items: (0..<500).map { DiagnosticsItem(label: "satır \($0)", value: "değer", status: .plain) })],
             generatedAt: Date(timeIntervalSince1970: 0)
         )
         let appended: ReportRequest = try appendingDiagnostics(report: report, diagnosticsText: long, limit: reportMessageLimit)

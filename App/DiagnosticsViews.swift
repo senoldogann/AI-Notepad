@@ -23,6 +23,16 @@ func diagnosticsUserNames() -> [String] {
     [NSUserName(), NSFullUserName()]
 }
 
+/// Ekrandaki tarih: arayüz dilinde gün ve saat. Saf fonksiyondur.
+private func diagnosticsScreenDate(date: Date) -> String {
+    date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened).locale(interfaceLocale()))
+}
+
+/// Kopyalanan tanılamadaki tarih: ISO 8601 (destekte saat dilimi karışmasın). Saf fonksiyondur.
+private func diagnosticsCopyDate(date: Date) -> String {
+    date.formatted(.iso8601)
+}
+
 /// Tanılamada denetlenen sunucu: abonelik sürümünde hesabın sunucusu, geliştirici sürümünde rapor sunucusu.
 private func diagnosticsAPIBase() throws -> URL {
     #if HOSTED_EDITION
@@ -41,19 +51,20 @@ private func appDiagnostics(bundle: Bundle) -> DiagnosticsSection {
     #else
     let edition: String = String(localized: "Geliştirici sürümü")
     #endif
-    let model: String
+    let modelLabel: String = String(localized: "Mac modeli")
+    let model: DiagnosticsItem
     do {
-        model = try macModelIdentifier()
+        model = DiagnosticsItem(label: modelLabel, value: try macModelIdentifier(), status: .plain)
     } catch {
         diagnosticsLogger.error("Mac modeli okunamadı, hata: \(String(describing: error), privacy: .private)")
-        model = String(localized: "okunamadı")
+        model = DiagnosticsItem(label: modelLabel, value: String(localized: "okunamadı"), status: .error)
     }
     return DiagnosticsSection(title: String(localized: "Uygulama"), items: [
-        DiagnosticsItem(label: String(localized: "Ad"), value: appName),
-        DiagnosticsItem(label: String(localized: "Sürüm"), value: appVersionText(version: version, build: build)),
-        DiagnosticsItem(label: String(localized: "Tür"), value: edition),
-        DiagnosticsItem(label: String(localized: "Sistem"), value: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"),
-        DiagnosticsItem(label: String(localized: "Mac modeli"), value: model),
+        DiagnosticsItem(label: String(localized: "Ad"), value: appName, status: .plain),
+        DiagnosticsItem(label: String(localized: "Sürüm"), value: appVersionText(version: version, build: build), status: .plain),
+        DiagnosticsItem(label: String(localized: "Tür"), value: edition, status: .plain),
+        DiagnosticsItem(label: String(localized: "Sistem"), value: "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)", status: .plain),
+        model,
     ])
 }
 
@@ -68,59 +79,63 @@ private func serverDiagnostics(base: Result<URL, any Error>, health: APIHealth?)
         url = value
     case .failure(let error):
         return DiagnosticsSection(title: title, items: [
-            DiagnosticsItem(label: String(localized: "Adres"), value: redactedDiagnosticText(text: userFacingMessage(error: error), userNames: diagnosticsUserNames())),
+            DiagnosticsItem(label: String(localized: "Adres"), value: redactedDiagnosticText(text: userFacingMessage(error: error), userNames: diagnosticsUserNames()), status: .error),
         ])
     }
-    let result: String
+    let accessLabel: String = String(localized: "Erişim")
+    let access: DiagnosticsItem
     switch health {
     case .none:
-        result = String(localized: "Denetleniyor…")
+        access = DiagnosticsItem(label: accessLabel, value: String(localized: "Denetleniyor…"), status: .plain)
     case .reachable(let latencyMs):
-        result = String(localized: "Erişilebilir, \(latencyMs) ms")
+        access = DiagnosticsItem(label: accessLabel, value: String(localized: "Erişilebilir, \(latencyMs) ms"), status: .plain)
     case .unhealthy(let status, let latencyMs):
-        result = String(localized: "Yanıt verdi ama sağlıklı değil (HTTP \(status)), \(latencyMs) ms")
+        access = DiagnosticsItem(label: accessLabel, value: String(localized: "Yanıt verdi ama sağlıklı değil (HTTP \(status)), \(latencyMs) ms"), status: .attention)
     case .unreachable(let reason):
-        result = String(localized: "Ulaşılamadı (\(reason))")
+        access = DiagnosticsItem(label: accessLabel, value: String(localized: "Ulaşılamadı (\(reason))"), status: .error)
     }
     return DiagnosticsSection(title: title, items: [
-        DiagnosticsItem(label: String(localized: "Adres"), value: url.host() ?? url.absoluteString),
-        DiagnosticsItem(label: String(localized: "Erişim"), value: result),
+        DiagnosticsItem(label: String(localized: "Adres"), value: url.host() ?? url.absoluteString, status: .plain),
+        access,
     ])
 }
 #endif
 
-/// Mikrofon izninin metni.
-private func microphoneText(permission: AVAudioApplication.recordPermission) -> String {
+/// Mikrofon izninin satırı; reddedildiyse hata (kayıt yapılamaz).
+private func microphoneDiagnostics(permission: AVAudioApplication.recordPermission) -> DiagnosticsItem {
+    let label: String = String(localized: "Mikrofon")
     switch permission {
-    case .granted: String(localized: "İzin verildi")
-    case .denied: String(localized: "Reddedildi")
-    case .undetermined: String(localized: "Henüz sorulmadı")
-    @unknown default: String(localized: "Bilinmiyor")
+    case .granted: return DiagnosticsItem(label: label, value: String(localized: "İzin verildi"), status: .plain)
+    case .denied: return DiagnosticsItem(label: label, value: String(localized: "Reddedildi"), status: .error)
+    case .undetermined: return DiagnosticsItem(label: label, value: String(localized: "Henüz sorulmadı"), status: .plain)
+    @unknown default: return DiagnosticsItem(label: label, value: String(localized: "Bilinmiyor"), status: .plain)
     }
 }
 
-/// Takvim ya da anımsatıcı izninin metni.
-private func eventKitText(status: EKAuthorizationStatus) -> String {
+/// Takvim ya da anımsatıcı izninin satırı; reddedildiyse ya da kısıtlıysa dikkat.
+private func eventKitDiagnostics(label: String, status: EKAuthorizationStatus) -> DiagnosticsItem {
     switch status {
-    case .fullAccess: String(localized: "Tam erişim")
-    case .writeOnly: String(localized: "Yalnızca yazma")
-    case .denied: String(localized: "Reddedildi")
-    case .restricted: String(localized: "Kısıtlı")
-    case .notDetermined: String(localized: "Henüz sorulmadı")
-    @unknown default: String(localized: "Bilinmiyor")
+    case .fullAccess: DiagnosticsItem(label: label, value: String(localized: "Tam erişim"), status: .plain)
+    case .writeOnly: DiagnosticsItem(label: label, value: String(localized: "Yalnızca yazma"), status: .plain)
+    case .denied: DiagnosticsItem(label: label, value: String(localized: "Reddedildi"), status: .attention)
+    case .restricted: DiagnosticsItem(label: label, value: String(localized: "Kısıtlı"), status: .attention)
+    case .notDetermined: DiagnosticsItem(label: label, value: String(localized: "Henüz sorulmadı"), status: .plain)
+    @unknown default: DiagnosticsItem(label: label, value: String(localized: "Bilinmiyor"), status: .plain)
     }
 }
 
-/// Apple Notlar'ı denetleme (Apple Events) izni; sormadan okunur (Notlar kapalıysa macOS durumu söylemez).
-private func appleEventsText() -> String {
+/// Apple Notlar'ı denetleme (Apple Events) izninin satırı; sormadan okunur (Notlar kapalıysa macOS durumu söylemez).
+/// Reddedildiyse dikkat.
+private func appleEventsDiagnostics() -> DiagnosticsItem {
+    let label: String = String(localized: "Apple Notlar (Apple Events)")
     let target: NSAppleEventDescriptor = NSAppleEventDescriptor(bundleIdentifier: notesBundleID)
     let status: OSStatus = AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, false)
     switch status {
-    case noErr: return String(localized: "İzin verildi")
-    case OSStatus(errAEEventNotPermitted): return String(localized: "Reddedildi")
-    case OSStatus(errAEEventWouldRequireUserConsent): return String(localized: "Henüz sorulmadı")
-    case OSStatus(procNotFound): return String(localized: "Notlar açık değil; durum okunamıyor")
-    default: return String(localized: "Bilinmiyor (\(status))")
+    case noErr: return DiagnosticsItem(label: label, value: String(localized: "İzin verildi"), status: .plain)
+    case OSStatus(errAEEventNotPermitted): return DiagnosticsItem(label: label, value: String(localized: "Reddedildi"), status: .attention)
+    case OSStatus(errAEEventWouldRequireUserConsent): return DiagnosticsItem(label: label, value: String(localized: "Henüz sorulmadı"), status: .plain)
+    case OSStatus(procNotFound): return DiagnosticsItem(label: label, value: String(localized: "Notlar açık değil; durum okunamıyor"), status: .plain)
+    default: return DiagnosticsItem(label: label, value: String(localized: "Bilinmiyor (\(status))"), status: .plain)
     }
 }
 
@@ -128,11 +143,11 @@ private func appleEventsText() -> String {
 @MainActor
 private func permissionDiagnostics(model: AppModel) -> DiagnosticsSection {
     DiagnosticsSection(title: String(localized: "İzinler"), items: [
-        DiagnosticsItem(label: String(localized: "Mikrofon"), value: microphoneText(permission: model.microphonePermission)),
-        DiagnosticsItem(label: String(localized: "Sistem sesi"), value: String(localized: "macOS bu iznin durumunu bildirmiyor; ilk kayıtta sorulur")),
-        DiagnosticsItem(label: String(localized: "Takvim"), value: eventKitText(status: EKEventStore.authorizationStatus(for: .event))),
-        DiagnosticsItem(label: String(localized: "Anımsatıcılar"), value: eventKitText(status: EKEventStore.authorizationStatus(for: .reminder))),
-        DiagnosticsItem(label: String(localized: "Apple Notlar (Apple Events)"), value: appleEventsText()),
+        microphoneDiagnostics(permission: model.microphonePermission),
+        DiagnosticsItem(label: String(localized: "Sistem sesi"), value: String(localized: "macOS bu iznin durumunu bildirmiyor; ilk kayıtta sorulur"), status: .plain),
+        eventKitDiagnostics(label: String(localized: "Takvim"), status: EKEventStore.authorizationStatus(for: .event)),
+        eventKitDiagnostics(label: String(localized: "Anımsatıcılar"), status: EKEventStore.authorizationStatus(for: .reminder)),
+        appleEventsDiagnostics(),
     ])
 }
 
@@ -143,38 +158,41 @@ private func transcriptionDiagnostics(model: AppModel) -> DiagnosticsSection {
     #if HOSTED_EDITION
     return hostedLiveDiagnostics(model: model, account: .shared)
     #else
-    let status: String
+    let modelLabel: String = String(localized: "Model")
+    let modelItem: DiagnosticsItem
     switch (model.liveEngine, model.modelStatus) {
     case (.deepgram, _):
-        status = String(localized: "Bulut; model gerekmez")
+        modelItem = DiagnosticsItem(label: modelLabel, value: String(localized: "Bulut; model gerekmez"), status: .plain)
     case (_, .notLoaded):
-        status = String(localized: "İndirilmedi; Mac'te canlı metin gerekince indirilir")
+        modelItem = DiagnosticsItem(label: modelLabel, value: String(localized: "İndirilmedi; Mac'te canlı metin gerekince indirilir"), status: .plain)
     case (_, .loading):
-        status = String(localized: "İndiriliyor ya da yükleniyor")
+        modelItem = DiagnosticsItem(label: modelLabel, value: String(localized: "İndiriliyor ya da yükleniyor"), status: .plain)
     case (_, .ready):
-        status = String(localized: "Hazır")
+        modelItem = DiagnosticsItem(label: modelLabel, value: String(localized: "Hazır"), status: .plain)
     case (_, .failed(let message)):
-        status = String(localized: "Başarısız: \(redactedDiagnosticText(text: message, userNames: diagnosticsUserNames()))")
+        modelItem = DiagnosticsItem(
+            label: modelLabel, value: String(localized: "Başarısız: \(redactedDiagnosticText(text: message, userNames: diagnosticsUserNames()))"), status: .error
+        )
     }
     return DiagnosticsSection(title: String(localized: "Canlı metin"), items: [
-        DiagnosticsItem(label: String(localized: "Motor"), value: model.liveEngine.rawValue),
-        DiagnosticsItem(label: String(localized: "Model"), value: status),
+        DiagnosticsItem(label: String(localized: "Motor"), value: model.liveEngine.rawValue, status: .plain),
+        modelItem,
     ])
     #endif
 }
 
-/// Güncelleme bölümü: son denetim, otomatik indirme ve bekleyen güncelleme.
+/// Güncelleme bölümü: son denetim (`dateText` biçiminde), otomatik indirme ve bekleyen güncelleme.
 @MainActor
-private func updateDiagnostics(updater: AppUpdater) -> DiagnosticsSection {
+private func updateDiagnostics(updater: AppUpdater, dateText: (Date) -> String) -> DiagnosticsSection {
     let title: String = String(localized: "Güncelleme")
     guard updater.isEnabled else {
-        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Durum"), value: String(localized: "Kapalı (imza anahtarı yok)"))])
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Durum"), value: String(localized: "Kapalı (imza anahtarı yok)"), status: .plain)])
     }
     let pending: String = updater.availableUpdate.map { updateHeadline(update: $0) } ?? String(localized: "Yok")
     return DiagnosticsSection(title: title, items: [
-        DiagnosticsItem(label: String(localized: "Son denetim"), value: updater.lastCheckDate.map { $0.formatted(.iso8601) } ?? String(localized: "Henüz denetlenmedi")),
-        DiagnosticsItem(label: String(localized: "Otomatik indirme"), value: updater.automaticallyUpdates ? String(localized: "Etkin") : String(localized: "Kapalı")),
-        DiagnosticsItem(label: String(localized: "Bekleyen güncelleme"), value: pending),
+        DiagnosticsItem(label: String(localized: "Son denetim"), value: updater.lastCheckDate.map(dateText) ?? String(localized: "Henüz denetlenmedi"), status: .plain),
+        DiagnosticsItem(label: String(localized: "Otomatik indirme"), value: updater.automaticallyUpdates ? String(localized: "Etkin") : String(localized: "Kapalı"), status: .plain),
+        DiagnosticsItem(label: String(localized: "Bekleyen güncelleme"), value: pending, status: .plain),
     ])
 }
 
@@ -185,19 +203,19 @@ private func errorDiagnostics(errors: Result<[DiagnosticErrorEntry], any Error>)
     let title: String = String(localized: "Son hatalar")
     switch errors {
     case .failure:
-        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunamadı"))])
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunamadı"), status: .error)])
     case .success(let entries) where entries.isEmpty:
-        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Bu oturumda hata yok"))])
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Bu oturumda hata yok"), status: .plain)])
     case .success(let entries):
         return DiagnosticsSection(title: title, items: entries.map { (entry: DiagnosticErrorEntry) -> DiagnosticsItem in
-            DiagnosticsItem(label: entry.date.formatted(date: .abbreviated, time: .standard), value: diagnosticErrorArea(code: entry.code))
+            DiagnosticsItem(label: entry.date.formatted(date: .abbreviated, time: .standard), value: diagnosticErrorArea(code: entry.code), status: .plain)
         })
     }
 }
 
 /// Son hatalar bölümü, günlük henüz okunurken: "hata yok" denmez (yanlış tanı olurdu).
 private func pendingErrorDiagnostics() -> DiagnosticsSection {
-    DiagnosticsSection(title: String(localized: "Son hatalar"), items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunuyor…"))])
+    DiagnosticsSection(title: String(localized: "Son hatalar"), items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Okunuyor…"), status: .plain)])
 }
 
 /// Son hatalar bölümü, kopyalanan tanılamada (destek için). Abonelik sürümünde ekrandakiyle aynı (zaman ve alan): kod,
@@ -211,13 +229,13 @@ private func errorDiagnosticsForSupport(errors: Result<[DiagnosticErrorEntry], a
     switch errors {
     case .failure(let error):
         return DiagnosticsSection(title: title, items: [
-            DiagnosticsItem(label: String(localized: "Okunamadı"), value: redactedDiagnosticText(text: String(describing: error), userNames: diagnosticsUserNames())),
+            DiagnosticsItem(label: String(localized: "Okunamadı"), value: redactedDiagnosticText(text: String(describing: error), userNames: diagnosticsUserNames()), status: .error),
         ])
     case .success(let entries) where entries.isEmpty:
-        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Bu oturumda hata yok"))])
+        return DiagnosticsSection(title: title, items: [DiagnosticsItem(label: String(localized: "Kayıt"), value: String(localized: "Bu oturumda hata yok"), status: .plain)])
     case .success(let entries):
         return DiagnosticsSection(title: title, items: entries.map { (entry: DiagnosticErrorEntry) -> DiagnosticsItem in
-            DiagnosticsItem(label: "\(entry.date.formatted(.iso8601)) \(entry.code)", value: entry.message)
+            DiagnosticsItem(label: "\(entry.date.formatted(.iso8601)) \(entry.code)", value: entry.message, status: .plain)
         })
     }
     #endif
@@ -267,21 +285,22 @@ private func probeAPI(base: Result<URL, any Error>) async -> APIHealth? {
     }
 }
 
-/// Tüm bölümler (sunucu denetimi ve son hatalar dahil); arayüz ve kopyalanan metin bunlardan üretilir. Abonelik
-/// sürümünde sunucu yerine yalnızca bağlantı durumu yer alır.
+/// Tüm bölümler (sunucu denetimi ve son hatalar dahil); arayüz ve kopyalanan metin bunlardan üretilir, tarihler
+/// `dateText` biçiminde (ekranda yerel, kopyalanan metinde ISO 8601). Abonelik sürümünde sunucu yerine yalnızca
+/// bağlantı durumu yer alır.
 @MainActor
-func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?, errors: DiagnosticsSection) -> [DiagnosticsSection] {
+func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?, errors: DiagnosticsSection, dateText: (Date) -> String) -> [DiagnosticsSection] {
     let base: Result<URL, any Error> = Result { try diagnosticsAPIBase() }
     var sections: [DiagnosticsSection] = [appDiagnostics(bundle: .main)]
     #if HOSTED_EDITION
-    sections += [hostedAccountDiagnostics(account: .shared), hostedConnectionDiagnostics(base: base, health: health)]
+    sections += [hostedAccountDiagnostics(account: .shared, dateText: dateText), hostedConnectionDiagnostics(base: base, health: health)]
     #else
     sections.append(serverDiagnostics(base: base, health: health))
     #endif
     sections += [
         permissionDiagnostics(model: model),
         transcriptionDiagnostics(model: model),
-        updateDiagnostics(updater: updater),
+        updateDiagnostics(updater: updater, dateText: dateText),
         errors,
     ]
     return sections
@@ -292,7 +311,10 @@ func collectDiagnostics(model: AppModel, updater: AppUpdater, health: APIHealth?
 func diagnosticsReportText(model: AppModel, updater: AppUpdater) async -> String {
     let health: APIHealth? = await probeAPI(base: Result { try diagnosticsAPIBase() })
     let errors: Result<[DiagnosticErrorEntry], any Error> = await loadAppErrors()
-    return diagnosticsText(sections: collectDiagnostics(model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors)), generatedAt: Date())
+    let sections: [DiagnosticsSection] = collectDiagnostics(
+        model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors), dateText: diagnosticsCopyDate
+    )
+    return diagnosticsText(sections: sections, generatedAt: Date())
 }
 
 /// Metni panoya koyar.
@@ -302,8 +324,19 @@ private func copyToPasteboard(text: String) {
     NSPasteboard.general.setString(text, forType: .string)
 }
 
+/// Değerin durumuna karşılık gelen uyarı önemi; olağan değerde nil (simge yok). Saf fonksiyondur.
+private func noticeSeverity(status: DiagnosticsStatus) -> NoticeSeverity? {
+    switch status {
+    case .plain: nil
+    case .attention: .attention
+    case .error: .error
+    }
+}
+
 /// Bölümün maddeleri iki sütunlu tabloda: solda soluk etiket, sağda değer (seçilebilir). Etiket sütunu her bölümde
 /// aynı genişlikte (değerler bölümler boyunca alt alta hizalı); uzun etiket ve değerler kendi sütununda alta kayar.
+/// Kötü değer (reddedilen izin, ulaşılamayan sunucu, başarısız işlem) uyarılarla aynı renkte simgeyle gösterilir; iyi
+/// değer sade kalır.
 private struct DiagnosticsGrid: View {
     let items: [DiagnosticsItem]
 
@@ -316,11 +349,19 @@ private struct DiagnosticsGrid: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: 190, alignment: .leading)
                         .gridColumnAlignment(.leading)
-                    Text(verbatim: item.element.value)
-                        .foregroundStyle(Theme.ink)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if let severity = noticeSeverity(status: item.element.status) {
+                            Image(systemName: severity.symbol)
+                                .imageScale(.small)
+                                .foregroundStyle(severity.tint)
+                                .accessibilityHidden(true)
+                        }
+                        Text(verbatim: item.element.value)
+                            .foregroundStyle(Theme.ink)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -344,7 +385,7 @@ struct DiagnosticsSettings: View {
         let errorSection: DiagnosticsSection = errors.map { (loaded: Result<[DiagnosticErrorEntry], any Error>) -> DiagnosticsSection in
             errorDiagnostics(errors: loaded)
         } ?? pendingErrorDiagnostics()
-        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errorSection)
+        let sections: [DiagnosticsSection] = collectDiagnostics(model: model, updater: updater, health: health, errors: errorSection, dateText: diagnosticsScreenDate)
         VStack(alignment: .leading, spacing: 0) {
             SettingsRow(title: Text("Tanılama")) {
                 Text("Sorun bildirirken işe yarar: sürüm, sistem, hesap durumu, bağlantı, izinler, canlı metin, güncelleme ve son hatalar. Ses, metin, not, anahtar ve jeton yok; kopyalamadıkça hiçbir yere gitmez.")
@@ -361,7 +402,7 @@ struct DiagnosticsSettings: View {
                             return
                         }
                         let support: [DiagnosticsSection] = collectDiagnostics(
-                            model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors)
+                            model: model, updater: updater, health: health, errors: errorDiagnosticsForSupport(errors: errors), dateText: diagnosticsCopyDate
                         )
                         copyToPasteboard(text: diagnosticsText(sections: support, generatedAt: Date()))
                         copied = true
