@@ -289,8 +289,8 @@
         "GITHUB_BLOG_BRANCH": "main",
         // Bkz. üstteki geliştirme `vars` açıklaması. Sahibin dolduracağı değerler: Cloudflare panelinin hesap kimliği ve
         // Web Analytics › gistsmith.com sitesinin etiketi (`siteTag`); gizli CF_ANALYTICS_TOKEN ayrıca girilir.
-        "CF_ANALYTICS_ACCOUNT_ID": "",
-        "CF_ANALYTICS_SITE_TAG": ""
+        "CF_ANALYTICS_ACCOUNT_ID": "08c1a1c10bb04ae06756edf49367cedb",
+        "CF_ANALYTICS_SITE_TAG": "9ed252de0ad445e5823a00c61647f96b"
       }
     }
   }
