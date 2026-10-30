@@ -21,8 +21,14 @@ export const crashPayloadMaxBytes: number = 64 * 1024;
  */
 export const reportBodyMaxBytes: number = 160 * 1024;
 
-/** Hesap başına günde (UTC) en çok kabul edilen rapor (geri bildirim ve çökme hesap ister; iletişim formu hesapsızdır). */
+/** Hesap başına günde (UTC) en çok kabul edilen rapor (hesapsız raporlar `anonymousReportBudgetShare` ile sınırlıdır). */
 export const reportsPerUserPerDay: number = 20;
+
+/**
+ * Hesapsız geri bildirim ve çökme raporlarının (geliştirici sürümü, iPhone) tür bütçesinden kullanabildiği pay (payda):
+ * bütçenin dörtte biri. Jetonsuz rapor yağmuru hesaplı kullanıcıların raporlarını aç bırakmaz.
+ */
+export const anonymousReportBudgetShare: number = 4;
 
 /** Yönetici listesinde sayfa boyu. */
 export const reportPageSize: number = 50;
@@ -208,9 +214,10 @@ export function utcDayStartMs(now: Date): number {
 }
 
 /**
- * Raporu saklar ve kimliğini döndürür. Çökme yükü en çok `crashPayloadMaxBytes` (`413 payload_too_large`). İki günlük
- * sınır (UTC günü) eklemeyle aynı ifadededir, eşzamanlı istekler aşamaz:
- * - hesap başına `reportsPerUserPerDay` rapor (hesapsız iletişim formu hariç; o Turnstile ve IP sınırıyla korunur);
+ * Raporu saklar ve kimliğini döndürür. Çökme yükü en çok `crashPayloadMaxBytes` (`413 payload_too_large`). Günlük
+ * sınırlar (UTC günü) eklemeyle aynı ifadededir, eşzamanlı istekler aşamaz:
+ * - hesap başına `reportsPerUserPerDay` rapor (iletişim formu Turnstile ve IP sınırıyla korunur);
+ * - hesapsız geri bildirim ve çökme raporları birlikte tür bütçesinin en çok 1/`anonymousReportBudgetShare`'ını;
  * - tür başına (geri bildirim, çökme, iletişim ayrı) `REPORT_BYTES_PER_DAY` bayt: bir tür (ör. çökme yağmuru) diğerlerini
  *   aç bırakmaz.
  * Aşılırsa `daily_cap_reached` (429). Log içerik, e-posta ya da yük taşımaz.
@@ -227,7 +234,9 @@ export async function createReport(db: D1Database, config: Config, input: Report
       `INSERT INTO reports (id, kind, status, created_at, user_id, email, app_version, os, message, payload, summary, size_bytes)
        SELECT ?1, ?2, 'open', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
        WHERE (SELECT COALESCE(SUM(size_bytes), 0) FROM reports WHERE kind = ?2 AND created_at >= ?12) + ?11 <= ?13
-         AND (?4 IS NULL OR (SELECT COUNT(*) FROM reports WHERE user_id = ?4 AND created_at >= ?12) < ?14)`,
+         AND (?4 IS NULL OR (SELECT COUNT(*) FROM reports WHERE user_id = ?4 AND created_at >= ?12) < ?14)
+         AND (?4 IS NOT NULL OR ?2 = 'contact'
+           OR (SELECT COALESCE(SUM(size_bytes), 0) FROM reports WHERE kind = ?2 AND user_id IS NULL AND created_at >= ?12) + ?11 <= ?13 / ?15)`,
     )
     .bind(
       id,
@@ -244,6 +253,7 @@ export async function createReport(db: D1Database, config: Config, input: Report
       dayStart,
       config.reportBytesPerDay,
       reportsPerUserPerDay,
+      anonymousReportBudgetShare,
     )
     .run();
   if (inserted.meta.changes !== 1) {

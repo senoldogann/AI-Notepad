@@ -196,8 +196,10 @@ describe("ücretsiz tam erişim", () => {
     const { user } = await complimentaryUser(harness);
     const response: Response = await harness.call(req("GET", "/v1/referral", { token: user.accessToken }));
     expect(response.status).toBe(200);
-    const body: { code: string | null; inviteUrl: string | null } = await response.json<{ code: string | null; inviteUrl: string | null }>();
+    const body: { code: string | null; inviteUrl: string | null; complimentary: boolean } = await response.json<{ code: string | null; inviteUrl: string | null; complimentary: boolean }>();
     expect(body.code).toMatch(/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/);
+    // Ödül uygulanmaz (ödenecek fatura yok): istemciler bunu söyler.
+    expect(body.complimentary).toBe(true);
     // Kod başka hesapta geçerlidir (sahibinin erişimi var).
     const friend: Session = await signIn(harness);
     const validated: Response = await harness.call(req("POST", "/v1/referral/validate", { token: friend.accessToken, json: { code: body.code } }));

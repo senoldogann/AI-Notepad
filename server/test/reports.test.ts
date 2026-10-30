@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
+import type { Env } from "../src/env";
 import { turnstileVerifyUrl } from "../src/auth/turnstile";
 import { crashPayloadMaxBytes, reportBodyMaxBytes, reportsPerUserPerDay } from "../src/reports";
 import { type Harness, type Session, blockingLimiter, defaultHarness, envWith, expectError, req, signIn } from "./helpers";
@@ -61,12 +62,22 @@ function stubTurnstile(harness: Harness, success: boolean): string[] {
 }
 
 describe("POST /v1/reports", () => {
-  it("geri bildirim ve çökme raporu hesap ister; jetonla gelen 202 {} döner ve hesaba bağlanır", async () => {
+  it("hesapsız sürümlerin (geliştirici, iPhone) jetonsuz raporu kabul edilir ama tür bütçesinin dörtte birini aşamaz", async () => {
     const harness: Harness = await defaultHarness();
-    const before: number = await reportCount();
-    await expectError(await postReport(harness, { kind: "feedback", message: "anonim" }, null), 401, "unauthorized");
-    await expectError(await postReport(harness, { kind: "crash", payload: metricKitCrash }, null), 401, "unauthorized");
-    expect(await reportCount()).toBe(before);
+    const small: Env = envWith({ REPORT_BYTES_PER_DAY: "4000" });
+    const anonymous = (message: string): Promise<Response> =>
+      harness.call(req("POST", "/v1/reports", { json: { kind: "feedback", message }, env: small }));
+    // Özetle birlikte ~600 bayt: dörtte bir (1000) bütçeye bir tane sığar, ikincisi 429.
+    expect((await anonymous("a".repeat(400))).status).toBe(202);
+    expect((await lastReport())?.user_id).toBeNull();
+    await expectError(await anonymous("b".repeat(400)), 429, "daily_cap_reached");
+    // Hesaplı kullanıcı bütçenin kalanını kullanabilir.
+    const session: Session = await signIn(harness);
+    expect((await harness.call(req("POST", "/v1/reports", { token: session.accessToken, json: { kind: "feedback", message: "c".repeat(400) }, env: small }))).status).toBe(202);
+  });
+
+  it("jetonla gelen geri bildirim 202 {} döner ve hesaba bağlanır", async () => {
+    const harness: Harness = await defaultHarness();
 
     const session: Session = await signIn(harness);
     const accepted: Response = await postReport(harness, { kind: "feedback", message: "  Harika uygulama  ", appVersion: "1.2.0", os: "macOS 26.1" }, session.accessToken);

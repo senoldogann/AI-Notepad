@@ -36,6 +36,8 @@ interface ReferralBody {
   readonly joined: number;
   readonly rewarded: number;
   readonly pending: number;
+  readonly nextRewardAt: string | null;
+  readonly complimentary: boolean;
   readonly rewardsLeftThisYear: number;
   readonly rewardsPerYear: number;
   readonly rewardUsd: number;
@@ -229,6 +231,8 @@ describe("davet kodu", () => {
       joined: 0,
       rewarded: 0,
       pending: 0,
+      nextRewardAt: null,
+      complimentary: false,
       rewardsLeftThisYear: 12,
       rewardsPerYear: 12,
       rewardUsd: 5.99,
@@ -353,7 +357,10 @@ describe("davet ödülü", () => {
     const friend = await referredFriend(harness, stripe, id, "friend", friendSession, code, false);
 
     await payInvoice(harness, stripe, friend, id("in_free"), 0, code);
-    expect(await referral(harness, owner.session)).toMatchObject({ joined: 1, pending: 1, rewarded: 0 });
+    const joined: ReferralBody = await referral(harness, owner.session);
+    expect(joined).toMatchObject({ joined: 1, pending: 1, rewarded: 0 });
+    // Ücretsiz aydaki arkadaşta tahmini tarih: ilk ücretli fatura (dönem sonu) + 30 gün.
+    expect(new Date(joined.nextRewardAt ?? 0).getTime()).toBeGreaterThan(harness.clock.nowMs + 30 * dayMs);
     expect((await redemptionStatus(friendSession.userId))?.status).toBe("joined");
     expect((await grant(harness)).processed).toBe(0);
 
@@ -362,13 +369,15 @@ describe("davet ödülü", () => {
     const ownerLater: Session = await refreshed(harness, owner.session);
     await payInvoice(harness, stripe, friend, id("in_second"), 599, code);
     expect((await redemptionStatus(friendSession.userId))?.status).toBe("qualified");
+    // İlk gerçek ödemeden sonra kesin tarih: ödeme + 30 gün.
+    expect((await referral(harness, ownerLater)).nextRewardAt).toBe(new Date(harness.clock.nowMs + 30 * dayMs).toISOString());
     harness.clock.nowMs += 29 * dayMs;
     expect((await grant(harness)).processed).toBe(0);
     harness.clock.nowMs += 2 * dayMs;
     expect(await grant(harness)).toEqual({ processed: 1, granted: 1, capped: 0, voided: 0, failed: 0 });
     expect(stripe.balanceTransactions).toHaveLength(1);
     expect(stripe.balanceTransactions[0]).toMatchObject({ customer: owner.customer, amount: -599, currency: "usd", metadata: { purpose: "referral_reward" } });
-    expect(await referral(harness, await refreshed(harness, ownerLater))).toMatchObject({ joined: 1, pending: 0, rewarded: 1, rewardsLeftThisYear: 11 });
+    expect(await referral(harness, await refreshed(harness, ownerLater))).toMatchObject({ joined: 1, pending: 0, rewarded: 1, rewardsLeftThisYear: 11, nextRewardAt: null });
 
     // Yeniden çalıştırma, aynı olayın tekrarı ve sonraki aylar ödül vermez.
     expect((await grant(harness)).processed).toBe(0);

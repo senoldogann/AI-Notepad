@@ -1,6 +1,6 @@
 import type { Config, SubscriptionPlan } from "./config";
 import { randomId } from "./crypto";
-import { type SubscriptionState, subscriptionAccess, subscriptionState } from "./entitlements";
+import { type SubscriptionState, isTerminalSubscription, subscriptionAccess, subscriptionState } from "./entitlements";
 import { ApiError } from "./errors";
 import { log } from "./log";
 import type { IdentityProvider } from "./auth/users";
@@ -107,10 +107,17 @@ export interface ReferralSummary {
   readonly inviteUrl: string | null;
   /** Kodla abone olan (ilk faturası ödenmiş) arkadaş sayısı. */
   readonly joined: number;
-  /** Verilen ödül (ücretsiz ay) sayısı. */
+  /** Verilen ödül (bir aylık ücret kadar alacak) sayısı. */
   readonly rewarded: number;
   /** Abone olmuş, ödülü henüz verilmemiş (ilk gerçek ödeme ya da bekleme süresi bekleniyor). */
   readonly pending: number;
+  /**
+   * Bekleyen ödüllerin en yakınının tahmini tarihi (ISO 8601); bekleyen yoksa null. İlk gerçek ödemesi alınmış davette
+   * kesin tarih (`reward_due_at`); ücretsiz ayındaki arkadaşta ilk ücretli faturası (dönem sonu) + bekleme süresi.
+   */
+  readonly nextRewardAt: string | null;
+  /** Hesabın süren ücretsiz erişimi var mı: ödenecek fatura olmadığından ödül uygulanmaz (`referrer_complimentary`). */
+  readonly complimentary: boolean;
   readonly rewardsLeftThisYear: number;
   readonly rewardsPerYear: number;
   readonly rewardUsd: number;
@@ -133,12 +140,13 @@ async function ensureReferralCode(db: D1Database, userId: string, nowMs: number)
   throw new ApiError("internal_error", "Davet kodu oluşturulamadı.");
 }
 
-/** Davet edenin sayaçları. */
+/** Davet edenin sayaçları; `next_reward_at` bekleyen ödüllerin en yakın tahmini tarihi (ms; yoksa null). */
 interface ReferrerCounts {
   readonly joined: number;
   readonly rewarded: number;
   readonly pending: number;
   readonly recent: number;
+  readonly next_reward_at: number | null;
 }
 
 /** Davet edenin son 365 günde aldığı ödül sayısı (`rewarded_at` penceresi). */
@@ -164,11 +172,15 @@ export async function referralSummary(db: D1Database, config: Config, userId: st
       `SELECT COALESCE(SUM(CASE WHEN joined_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS joined,
          COALESCE(SUM(CASE WHEN status = 'granted' THEN 1 ELSE 0 END), 0) AS rewarded,
          COALESCE(SUM(CASE WHEN status IN ('joined', 'qualified') THEN 1 ELSE 0 END), 0) AS pending,
-         COALESCE(SUM(CASE WHEN status = 'granted' AND rewarded_at > ?2 THEN 1 ELSE 0 END), 0) AS recent
-       FROM referral_redemptions WHERE referrer_user_id = ?1`,
+         COALESCE(SUM(CASE WHEN status = 'granted' AND rewarded_at > ?2 THEN 1 ELSE 0 END), 0) AS recent,
+         MIN(CASE WHEN r.status = 'qualified' THEN r.reward_due_at
+                  WHEN r.status = 'joined' THEN (SELECT s.current_period_end FROM subscriptions s WHERE s.stripe_subscription_id = r.stripe_subscription_id) + ?3
+             END) AS next_reward_at
+       FROM referral_redemptions r WHERE referrer_user_id = ?1`,
     )
-    .bind(userId, nowMs - referralRewardWindowMs)
+    .bind(userId, nowMs - referralRewardWindowMs, referralHoldMs)
     .first<ReferrerCounts>();
+  const complimentary: boolean = subscription !== null && subscription.complimentary && !isTerminalSubscription(subscription, now);
   return {
     enabled: config.referralPolicy === "on",
     code,
@@ -176,6 +188,8 @@ export async function referralSummary(db: D1Database, config: Config, userId: st
     joined: counts?.joined ?? 0,
     rewarded: counts?.rewarded ?? 0,
     pending: counts?.pending ?? 0,
+    nextRewardAt: counts === null || counts.next_reward_at === null ? null : new Date(counts.next_reward_at).toISOString(),
+    complimentary,
     rewardsLeftThisYear: Math.max(0, referralRewardsPerYear - (counts?.recent ?? 0)),
     rewardsPerYear: referralRewardsPerYear,
     rewardUsd: config.priceUsdMonthly,
