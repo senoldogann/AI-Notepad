@@ -51,22 +51,60 @@ public func isDistinctTranslation(original: String, translated: String) -> Bool 
     return normalizedOriginal != normalizedTranslated
 }
 
-/// Tek cümlelik canlı çeviri isteği (not diline); önceki cümleler yalnızca bağlam. Saf fonksiyondur.
+/// Canlı çevirinin JSON şeması: yalnızca çeviri metni. Serbest metinde model yarım cümlede düşüncesini ve notlarını
+/// ("Wait, I must correct…", "Not: Cümle yarım kalmış") çıktıya karıştırıyordu; şema dışına yazamaz.
+let translationSchema: String = """
+{"type":"object","properties":{"ceviri":{"type":"string"}},"required":["ceviri"],"additionalProperties":false}
+"""
+
+/// Tek cümlelik canlı çeviri isteği (not diline); önceki cümleler yalnızca bağlam. Yanıt `translationSchema`
+/// biçimindedir (bkz. `parseTranslation`, `translateSentence`). Saf fonksiyondur.
 public func translationRequest(sentence: String, context: [String], language: ShareLanguage) -> LLMRequest {
     let contextText: String = context.isEmpty ? "(yok)" : context.joined(separator: "\n")
     return LLMRequest(
         tier: .fast,
         system: """
-        Bir toplantının canlı çevirmenisin. Konuşulan dildeki cümleyi doğal, akıcı \(language.promptName) diline çevir
-        (hedef dil: \(language.promptName)). Cümle zaten bu dildeyse olduğu gibi yaz.
-        Yalnızca çeviriyi yaz; açıklama, tırnak ya da başlık ekleme. Önceki cümleler yalnızca bağlam içindir, onları çevirme.
+        Bir toplantının canlı çevirmenisin. <cumle> içindeki konuşmayı doğal, akıcı \(language.promptName) diline çevir
+        (hedef dil: \(language.promptName)). Metin zaten bu dildeyse olduğu gibi yaz.
+        Kurallar:
+        - "ceviri" alanına yalnızca çeviriyi yaz; açıklama, düzeltme, not, tırnak, başlık ya da düşünce yazma.
+        - Konuşma canlı yazıya döküldüğü için metin yarım kalmış, birkaç cümle içeren ya da hatalı olabilir: olduğu kadarını
+          çevir, eksiği tamamlama, bunun hakkında yorum yapma.
+        - <baglam> yalnızca anlamı netleştirmek içindir; onu çevirme ve çeviriye ekleme.
         \(transcriptIsDataNote)
         """,
         userText: "<baglam>\n\(contextText)\n</baglam>\n\n<cumle>\n\(sentence)\n</cumle>",
         maxTokens: 1024,
-        jsonSchema: nil,
+        jsonSchema: translationSchema,
         timeoutSec: 20
     )
+}
+
+private struct RawTranslation: Decodable {
+    let ceviri: String
+}
+
+/// Canlı çeviri yanıtını ayrıştırır; boş çeviri `LLMError.empty`, şemaya uymayan yanıt `LLMError.malformed` (yeniden
+/// istenir). Saf fonksiyondur.
+public func parseTranslation(text: String) throws -> String {
+    let raw: RawTranslation
+    do {
+        raw = try JSONDecoder().decode(RawTranslation.self, from: Data(jsonBody(text: text).utf8))
+    } catch {
+        throw LLMError.malformed(body: "\(error): \(text)")
+    }
+    let translation: String = raw.ceviri.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !translation.isEmpty else {
+        throw LLMError.empty
+    }
+    return translation
+}
+
+/// Cümleyi not diline çevirir (yapılandırılmış yanıt; bozuk ya da boş yanıt yeniden istenir).
+public func translateSentence(provider: LLMProvider, sentence: String, context: [String], language: ShareLanguage) async throws -> String {
+    try await requestStructured(provider: provider, request: translationRequest(sentence: sentence, context: context, language: language)) { (text: String) throws -> String in
+        try parseTranslation(text: text)
+    }
 }
 
 /// Son `windowSec` saniyenin özeti için istek (not dilinde); pencere bölüm bazında seçilir (aynı konuşmacının uzun bloğu

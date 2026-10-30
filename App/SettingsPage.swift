@@ -1049,7 +1049,7 @@ private func testConnection() async -> ConnectionTest {
     }
     let reply: String
     do {
-        reply = try await sendLLM(provider: provider, request: translationRequest(sentence: connectionTestSentence(provider: provider), context: [], language: selectedNoteLanguage()))
+        reply = try await translateSentence(provider: provider, sentence: connectionTestSentence(provider: provider), context: [], language: selectedNoteLanguage())
     } catch {
         return .failed(String(localized: "Çeviri modeli: \(userFacingMessage(error: error))"))
     }
