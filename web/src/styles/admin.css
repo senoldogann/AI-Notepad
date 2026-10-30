@@ -465,14 +465,17 @@ html.admin-app .admin > .notice {
   color: var(--ink);
 }
 
+/* Balon yalnızca gösterilirken yerleşimdedir: gizliyken de kutusu olsaydı (saydam bile olsa) kabuğun içeriğini sağa
+   taşırıp telefonda yatay kaydırma açardı. Genişliği ekranı aşmaz. */
 .hint::after {
   content: attr(data-hint);
   position: absolute;
   top: calc(100% + 8px);
   left: -10px;
   z-index: 20;
+  display: none;
   width: max-content;
-  max-width: 300px;
+  max-width: min(300px, 100vw - 48px);
   padding: 8px 10px;
   border-radius: 7px;
   background: var(--ink);
@@ -484,18 +487,18 @@ html.admin-app .admin > .notice {
   text-align: left;
   text-transform: none;
   white-space: normal;
-  opacity: 0;
   pointer-events: none;
-  transform: translateY(-2px);
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
 }
 
 .hint:hover::after,
 .hint:focus-visible::after {
-  opacity: 1;
-  transform: none;
+  display: block;
+}
+
+/* Şeridin en sağındaki ölçünün balonu sola açılır (sağ kenardan taşmasın). */
+.kpi:last-child .hint::after {
+  right: -10px;
+  left: auto;
 }
 
 /* ---------- Özet şeridi ---------- */
