@@ -65,6 +65,7 @@ const hreflangLinks: ReadonlyArray<{ readonly lang: string; readonly href: strin
     {indexed ? <link rel="canonical" href={canonical} /> : <meta name="robots" content="noindex" />}
     {indexed ? hreflangLinks.map((link) => <link rel="alternate" hreflang={link.lang} href={link.href} />) : null}
     <link rel="preload" href="/fonts/InterVariable-latin.woff2" as="font" type="font/woff2" crossorigin />
+    {/* Simge köşesiz, tam siyah karedir: Google arama sonuçlarında daire içinde gösterir; yuvarlak köşeli karede köşeler beyaz kalırdı. */}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="alternate" type="application/rss+xml" title={copy.blog.feedTitle} href={blogFeedPath} />
