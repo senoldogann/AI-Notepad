@@ -296,6 +296,7 @@ public func sharedNoteRequest(note: MeetingNote, language: ShareLanguage, userNa
         "- terim: \(entry.term); anlam: \(entry.meaning)"
     }.joined(separator: "\n")
     return LLMRequest(
+        purpose: .sharedNoteTranslation,
         tier: .smart,
         system: """
         Bir toplantı notunu iş arkadaşlarıyla paylaşmak için \(target) diline çeviriyorsun. Kurallar:

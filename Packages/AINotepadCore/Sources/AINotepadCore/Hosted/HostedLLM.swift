@@ -22,6 +22,8 @@ public struct HostedLLMCredentials: Sendable, Equatable {
 
 /// Çağrı anında geçerli jetonu ve açık toplantıyı veren kaynak (bkz. `HostedClient`).
 public protocol HostedLLMCredentialSource: AnyObject, Sendable {
+    /// Her isteğe eklenen sürüm başlıkları (bkz. `HostedClientInfo`).
+    nonisolated var clientInfo: HostedClientInfo { get }
     /// Geçerli (gerekirse yenilenmiş) erişim jetonu ve son açılan toplantı; giriş yoksa `notSignedIn`, toplantı yoksa
     /// `noActiveMeeting`.
     func meetingLLMCredentials() async throws -> HostedLLMCredentials
@@ -111,9 +113,9 @@ public func hostedLLMRequestBody(request: LLMRequest, effort: LLMEffort, maxToke
     return try llmRequestEncoder().encode(body)
 }
 
-/// `POST /v1/llm/messages` isteği: bearer jeton, toplantıya bağlıysa toplantı başlığı (`x-meeting-id`) ve gövde. Saf
-/// fonksiyondur.
-public func hostedLLMURLRequest(baseURL: URL, credentials: HostedLLMCredentials, request: LLMRequest) throws -> URLRequest {
+/// `POST /v1/llm/messages` isteği: bearer jeton, toplantıya bağlıysa toplantı başlığı (`x-meeting-id`), isteğin özelliği
+/// (`x-llm-purpose`; sunucu token kullanımını özellik başına toplar), sürüm başlıkları ve gövde. Saf fonksiyondur.
+public func hostedLLMURLRequest(baseURL: URL, credentials: HostedLLMCredentials, clientInfo: HostedClientInfo, request: LLMRequest) throws -> URLRequest {
     var urlRequest: URLRequest = URLRequest(url: baseURL.appending(path: "v1/llm/messages"))
     urlRequest.httpMethod = "POST"
     urlRequest.timeoutInterval = request.timeoutSec
@@ -124,8 +126,9 @@ public func hostedLLMURLRequest(baseURL: URL, credentials: HostedLLMCredentials,
     if let meetingID = credentials.meetingID {
         urlRequest.setValue(meetingID, forHTTPHeaderField: "x-meeting-id")
     }
+    urlRequest.setValue(request.purpose.rawValue, forHTTPHeaderField: "x-llm-purpose")
     urlRequest.setValue("application/json", forHTTPHeaderField: "content-type")
-    return urlRequest
+    return withHostedClientHeaders(request: urlRequest, info: clientInfo)
 }
 
 /// Yanıtı sınıflandırır: 2xx gövde Anthropic akışıdır (Claude ile aynı kurallar); başarısız durumda sunucunun hata
@@ -151,7 +154,7 @@ func prepareHostedCall(config: HostedLLMConfig, request: LLMRequest) async throw
         credentials = HostedLLMCredentials(accessToken: try await config.credentials.validAccessToken(), meetingID: nil)
     }
     return PreparedLLMCall(
-        urlRequest: try hostedLLMURLRequest(baseURL: config.baseURL, credentials: credentials, request: request),
+        urlRequest: try hostedLLMURLRequest(baseURL: config.baseURL, credentials: credentials, clientInfo: config.credentials.clientInfo, request: request),
         model: hostedModelName,
         // Destek için Cloudflare istek kimliği.
         requestIDHeader: "cf-ray"

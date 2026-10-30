@@ -36,7 +36,9 @@ interface StoredIdentity {
  * Süren ayırmaların tahmini maliyeti silinmeden günlük harcamaya yazılır (`userReservationRemovalStatements`): silme
  * sırasında süren çağrı kesinleşirken yabancı anahtar hatası almaz, harcama da kaybolmaz.
  * `daily_spend` (toplam, kişisel değil), `downloads`, `download_sources`, `download_visitors`, `ops_events`,
- * `used_nonces` ve `stripe_events` hesaba bağlı değildir.
+ * `used_nonces`, `stripe_events` ve telemetri toplamları (`llm_purpose_usage`, `client_event_counts`,
+ * `client_event_durations`, `feature_usage_daily`) hesaba bağlı değildir; hesabın son uygulama ve macOS sürümü ile
+ * telemetri sayaçları `users` satırıyla silinir.
  */
 function accountDeletionStatements(db: D1Database, userId: string, identityHashes: readonly string[], now: Date): D1PreparedStatement[] {
   return [

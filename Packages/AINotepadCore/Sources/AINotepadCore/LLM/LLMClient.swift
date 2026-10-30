@@ -12,8 +12,42 @@ public enum LLMTier: String, Sendable {
     case live
 }
 
+/// İsteğin hangi özellik için olduğu. Abonelik sürümü bunu `x-llm-purpose` başlığında gönderir (sunucu token
+/// kullanımını özellik başına günlük toplar); kendi anahtarlı sağlayıcılar göndermez. Ham değerler sunucunun
+/// `server/src/llm/purpose.ts` → `llmPurposes` listesiyle birebir aynıdır (bkz. `ServerParityTests`).
+public enum LLMPurpose: String, Sendable, Equatable, CaseIterable {
+    /// Kayıt sırasında canlı cümle çevirisi.
+    case liveTranslation = "live_translation"
+    /// "Ne kaçırdım?" özeti.
+    case missedSummary = "missed_summary"
+    /// Kayıt sırasında toplantıya soru.
+    case liveQuestion = "live_question"
+    /// Tek parça toplantı notu.
+    case note
+    /// Uzun toplantının not parçası.
+    case noteChunk = "note_chunk"
+    /// Parçalı notun birleştirilmesi.
+    case noteOverview = "note_overview"
+    /// Konuşmacı gözden geçirmesi.
+    case speakerReview = "speaker_review"
+    /// Not düzenleme ve yeniden yazma.
+    case noteEdit = "note_edit"
+    /// Notun paylaşım diline çevirisi.
+    case sharedNoteTranslation = "shared_note_translation"
+    /// Sor: arşivde arama terimleri.
+    case askSearchTerms = "ask_search_terms"
+    /// Sor: yanıt.
+    case askAnswer = "ask_answer"
+    /// Görev aracına iş açan ajan.
+    case taskAgent = "task_agent"
+    /// Ayarlar'daki bağlantı denemesi.
+    case connectionTest = "connection_test"
+}
+
 /// Tek turlu LLM isteği; sağlayıcıdan bağımsız.
 public struct LLMRequest: Sendable, Equatable {
+    /// İsteğin özelliği (abonelik sunucusunda token kullanımının kovası).
+    public let purpose: LLMPurpose
     public let tier: LLMTier
     public let system: String
     public let userText: String
@@ -23,7 +57,8 @@ public struct LLMRequest: Sendable, Equatable {
     /// Deneme başına zaman aşımı; canlı çeviride kısa tutulur ki kuyruk tıkanmasın.
     public let timeoutSec: Double
 
-    public init(tier: LLMTier, system: String, userText: String, maxTokens: Int, jsonSchema: String?, timeoutSec: Double) {
+    public init(purpose: LLMPurpose, tier: LLMTier, system: String, userText: String, maxTokens: Int, jsonSchema: String?, timeoutSec: Double) {
+        self.purpose = purpose
         self.tier = tier
         self.system = system
         self.userText = userText

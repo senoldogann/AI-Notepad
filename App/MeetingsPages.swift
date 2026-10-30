@@ -1128,6 +1128,7 @@ struct MeetingDetailPage: View {
     private func copyMarkdown() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(meetingMarkdown(record: shownRecord), forType: .string)
+        recordFeatureUsage(feature: .export(.copyMarkdown))
         export = .copied
     }
 
@@ -1139,6 +1140,7 @@ struct MeetingDetailPage: View {
         }
         service.subject = shownRecord.note?.title ?? record.title
         service.perform(withItems: [text])
+        recordFeatureUsage(feature: .export(.email))
     }
 
     @ViewBuilder
@@ -1195,7 +1197,7 @@ struct MeetingDetailPage: View {
     }
 
     private func exportPDF() {
-        export = saveExport(fileExtension: "pdf") { (url: URL) throws -> Void in
+        export = saveExport(format: .pdf, fileExtension: "pdf") { (url: URL) throws -> Void in
             try meetingPDF(record: shownRecord).write(to: url, options: .atomic)
         }
     }
@@ -1225,6 +1227,7 @@ struct MeetingDetailPage: View {
             // Seçici pencerenin sağ üstünde, "⋯" düğmesinin yakınında açılır.
             let anchor: NSRect = NSRect(x: view.bounds.maxX - 80, y: view.isFlipped ? 90 : view.bounds.maxY - 90, width: 1, height: 1)
             NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: view, preferredEdge: .minY)
+            recordFeatureUsage(feature: .export(.pdfShare))
         } catch {
             meetingsLogger.error("PDF paylaşılamadı, hata: \(String(describing: error), privacy: .private)")
             export = .failed(userFacingMessage(error: StorageError.writeFailed(path: "PDF", reason: error.localizedDescription)))
@@ -1265,6 +1268,7 @@ struct MeetingDetailPage: View {
                 // Seçici pencerenin sağ üstünde, "⋯" düğmesinin yakınında açılır.
                 let anchor: NSRect = NSRect(x: view.bounds.maxX - 80, y: view.isFlipped ? 90 : view.bounds.maxY - 90, width: 1, height: 1)
                 NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: view, preferredEdge: .minY)
+                recordFeatureUsage(feature: .export(.linkShare))
                 export = .done(String(localized: "PDF iCloud Drive'a kaydedildi: \(url.lastPathComponent)"))
             } catch {
                 meetingsLogger.error("Bağlantıyla paylaşılamadı, hata: \(String(describing: error), privacy: .private)")
@@ -1286,6 +1290,7 @@ struct MeetingDetailPage: View {
                 let url: URL = try exportFileURL(directory: downloads, title: title, startedAt: record.startedAt, fileExtension: "m4a")
                 let range: (start: Double, end: Double) = clipRange(startSec: paragraph.startSec, endSec: paragraph.endSec)
                 try await exportAudioClip(sources: sources, startSec: range.start, endSec: range.end, destination: url)
+                recordFeatureUsage(feature: .export(.audioClip))
                 export = .saved(url)
             } catch {
                 meetingsLogger.error("Klip kaydedilemedi, hata: \(String(describing: error), privacy: .private)")
@@ -1302,40 +1307,40 @@ struct MeetingDetailPage: View {
         let shown: (note: MeetingNote, language: ShareLanguage?) = noteLanguage.flatMap { (language: ShareLanguage) -> (note: MeetingNote, language: ShareLanguage?)? in
             record.sharedNotes?[language.rawValue].map { (note: $0, language: language) }
         } ?? (note: note, language: nil)
-        export = saveExport(fileExtension: "html") { (url: URL) throws -> Void in
+        export = saveExport(format: .html, fileExtension: "html") { (url: URL) throws -> Void in
             try Data(meetingHTML(record: record, note: shown.note, language: shown.language, appName: appName).utf8).write(to: url, options: .atomic)
         }
     }
 
     private func exportMarkdown() {
-        export = saveExport(fileExtension: "md") { (url: URL) throws -> Void in
+        export = saveExport(format: .markdown, fileExtension: "md") { (url: URL) throws -> Void in
             try Data(meetingMarkdown(record: shownRecord).utf8).write(to: url, options: .atomic)
         }
     }
 
     /// Notu ve transkripti (seçili not dilinde) Word belgesi olarak İndirilenler'e kaydeder.
     private func exportDOCX() {
-        export = saveExport(fileExtension: "docx") { (url: URL) throws -> Void in
+        export = saveExport(format: .docx, fileExtension: "docx") { (url: URL) throws -> Void in
             try meetingDOCX(record: shownRecord).write(to: url, options: .atomic)
         }
     }
 
     /// Transkripti düz metin (`[mm:ss] Ad: metin`) olarak İndirilenler'e kaydeder.
     private func exportTranscriptText() {
-        export = saveExport(fileExtension: "txt") { (url: URL) throws -> Void in
+        export = saveExport(format: .transcriptText, fileExtension: "txt") { (url: URL) throws -> Void in
             try Data(transcriptText(record: record).utf8).write(to: url, options: .atomic)
         }
     }
 
     /// Transkripti SRT altyazısı olarak İndirilenler'e kaydeder (videoya eklenebilir).
     private func exportSRT() {
-        export = saveExport(fileExtension: "srt") { (url: URL) throws -> Void in
+        export = saveExport(format: .srt, fileExtension: "srt") { (url: URL) throws -> Void in
             try Data(transcriptSRT(record: record).utf8).write(to: url, options: .atomic)
         }
     }
 
-    /// Dosyayı İndirilenler'e (aynı ad varsa numaralı) yazar.
-    private func saveExport(fileExtension: String, write: (URL) throws -> Void) -> ExportStatus {
+    /// Dosyayı İndirilenler'e (aynı ad varsa numaralı) yazar; başarılıysa biçimi kullanım istatistiğine işlenir.
+    private func saveExport(format: TelemetryExportFormat, fileExtension: String, write: (URL) throws -> Void) -> ExportStatus {
         do {
             let downloads: URL = try FileManager.default.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let url: URL = try exportFileURL(directory: downloads, title: record.note?.title ?? record.title, startedAt: record.startedAt, fileExtension: fileExtension)
@@ -1344,6 +1349,7 @@ struct MeetingDetailPage: View {
             } catch {
                 throw StorageError.writeFailed(path: url.path, reason: error.localizedDescription)
             }
+            recordFeatureUsage(feature: .export(format))
             return .saved(url)
         } catch {
             meetingsLogger.error("Dışa aktarılamadı, uzantı: \(fileExtension, privacy: .public), hata: \(String(describing: error), privacy: .private)")

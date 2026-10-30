@@ -120,6 +120,7 @@ public func speakerReviewRequest(
         speakerNames[person].flatMap { $0.isEmpty ? nil : "Konuşmacı \(person) = \($0)" }
     }
     return LLMRequest(
+        purpose: .speakerReview,
         tier: .smart,
         system: """
         Bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptinde otomatik konuşmacı ayırmayı gözden geçiriyorsun. "Sen" kullanıcıdır \

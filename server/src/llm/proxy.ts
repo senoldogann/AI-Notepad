@@ -26,6 +26,7 @@ import {
 } from "../reservations";
 import { recordMeetingFailure, recordOpsEvents } from "../opsEvents";
 import { llmCostMicroUsd } from "../usage";
+import { type LLMPurpose, purposeUsageStatement } from "./purpose";
 import { type LLMRequest, clampMaxTokens, estimateInputTokens, upstreamParams } from "./request";
 
 /** Akışsız çağrının zaman aşımı: yanıt başlığı ancak üretim bitince gelir, bu yüzden toplam süredir. */
@@ -39,11 +40,12 @@ type CallOutcome<T> = { readonly ok: true; readonly value: T } | { readonly ok: 
 /**
  * Çağrının bağlı olduğu bütçe: açık bir toplantı (kayıt sırasında ve ek sürede; toplantı bütçesi de düşer) ya da
  * yalnızca hesap (Sor, notu yeniden yazma, düzenleme, görev aracı; kullanıcının günlük ve aylık sınırı ve daha küçük
- * çağrı başı `max_tokens`).
+ * çağrı başı `max_tokens`). `purpose`: çağrının amacı (`x-llm-purpose`); yalnızca amaç başına token toplamına yazılır
+ * (bkz. `purposeUsageStatement`), bütçeyi etkilemez.
  */
 export type LLMScope =
-  | { readonly kind: "meeting"; readonly userId: string; readonly meeting: MeetingRow }
-  | { readonly kind: "account"; readonly userId: string; readonly access: AccountLLMAccess };
+  | { readonly kind: "meeting"; readonly userId: string; readonly meeting: MeetingRow; readonly purpose: LLMPurpose }
+  | { readonly kind: "account"; readonly userId: string; readonly access: AccountLLMAccess; readonly purpose: LLMPurpose };
 
 /** Deneme kullanıcısının toplantısız çağrısı mı (ayrıca küçük günlük sınır). Saf fonksiyondur. */
 function isTrialAccountCall(scope: LLMScope): boolean {
@@ -127,7 +129,8 @@ export function noteMeetingIdOf(scope: LLMScope, request: LLMRequest): string | 
 
 /**
  * Ayırmayı gerçek kullanımla kesinleştirir ve gerçek maliyeti günlük harcamaya ekler (denemedeyse deneme payına da).
- * `noteMeetingId` verildiyse (başarılı not çağrısı) aynı işlemde toplantının ilk not anı yazılır (yalnızca boşsa).
+ * `noteMeetingId` verildiyse (başarılı not çağrısı) aynı işlemde toplantının ilk not anı yazılır (yalnızca boşsa); amaç
+ * başına günlük token toplamı da aynı işlemde artar.
  */
 async function chargeUsage(
   db: D1Database,
@@ -141,7 +144,11 @@ async function chargeUsage(
     noteMeetingId === null
       ? []
       : [db.prepare("UPDATE meeting_sessions SET first_note_at = ? WHERE id = ? AND first_note_at IS NULL").bind(now.getTime(), noteMeetingId)];
-  await db.batch([...settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now), ...noteStatements]);
+  await db.batch([
+    ...settleLLMStatements(db, reservation, usage, llmCostMicroUsd(usage.inputTokens, usage.outputTokens), now),
+    ...noteStatements,
+    purposeUsageStatement(db, scope.purpose, usage, now),
+  ]);
   log("info", "llm_usage", { userId: scope.userId, meetingId: scopeMeetingId(scope), inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
 }
 

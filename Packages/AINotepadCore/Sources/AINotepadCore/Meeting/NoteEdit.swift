@@ -6,6 +6,7 @@ public func noteEditRequest(
     note: MeetingNote, instruction: String, segments: [StoredSegment], speakerNames: [Int: String], userName: String, language: ShareLanguage
 ) -> LLMRequest {
     LLMRequest(
+        purpose: .noteEdit,
         tier: .smart,
         system: noteEditSystem(
             userName: userName, language: language, sourceRule: "Yeni bilgi gerekirse yalnızca transkriptten al, uydurma."
@@ -27,6 +28,7 @@ public func noteEditRequest(
 /// verilir; model yeni bilgi eklemeden notu `language` dilinde yeniden düzenler. Saf fonksiyondur.
 public func noteOnlyEditRequest(note: MeetingNote, instruction: String, userName: String, language: ShareLanguage) -> LLMRequest {
     LLMRequest(
+        purpose: .noteEdit,
         tier: .smart,
         system: noteEditSystem(
             userName: userName, language: language,

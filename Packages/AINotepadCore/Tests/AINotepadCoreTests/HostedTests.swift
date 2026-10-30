@@ -44,8 +44,11 @@ private func tokens(accessExpiresAt: Date) -> HostedTokens {
     HostedTokens(accessToken: "erisim", refreshToken: "yenileme", accessExpiresAt: accessExpiresAt, userId: "kullanici")
 }
 
+/// Denemelerin sürüm başlıkları.
+private let testClientInfo: HostedClientInfo = HostedClientInfo(appVersion: "0.1.10 (19)", osVersion: "macOS 15.4.1")
+
 private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
-    LLMRequest(tier: tier, system: "sistem", userText: "metin", maxTokens: 2048, jsonSchema: schema, timeoutSec: 20)
+    LLMRequest(purpose: .note, tier: tier, system: "sistem", userText: "metin", maxTokens: 2048, jsonSchema: schema, timeoutSec: 20)
 }
 
 @Suite struct HostedAudioTests {
@@ -303,24 +306,29 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let urlRequest: URLRequest = try hostedLLMURLRequest(
             baseURL: try #require(URL(string: "http://localhost:8787")),
             credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: "6f1c2b8e-1d2a-4c55-9a9e-2b6a0f4d8c11"),
+            clientInfo: testClientInfo,
             request: llmRequest(tier: .smart, schema: schema)
         )
         #expect(urlRequest.url?.absoluteString == "http://localhost:8787/v1/llm/messages")
         #expect(urlRequest.httpMethod == "POST")
         #expect(urlRequest.value(forHTTPHeaderField: "authorization") == "Bearer jeton")
         #expect(urlRequest.value(forHTTPHeaderField: "x-meeting-id") == "6f1c2b8e-1d2a-4c55-9a9e-2b6a0f4d8c11")
+        // Özellik ve sürüm başlıkları her yapay zekâ isteğinde.
+        #expect(urlRequest.value(forHTTPHeaderField: "x-llm-purpose") == "note")
+        #expect(urlRequest.value(forHTTPHeaderField: "x-app-version") == "0.1.10 (19)")
+        #expect(urlRequest.value(forHTTPHeaderField: "x-os-version") == "macOS 15.4.1")
         let body: [String: Any] = try jsonObject(try #require(urlRequest.httpBody))
         #expect(Set(body.keys) == ["effort", "system", "messages", "max_tokens", "output_config", "stream"])
         #expect(body["effort"] as? String == "medium")
         #expect(body["stream"] as? Bool == true)
         #expect(body["max_tokens"] as? Int == 2048)
         // Sunucu sınırının üstündeki istek sınıra iner (toplantı 8192, hesap 6144).
-        let large: LLMRequest = LLMRequest(tier: .smart, system: "s", userText: "u", maxTokens: 16_000, jsonSchema: nil, timeoutSec: 30)
+        let large: LLMRequest = LLMRequest(purpose: .note, tier: .smart, system: "s", userText: "u", maxTokens: 16_000, jsonSchema: nil, timeoutSec: 30)
         let local: URL = try #require(URL(string: "http://localhost:8787"))
-        let meetingRequest: URLRequest = try hostedLLMURLRequest(baseURL: local, credentials: HostedLLMCredentials(accessToken: "j", meetingID: "m"), request: large)
+        let meetingRequest: URLRequest = try hostedLLMURLRequest(baseURL: local, credentials: HostedLLMCredentials(accessToken: "j", meetingID: "m"), clientInfo: testClientInfo, request: large)
         let largeMeeting: [String: Any] = try jsonObject(try #require(meetingRequest.httpBody))
         #expect(largeMeeting["max_tokens"] as? Int == hostedMeetingMaxTokens)
-        let accountRequest: URLRequest = try hostedLLMURLRequest(baseURL: local, credentials: HostedLLMCredentials(accessToken: "j", meetingID: nil), request: large)
+        let accountRequest: URLRequest = try hostedLLMURLRequest(baseURL: local, credentials: HostedLLMCredentials(accessToken: "j", meetingID: nil), clientInfo: testClientInfo, request: large)
         let largeAccount: [String: Any] = try jsonObject(try #require(accountRequest.httpBody))
         #expect(largeAccount["max_tokens"] as? Int == hostedAccountMaxTokens)
         let messages: [[String: Any]] = try #require(body["messages"] as? [[String: Any]])
@@ -331,6 +339,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let live: URLRequest = try hostedLLMURLRequest(
             baseURL: try #require(URL(string: "https://api.ornek.fi")),
             credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: "m"),
+            clientInfo: testClientInfo,
             request: llmRequest(tier: .live, schema: nil)
         )
         let liveBody: [String: Any] = try jsonObject(try #require(live.httpBody))
@@ -341,6 +350,7 @@ private func llmRequest(tier: LLMTier, schema: String?) -> LLMRequest {
         let account: URLRequest = try hostedLLMURLRequest(
             baseURL: try #require(URL(string: "https://api.ornek.fi")),
             credentials: HostedLLMCredentials(accessToken: "jeton", meetingID: nil),
+            clientInfo: testClientInfo,
             request: llmRequest(tier: .smart, schema: nil)
         )
         #expect(account.value(forHTTPHeaderField: "x-meeting-id") == nil)

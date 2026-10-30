@@ -9,7 +9,7 @@ private let sampleConfig: OpenAICompatibleConfig = OpenAICompatibleConfig(
 @Suite struct OpenAICompatibleTests {
     @Test func bodyHasSystemUserAndStrictSchema() throws {
         let request: LLMRequest = LLMRequest(
-            tier: .smart, system: "sistem", userText: "metin", maxTokens: 512,
+            purpose: .note, tier: .smart, system: "sistem", userText: "metin", maxTokens: 512,
             jsonSchema: #"{"type":"object","properties":{"a":{"type":"string"}},"required":["a"],"additionalProperties":false}"#, timeoutSec: 30
         )
         let body: [String: Any] = try jsonObject(openAIRequestBody(request: request, model: openAIModel(config: sampleConfig, tier: request.tier), effort: .high))
@@ -76,7 +76,7 @@ struct OllamaTests {
     @Test func translatesFinnishSentence() async throws {
         let text: String = try await sendLLM(
             provider: .openAICompatible(try config()),
-            request: LLMRequest(tier: .fast, system: "Cümleyi Türkçeye çevir; yalnızca çeviriyi yaz.", userText: "Hyvää huomenta kaikille.", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120)
+            request: LLMRequest(purpose: .note, tier: .fast, system: "Cümleyi Türkçeye çevir; yalnızca çeviriyi yaz.", userText: "Hyvää huomenta kaikille.", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120)
         )
         #expect(!text.isEmpty)
     }
@@ -86,7 +86,7 @@ struct OllamaTests {
         let parts: StreamBox = StreamBox()
         let text: String = try await streamLLM(
             provider: .openAICompatible(try config()),
-            request: LLMRequest(tier: .smart, system: "Türkçe cevap ver.", userText: "Fince'de 'günaydın' nasıl denir? İki cümleyle anlat.", maxTokens: 4000, jsonSchema: nil, timeoutSec: 180)
+            request: LLMRequest(purpose: .note, tier: .smart, system: "Türkçe cevap ver.", userText: "Fince'de 'günaydın' nasıl denir? İki cümleyle anlat.", maxTokens: 4000, jsonSchema: nil, timeoutSec: 180)
         ) { (partial: String) -> Void in
             parts.append(partial)
         }

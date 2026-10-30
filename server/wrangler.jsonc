@@ -23,13 +23,16 @@
   // çökme, iletişim) IP başına dakikada 5; ayrıca hesap başına günde 20 ve tür başına günlük `REPORT_BYTES_PER_DAY`.
   // DEEPGRAM_USER_LIMITER: `POST /v1/live/deepgram-token` kullanıcı başına dakikada 10 (kayıt başında iki akış, kopmada
   // yeniden bağlanma; ayrıca toplantı başına toplam ve 5 dakikalık pencere sınırı, bkz. src/deepgram.ts).
+  // TELEMETRY_USER_LIMITER: `POST /v1/telemetry` ve `/v1/telemetry/features` kullanıcı başına dakikada 6 (uygulama en
+  // çok birkaç dakikada bir gönderir; ayrıca hesap başına günde 200 istek, bkz. src/telemetry.ts).
   "ratelimits": [
     { "name": "AUTH_IP_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_IP_LIMITER", "namespace_id": "1002", "simple": { "limit": 1200, "period": 60 } },
     { "name": "START_USER_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } },
     { "name": "PROXY_USER_LIMITER", "namespace_id": "1004", "simple": { "limit": 120, "period": 60 } },
     { "name": "REPORT_IP_LIMITER", "namespace_id": "1005", "simple": { "limit": 5, "period": 60 } },
-    { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "1006", "simple": { "limit": 10, "period": 60 } }
+    { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "1006", "simple": { "limit": 10, "period": 60 } },
+    { "name": "TELEMETRY_USER_LIMITER", "namespace_id": "1007", "simple": { "limit": 6, "period": 60 } }
   ],
   "vars": {
     "ENVIRONMENT": "development",
@@ -185,7 +188,8 @@
         { "name": "START_USER_LIMITER", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } },
         { "name": "PROXY_USER_LIMITER", "namespace_id": "2004", "simple": { "limit": 120, "period": 60 } },
         { "name": "REPORT_IP_LIMITER", "namespace_id": "2005", "simple": { "limit": 5, "period": 60 } },
-        { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "2006", "simple": { "limit": 10, "period": 60 } }
+        { "name": "DEEPGRAM_USER_LIMITER", "namespace_id": "2006", "simple": { "limit": 10, "period": 60 } },
+        { "name": "TELEMETRY_USER_LIMITER", "namespace_id": "2007", "simple": { "limit": 6, "period": 60 } }
       ],
       "vars": {
         "ENVIRONMENT": "production",

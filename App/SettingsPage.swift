@@ -512,11 +512,35 @@ private struct GeneralSettings: View {
             CloudSyncRow(model: model)
             #endif
             UpdateSettingsRow(updater: updater)
+            #if HOSTED_EDITION
+            UsageStatisticsRow()
+            #endif
             CrashReportsSettings(center: crashReports)
             FeedbackSettingsRow { await diagnosticsReportText(model: model, updater: updater) }
         }
     }
 }
+
+#if HOSTED_EDITION
+/// "Anonim kullanım istatistiklerini paylaş" (varsayılan açık): kapatılınca bekleyen istatistikler silinir ve hiçbiri
+/// gönderilmez. Sürüm ve yapay zekâ amacı başlıkları hizmetin işleyişi için her durumda gider (açıklamada yazar).
+private struct UsageStatisticsRow: View {
+    @AppStorage(SettingsKey.shareUsageStatistics) private var shareUsageStatistics: Bool = true
+
+    var body: some View {
+        SettingsRow(title: Text("Anonim kullanım istatistiklerini paylaş")) {
+            Text("Açıkken uygulama günde bir kez hangi özellikleri kullandığını (canlı çeviri, Sor, bağlantı ve dışa aktarma türleri) ve bağlantı kopması, not hatası gibi güvenilirlik sayılarını gönderir; bunlar hesabına bağlanmaz. Ses, metin, not, başlık ya da ad asla gönderilmez. Uygulama ve macOS sürümü ile yapay zekâ isteklerinin hangi özellik için olduğu, hizmetin işleyişi için her durumda gönderilir.")
+        } control: {
+            Toggle("Anonim kullanım istatistiklerini paylaş", isOn: $shareUsageStatistics).settingsToggle()
+        }
+        .onChange(of: shareUsageStatistics) { (_: Bool, enabled: Bool) in
+            if !enabled {
+                HostedTelemetryCenter.shared.sharingDisabled()
+            }
+        }
+    }
+}
+#endif
 
 /// Anahtar hesabının arayüz adı. Saf fonksiyondur.
 private func secretAccountTitle(account: SecretAccount) -> String {
@@ -1055,7 +1079,7 @@ private func testConnection() async -> ConnectionTest {
     }
     do {
         _ = try await sendLLM(provider: provider, request: LLMRequest(
-            tier: .smart, system: "Yalnızca \"tamam\" yaz.", userText: "Bağlantı denemesi", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120
+            purpose: .connectionTest, tier: .smart, system: "Yalnızca \"tamam\" yaz.", userText: "Bağlantı denemesi", maxTokens: 4000, jsonSchema: nil, timeoutSec: 120
         ))
     } catch {
         return .failed(String(localized: "Not modeli: \(userFacingMessage(error: error))"))

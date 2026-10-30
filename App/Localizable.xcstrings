@@ -16248,6 +16248,39 @@
           }
         }
       }
+    },
+    "Anonim kullanım istatistiklerini paylaş": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share anonymous usage statistics"
+          }
+        }
+      }
+    },
+    "Açıkken uygulama günde bir kez hangi özellikleri kullandığını (canlı çeviri, Sor, bağlantı ve dışa aktarma türleri) ve bağlantı kopması, not hatası gibi güvenilirlik sayılarını gönderir; bunlar hesabına bağlanmaz. Ses, metin, not, başlık ya da ad asla gönderilmez. Uygulama ve macOS sürümü ile yapay zekâ isteklerinin hangi özellik için olduğu, hizmetin işleyişi için her durumda gönderilir.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, the app sends once a day which features you used (live translation, Ask, integration and export types) and reliability counts such as connection drops and note errors; these are not linked to your account. Audio, transcripts, notes, titles or names are never sent. The app and macOS version and which feature each AI request is for are always sent, because the service needs them."
+          }
+        }
+      }
+    },
+    "Uygulamanın sürüm bilgisi bozuk; uygulamayı yeniden kur.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app's version information is damaged; reinstall the app."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

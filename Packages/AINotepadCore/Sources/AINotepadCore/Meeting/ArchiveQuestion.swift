@@ -168,6 +168,7 @@ public func searchTermsRequest(question: String, history: [ArchiveTurn], languag
     // Transkriptler toplantının dilinde: terimler not dilinde ve arşivde en sık geçen (en fazla 4) dilde istenir.
     let names: String = ([language.rawValue] + languages.filter { $0 != language.meetingLanguage }.prefix(4).map(\.rawValue)).joined(separator: ", ")
     return LLMRequest(
+        purpose: .askSearchTerms,
         tier: .fast,
         system: """
         Kullanıcı notları \(language.promptName) dilinde, transkriptleri toplantının dilinde olan toplantı arşivinde arama yapacak. Sorudaki anahtar
@@ -212,6 +213,7 @@ public func archiveAnswerRequest(
         return "<parca no=\"\(item.offset + 1)\" toplanti=\"\(item.element.meetingTitle)\" tarih=\"\(formatter.string(from: item.element.meetingDate))\" kaynak=\"\(source)\">\n\(item.element.text)\n</parca>"
     }.joined(separator: "\n\n")
     return LLMRequest(
+        purpose: .askAnswer,
         tier: .smart,
         system: """
         Kullanıcının (\(user); transkriptte "Sen") toplantı arşivinden soru cevaplıyorsun. Bugün \(formatter.string(from: now)).

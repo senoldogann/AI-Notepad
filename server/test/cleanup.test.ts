@@ -129,6 +129,10 @@ describe("süresi dolmuş satırların temizliği", () => {
       download_visitors: 1,
       download_sources: 1,
       ops_events: 1,
+      llm_purpose_usage: 0,
+      client_event_counts: 0,
+      client_event_durations: 0,
+      feature_usage_daily: 0,
       subscription_cancellations: 1,
       referral_redemptions: 1,
     });

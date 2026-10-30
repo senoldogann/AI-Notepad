@@ -83,6 +83,7 @@ public func meetingNoteRequest(
     let user: String = userName.isEmpty ? "kullanıcı" : userName
     let mine: (rule: String, block: String) = myNotesPrompt(myNotes: myNotes)
     return LLMRequest(
+        purpose: .note,
         tier: .smart,
         system: """
         Bir toplantının (Fince, İngilizce ya da başka bir dilde) transkriptinden \(language.promptName) dilinde toplantı notu
