@@ -128,6 +128,21 @@ describe("deneme ses süresi birikimli sınırı", () => {
     expect(scribe.calls).toBe(2);
   });
 
+  it("yeniden işleme sınırı toplantının en uzun süresini aşabilir: uzun toplantı ikinci geçişte kaydın tamamını yeniden yazar", async () => {
+    const harness: Harness = await defaultHarness();
+    const session: Session = await signIn(harness);
+    // Bir dakikalık toplantı (örtüşme payı yok): ilk geçiş 50 sn yazar, ilk sınırdan yalnızca 10 sn kalır.
+    const short: Env = envWith({ TRIAL_MAX_MEETING_MINUTES: "1" });
+    const meeting: StartedMeetingBody = await (await harness.call(req("POST", "/v1/meetings/start", { token: session.accessToken, json: {}, env: short }))).json<StartedMeetingBody>();
+    const scribe = stubScribe(harness, 50);
+    const fifty: Uint8Array = wavFile(8000, 1, 8, 8000 * 50);
+    expect((await transcribe(harness, session, meeting.meetingId, fifty, "audio/wav", short)).status).toBe(200);
+    await env.DB.prepare("UPDATE meeting_sessions SET reprocess_audio_cap = 100 WHERE id = ?").bind(meeting.meetingId).run();
+    expect((await transcribe(harness, session, meeting.meetingId, fifty, "audio/wav", short)).status).toBe(200);
+    await expectError(await transcribe(harness, session, meeting.meetingId, wavFile(8000, 1, 8, 8000), "audio/wav", short), 413, "audio_too_long");
+    expect(scribe.calls).toBe(2);
+  });
+
   it("yalnızca PCM WAV kabul edilir: sıkıştırılmış türler (süresi boyuttan kestirilemez) 415 alır", async () => {
     const harness: Harness = await defaultHarness();
     const session: Session = await signIn(harness);

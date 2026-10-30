@@ -265,8 +265,10 @@ describe("haklar ve toplantı oturumları", () => {
     current = await refreshed(harness, current);
     await expectError(await reprocess(late.meetingId), 402, "subscription_required");
     expect(mayReprocess(true, 0, 365 * dayMs, 7 * dayMs)).toBe(true);
-    expect(reprocessAudioCap(0, 600)).toBeNull();
-    expect(reprocessAudioCap(6000, 6000)).toBe(6000 + 6000 + 120);
+    expect(reprocessAudioCap(0, 600, 0)).toBeNull();
+    expect(reprocessAudioCap(6000, 6000, 0)).toBe(6000 + 6000 + 120);
+    // İkinci yeniden işlemede bir geçiş, yazılan sesin yarısıdır (sınır kaydın iki katına çıkmaz).
+    expect(reprocessAudioCap(1200, 0, 1)).toBe(1200 + 600);
   });
 
   it("bütçesini neredeyse bitirmiş toplantı yeniden işlemede tam pay alır; harcama tavanı doluysa hak harcanmaz", async () => {
